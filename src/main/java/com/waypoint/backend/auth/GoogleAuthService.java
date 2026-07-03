@@ -14,17 +14,20 @@ public class GoogleAuthService {
     private final UserService userService;
     private final JwtService jwtService;
     private final EntitlementService entitlementService;
+    private final GoogleProperties googleProperties;
 
     public GoogleAuthService(
             GoogleProfileClient googleProfileClient,
             UserService userService,
             JwtService jwtService,
-            EntitlementService entitlementService
+            EntitlementService entitlementService,
+            GoogleProperties googleProperties
     ) {
         this.googleProfileClient = googleProfileClient;
         this.userService = userService;
         this.jwtService = jwtService;
         this.entitlementService = entitlementService;
+        this.googleProperties = googleProperties;
     }
 
     public AuthResponse login(String googleAccessToken) {
@@ -34,6 +37,12 @@ public class GoogleAuthService {
         }
         if (profile.email() == null || profile.email().isBlank() || !profile.emailVerified()) {
             throw new UnauthorizedException("Google account email is not verified");
+        }
+        if (profile.audience() == null || profile.audience().isBlank()) {
+            throw new UnauthorizedException("Google access token audience is missing");
+        }
+        if (!googleProperties.clientId().equals(profile.audience())) {
+            throw new UnauthorizedException("Google access token audience is invalid");
         }
         UserEntity user = userService.findOrCreateGoogleUser(profile);
         String waypointToken = jwtService.issueToken(user.getId(), user.getEmail());

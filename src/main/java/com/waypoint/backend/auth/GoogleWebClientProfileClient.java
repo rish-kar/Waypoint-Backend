@@ -1,7 +1,6 @@
 package com.waypoint.backend.auth;
 
 import com.waypoint.backend.common.UnauthorizedException;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -12,32 +11,26 @@ import tools.jackson.databind.JsonNode;
 @Component
 public class GoogleWebClientProfileClient implements GoogleProfileClient {
     private final WebClient webClient;
-    private final String clientId;
-    private final String tokenInfoUrl;
-    private final String userInfoUrl;
+    private final GoogleProperties properties;
 
     public GoogleWebClientProfileClient(
             WebClient.Builder webClientBuilder,
-            @Value("${google.client-id}") String clientId,
-            @Value("${google.token-info-url}") String tokenInfoUrl,
-            @Value("${google.user-info-url}") String userInfoUrl
+            GoogleProperties properties
     ) {
         this.webClient = webClientBuilder.build();
-        this.clientId = clientId;
-        this.tokenInfoUrl = tokenInfoUrl;
-        this.userInfoUrl = userInfoUrl;
+        this.properties = properties;
     }
 
     @Override
     public GoogleProfile fetchProfile(String accessToken) {
         try {
             JsonNode tokenInfo = webClient.get()
-                    .uri(tokenInfoUrl + "?access_token={accessToken}", accessToken)
+                    .uri(properties.tokenInfoUrl() + "?access_token={accessToken}", accessToken)
                     .retrieve()
                     .bodyToMono(JsonNode.class)
                     .block();
             JsonNode userInfo = webClient.get()
-                    .uri(userInfoUrl)
+                    .uri(properties.userInfoUrl())
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
                     .retrieve()
                     .bodyToMono(JsonNode.class)
@@ -48,7 +41,10 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
             }
 
             String audience = text(tokenInfo, "aud");
-            if (StringUtils.hasText(audience) && StringUtils.hasText(clientId) && !clientId.equals(audience)) {
+            if (!StringUtils.hasText(audience)) {
+                throw new UnauthorizedException("Google access token audience is missing");
+            }
+            if (!properties.clientId().equals(audience)) {
                 throw new UnauthorizedException("Google access token audience is invalid");
             }
 

@@ -1,6 +1,8 @@
 package com.waypoint.backend.entitlement;
 
 import com.waypoint.backend.subscription.SubscriptionEntity;
+import com.waypoint.backend.subscription.SubscriptionAccessDecision;
+import com.waypoint.backend.subscription.SubscriptionAccessPolicy;
 import com.waypoint.backend.subscription.SubscriptionRepository;
 import com.waypoint.backend.subscription.SubscriptionStatus;
 import org.springframework.stereotype.Service;
@@ -27,9 +29,11 @@ public class EntitlementService {
     );
 
     private final SubscriptionRepository subscriptionRepository;
+    private final SubscriptionAccessPolicy subscriptionAccessPolicy;
 
-    public EntitlementService(SubscriptionRepository subscriptionRepository) {
+    public EntitlementService(SubscriptionRepository subscriptionRepository, SubscriptionAccessPolicy subscriptionAccessPolicy) {
         this.subscriptionRepository = subscriptionRepository;
+        this.subscriptionAccessPolicy = subscriptionAccessPolicy;
     }
 
     @Transactional(readOnly = true)
@@ -37,31 +41,20 @@ public class EntitlementService {
         Instant now = Instant.now();
         List<SubscriptionEntity> subscriptions = subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId);
         return subscriptions.stream()
-                .map(subscription -> evaluate(subscription, now))
-                .filter(Evaluation::premium)
-                .max(Comparator.comparing(evaluation -> evaluation.validUntil() == null ? Instant.MAX : evaluation.validUntil()))
-                .map(evaluation -> premiumResponse(evaluation, includeCheckedAt ? now : null))
+                .map(subscription -> subscriptionAccessPolicy.evaluate(subscription, now))
+                .filter(SubscriptionAccessDecision::premium)
+                .max(Comparator.comparing(decision -> decision.validUntil() == null ? Instant.MAX : decision.validUntil()))
+                .map(decision -> premiumResponse(decision, includeCheckedAt ? now : null))
                 .orElseGet(() -> freeResponse(latestStatus(subscriptions), includeCheckedAt ? now : null));
     }
 
-    private Evaluation evaluate(SubscriptionEntity subscription, Instant now) {
-        SubscriptionStatus status = subscription.getStatus() == null ? SubscriptionStatus.UNKNOWN : subscription.getStatus();
-        return switch (status) {
-            case ACTIVE, ON_TRIAL -> new Evaluation(true, status, subscription.getRenewsAt());
-            case CANCELLED -> subscription.getEndsAt() != null && subscription.getEndsAt().isAfter(now)
-                    ? new Evaluation(true, status, subscription.getEndsAt())
-                    : new Evaluation(false, status, null);
-            default -> new Evaluation(false, status, null);
-        };
-    }
-
-    private EntitlementResponse premiumResponse(Evaluation evaluation, Instant checkedAt) {
+    private EntitlementResponse premiumResponse(SubscriptionAccessDecision decision, Instant checkedAt) {
         return new EntitlementResponse(
                 "PREMIUM",
-                evaluation.status().name(),
+                decision.status().name(),
                 true,
                 PREMIUM_FEATURES,
-                evaluation.validUntil(),
+                decision.validUntil(),
                 checkedAt
         );
     }
@@ -83,8 +76,5 @@ public class EntitlementService {
         }
         SubscriptionStatus status = subscriptions.getFirst().getStatus();
         return status == null ? SubscriptionStatus.INACTIVE.name() : status.name();
-    }
-
-    private record Evaluation(boolean premium, SubscriptionStatus status, Instant validUntil) {
     }
 }

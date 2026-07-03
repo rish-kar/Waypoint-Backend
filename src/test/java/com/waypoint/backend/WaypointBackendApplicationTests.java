@@ -12,6 +12,7 @@ import com.waypoint.backend.subscription.SubscriptionStatus;
 import com.waypoint.backend.user.UserEntity;
 import com.waypoint.backend.user.UserRepository;
 import com.waypoint.backend.webhook.ProcessingStatus;
+import com.waypoint.backend.webhook.WebhookEventStore;
 import com.waypoint.backend.webhook.WebhookEventRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -69,6 +75,7 @@ class WaypointBackendApplicationTests {
     private final UserRepository userRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final WebhookEventRepository webhookEventRepository;
+    private final WebhookEventStore webhookEventStore;
     private final JwtService jwtService;
     private final FakeGoogleProfileClient googleProfileClient;
 
@@ -79,6 +86,7 @@ class WaypointBackendApplicationTests {
             UserRepository userRepository,
             SubscriptionRepository subscriptionRepository,
             WebhookEventRepository webhookEventRepository,
+            WebhookEventStore webhookEventStore,
             JwtService jwtService,
             FakeGoogleProfileClient googleProfileClient
     ) {
@@ -87,6 +95,7 @@ class WaypointBackendApplicationTests {
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.webhookEventRepository = webhookEventRepository;
+        this.webhookEventStore = webhookEventStore;
         this.jwtService = jwtService;
         this.googleProfileClient = googleProfileClient;
     }
@@ -154,6 +163,51 @@ class WaypointBackendApplicationTests {
     }
 
     @Test
+    void rejectsGoogleProfileWithoutAudience() throws Exception {
+        googleProfileClient.profile = new GoogleProfile(
+                "google-123",
+                "user@example.com",
+                true,
+                "User Name",
+                "https://example.com/picture.png",
+                null
+        );
+
+        mockMvc.perform(post("/api/v1/auth/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accessToken\":\"valid-google-token\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void rejectsGoogleProfileWithMismatchedAudience() throws Exception {
+        googleProfileClient.profile = new GoogleProfile(
+                "google-123",
+                "user@example.com",
+                true,
+                "User Name",
+                "https://example.com/picture.png",
+                "different-client"
+        );
+
+        mockMvc.perform(post("/api/v1/auth/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accessToken\":\"valid-google-token\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void acceptsGoogleProfileWithMatchingAudience() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accessToken\":\"valid-google-token\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.email").value("user@example.com"));
+    }
+
+    @Test
     void protectsJwtEndpoints() throws Exception {
         UserEntity user = createUser("google-123", "user@example.com");
         String token = jwtService.issueToken(user.getId(), user.getEmail());
@@ -203,6 +257,59 @@ class WaypointBackendApplicationTests {
                 .andExpect(jsonPath("$.plan").value("PREMIUM"))
                 .andExpect(jsonPath("$.status").value("CANCELLED"))
                 .andExpect(jsonPath("$.premium").value(true));
+    }
+
+    @Test
+    void billingStatusAllowsCancelledSubscriptionBeforeEndsAt() throws Exception {
+        UserEntity user = createUser("google-123", "user@example.com");
+        SubscriptionEntity subscription = createSubscription(user, SubscriptionStatus.CANCELLED, null);
+        subscription.setEndsAt(Instant.now().plusSeconds(3600));
+        subscriptionRepository.save(subscription);
+
+        mockMvc.perform(get("/api/v1/billing/status").header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plan").value("PREMIUM"))
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    void billingStatusReturnsFreeForCancelledSubscriptionAfterEndsAt() throws Exception {
+        UserEntity user = createUser("google-123", "user@example.com");
+        SubscriptionEntity subscription = createSubscription(user, SubscriptionStatus.CANCELLED, null);
+        subscription.setEndsAt(Instant.now().minusSeconds(3600));
+        subscriptionRepository.save(subscription);
+
+        mockMvc.perform(get("/api/v1/billing/status").header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plan").value("FREE"))
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        mockMvc.perform(get("/api/v1/entitlements").header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plan").value("FREE"))
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    void billingStatusReturnsFreeForCancelledSubscriptionWithNullEndsAt() throws Exception {
+        UserEntity user = createUser("google-123", "user@example.com");
+        createSubscription(user, SubscriptionStatus.CANCELLED, null);
+
+        mockMvc.perform(get("/api/v1/billing/status").header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plan").value("FREE"))
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
+    void billingStatusReturnsFreeForRefundedSubscription() throws Exception {
+        UserEntity user = createUser("google-123", "user@example.com");
+        createSubscription(user, SubscriptionStatus.REFUNDED, null);
+
+        mockMvc.perform(get("/api/v1/billing/status").header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plan").value("FREE"))
+                .andExpect(jsonPath("$.status").value("REFUNDED"));
     }
 
     @Test
@@ -267,6 +374,21 @@ class WaypointBackendApplicationTests {
     }
 
     @Test
+    void duplicateWebhookRaceCreatesOnlyOneEventRecord() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Callable<WebhookEventStore.WebhookReception> task = () -> webhookEventStore.recordReceived("race-hash", "{\"ok\":true}");
+            List<Future<WebhookEventStore.WebhookReception>> futures = executor.invokeAll(List.of(task, task));
+
+            List<WebhookEventStore.WebhookReception> receptions = List.of(futures.get(0).get(), futures.get(1).get());
+            assertThat(receptions.stream().filter(WebhookEventStore.WebhookReception::created)).hasSize(1);
+            assertThat(webhookEventRepository.findAll()).hasSize(1);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void createsSubscriptionFromWebhookCustomData() throws Exception {
         UserEntity user = createUser("google-123", "user@example.com");
         String payload = subscriptionWebhook(user.getId(), "subscription_created", "sub_created", "active");
@@ -283,6 +405,120 @@ class WaypointBackendApplicationTests {
         assertThat(subscription.getExternalVariantId()).isEqualTo("111");
         assertThat(subscription.getPlan()).isEqualTo("MONTHLY");
         assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+    }
+
+    @Test
+    void activeUnknownVariantRemainsFree() throws Exception {
+        UserEntity user = createUser("google-123", "user@example.com");
+        String payload = subscriptionWebhook(user.getId(), "subscription_created", "sub_unknown_variant", "active", "999", true, null);
+
+        mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Signature", hmac(payload))
+                        .content(payload))
+                .andExpect(status().isOk());
+
+        SubscriptionEntity subscription = subscriptionRepository.findByExternalSubscriptionId("sub_unknown_variant").orElseThrow();
+        assertThat(subscription.getPlan()).isEqualTo("UNKNOWN");
+        assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+
+        mockMvc.perform(get("/api/v1/entitlements").header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plan").value("FREE"))
+                .andExpect(jsonPath("$.premium").value(false));
+        mockMvc.perform(get("/api/v1/billing/status").header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plan").value("FREE"))
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+    }
+
+    @Test
+    void updatesExistingSubscriptionWithoutCustomData() throws Exception {
+        UserEntity user = createUser("google-123", "user@example.com");
+        createSubscription(user, SubscriptionStatus.CANCELLED, null, "sub_existing", "111", "MONTHLY");
+        String payload = subscriptionWebhook(null, "subscription_updated", "sub_existing", "active", "111", false, null);
+
+        mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Signature", hmac(payload))
+                        .content(payload))
+                .andExpect(status().isOk());
+
+        SubscriptionEntity subscription = subscriptionRepository.findByExternalSubscriptionId("sub_existing").orElseThrow();
+        assertThat(subscription.getUser().getId()).isEqualTo(user.getId());
+        assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+    }
+
+    @Test
+    void refundsExistingSubscriptionWithoutCustomData() throws Exception {
+        UserEntity user = createUser("google-123", "user@example.com");
+        createSubscription(user, SubscriptionStatus.ACTIVE, Instant.now().plusSeconds(3600), "sub_refund_no_custom", "111", "MONTHLY");
+        String payload = subscriptionWebhook(null, "order_refunded", "sub_refund_no_custom", "active", "111", false, null);
+
+        mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Signature", hmac(payload))
+                        .content(payload))
+                .andExpect(status().isOk());
+
+        assertThat(subscriptionRepository.findByExternalSubscriptionId("sub_refund_no_custom").orElseThrow().getStatus())
+                .isEqualTo(SubscriptionStatus.REFUNDED);
+    }
+
+    @Test
+    void rejectsNewSubscriptionWithoutCustomDataAndStoresFailedEvent() throws Exception {
+        String payload = subscriptionWebhook(null, "subscription_created", "sub_missing_custom", "active", "111", false, null);
+
+        mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Signature", hmac(payload))
+                        .content(payload))
+                .andExpect(status().isBadRequest());
+
+        assertThat(subscriptionRepository.findByExternalSubscriptionId("sub_missing_custom")).isEmpty();
+        assertThat(webhookEventRepository.findAll()).singleElement()
+                .satisfies(event -> {
+                    assertThat(event.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED);
+                    assertThat(event.getPayloadJson()).contains("sub_missing_custom");
+                    assertThat(event.getErrorMessage()).contains("waypoint_user_id");
+                });
+    }
+
+    @Test
+    void rejectsExistingSubscriptionConflictingCustomUserAndPreservesFailure() throws Exception {
+        UserEntity owner = createUser("google-owner", "owner@example.com");
+        UserEntity other = createUser("google-other", "other@example.com");
+        createSubscription(owner, SubscriptionStatus.ACTIVE, Instant.now().plusSeconds(3600), "sub_conflict", "111", "MONTHLY");
+        String payload = subscriptionWebhook(other.getId(), "subscription_updated", "sub_conflict", "active", "111", true, null);
+
+        mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Signature", hmac(payload))
+                        .content(payload))
+                .andExpect(status().isBadRequest());
+
+        SubscriptionEntity subscription = subscriptionRepository.findByExternalSubscriptionId("sub_conflict").orElseThrow();
+        assertThat(subscription.getUser().getId()).isEqualTo(owner.getId());
+        assertThat(webhookEventRepository.findAll()).singleElement()
+                .satisfies(event -> assertThat(event.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED));
+    }
+
+    @Test
+    void unknownWebhookUserDoesNotCreateSubscriptionAndFailureRemainsStored() throws Exception {
+        String payload = subscriptionWebhook(UUID.randomUUID(), "subscription_created", "sub_unknown_user", "active", "111", true, null);
+
+        mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Signature", hmac(payload))
+                        .content(payload))
+                .andExpect(status().isBadRequest());
+
+        assertThat(subscriptionRepository.findByExternalSubscriptionId("sub_unknown_user")).isEmpty();
+        assertThat(webhookEventRepository.findAll()).singleElement()
+                .satisfies(event -> {
+                    assertThat(event.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED);
+                    assertThat(event.getErrorMessage()).contains("unknown Waypoint user");
+                });
     }
 
     @Test
@@ -332,14 +568,25 @@ class WaypointBackendApplicationTests {
     }
 
     private SubscriptionEntity createSubscription(UserEntity user, SubscriptionStatus status, Instant renewsAt) {
+        return createSubscription(user, status, renewsAt, "sub_" + UUID.randomUUID(), "111", "MONTHLY");
+    }
+
+    private SubscriptionEntity createSubscription(
+            UserEntity user,
+            SubscriptionStatus status,
+            Instant renewsAt,
+            String externalSubscriptionId,
+            String variantId,
+            String plan
+    ) {
         SubscriptionEntity subscription = new SubscriptionEntity();
         subscription.setUser(user);
         subscription.setProvider("LEMON_SQUEEZY");
-        subscription.setExternalSubscriptionId("sub_" + UUID.randomUUID());
+        subscription.setExternalSubscriptionId(externalSubscriptionId);
         subscription.setExternalCustomerId("cus_123");
         subscription.setExternalProductId("prod_123");
-        subscription.setExternalVariantId("111");
-        subscription.setPlan("MONTHLY");
+        subscription.setExternalVariantId(variantId);
+        subscription.setPlan(plan);
         subscription.setStatus(status);
         subscription.setRenewsAt(renewsAt);
         return subscriptionRepository.save(subscription);
@@ -350,14 +597,30 @@ class WaypointBackendApplicationTests {
     }
 
     private String subscriptionWebhook(UUID userId, String eventName, String subscriptionId, String status) throws Exception {
-        JsonNode node = objectMapper.readTree("""
-                {
-                  "meta": {
-                    "event_name": "%s",
+        return subscriptionWebhook(userId, eventName, subscriptionId, status, "111", true, null);
+    }
+
+    private String subscriptionWebhook(
+            UUID userId,
+            String eventName,
+            String subscriptionId,
+            String status,
+            String variantId,
+            boolean includeCustomData,
+            Instant endsAt
+    ) throws Exception {
+        String customData = includeCustomData ? """
                     "custom_data": {
                       "waypoint_user_id": "%s",
                       "waypoint_plan": "MONTHLY"
                     }
+                """.formatted(userId) : "\"custom_data\": {}";
+        String endsAtJson = endsAt == null ? "null" : "\"" + endsAt + "\"";
+        JsonNode node = objectMapper.readTree("""
+                {
+                  "meta": {
+                    "event_name": "%s",
+                    %s
                   },
                   "data": {
                     "type": "subscriptions",
@@ -365,14 +628,14 @@ class WaypointBackendApplicationTests {
                     "attributes": {
                       "customer_id": "cus_123",
                       "product_id": "prod_123",
-                      "variant_id": "111",
+                      "variant_id": "%s",
                       "status": "%s",
                       "renews_at": "2030-01-01T00:00:00Z",
-                      "ends_at": null
+                      "ends_at": %s
                     }
                   }
                 }
-                """.formatted(eventName, userId, subscriptionId, status));
+                """.formatted(eventName, customData, subscriptionId, variantId, status, endsAtJson));
         return objectMapper.writeValueAsString(node);
     }
 
