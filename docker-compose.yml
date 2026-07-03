@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: waypoint-postgres
+    environment:
+      POSTGRES_DB: waypoint
+      POSTGRES_USER: waypoint
+      POSTGRES_PASSWORD: waypoint
+    ports:
+      - "5432:5432"
+    volumes:
+      - waypoint-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waypoint -d waypoint"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  waypoint-postgres-data:
