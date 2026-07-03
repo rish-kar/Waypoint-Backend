@@ -47,13 +47,22 @@ public class WebhookSubscriptionProcessor {
         subscription.setUser(user);
         subscription.setProvider("LEMON_SQUEEZY");
         subscription.setExternalSubscriptionId(externalSubscriptionId);
-        subscription.setExternalCustomerId(firstText(attributes, "customer_id", relationshipId(data, "customer")));
-        subscription.setExternalProductId(firstText(attributes, "product_id", relationshipId(data, "product")));
-        subscription.setExternalVariantId(firstText(attributes, "variant_id", relationshipId(data, "variant")));
-        subscription.setPlan(subscriptionAccessPolicy.planForVariant(subscription.getExternalVariantId()));
+        setIfPresent(subscription::setExternalCustomerId, firstText(attributes, "customer_id", relationshipId(data, "customer")));
+        setIfPresent(subscription::setExternalProductId, firstText(attributes, "product_id", relationshipId(data, "product")));
+        String variantId = firstText(attributes, "variant_id", relationshipId(data, "variant"));
+        if (StringUtils.hasText(variantId)) {
+            subscription.setExternalVariantId(variantId);
+            subscription.setPlan(subscriptionAccessPolicy.planForVariant(variantId));
+        } else if (!StringUtils.hasText(subscription.getPlan())) {
+            subscription.setPlan("UNKNOWN");
+        }
         subscription.setStatus(resolveStatus(eventName, attributes));
-        subscription.setRenewsAt(parseInstant(text(attributes, "renews_at")));
-        subscription.setEndsAt(parseInstant(text(attributes, "ends_at")));
+        if (attributes.get("renews_at") != null) {
+            subscription.setRenewsAt(parseInstant(text(attributes, "renews_at")));
+        }
+        if (attributes.get("ends_at") != null) {
+            subscription.setEndsAt(parseInstant(text(attributes, "ends_at")));
+        }
         subscriptionRepository.save(subscription);
     }
 
@@ -103,10 +112,16 @@ public class WebhookSubscriptionProcessor {
     }
 
     private SubscriptionStatus resolveStatus(String eventName, JsonNode attributes) {
-        if (eventName != null && eventName.toLowerCase().contains("refund")) {
+        if ("subscription_payment_refunded".equalsIgnoreCase(eventName)) {
             return SubscriptionStatus.REFUNDED;
         }
         return SubscriptionStatus.fromExternal(text(attributes, "status"));
+    }
+
+    private void setIfPresent(java.util.function.Consumer<String> setter, String value) {
+        if (StringUtils.hasText(value)) {
+            setter.accept(value);
+        }
     }
 
     private String relationshipId(JsonNode data, String relationship) {

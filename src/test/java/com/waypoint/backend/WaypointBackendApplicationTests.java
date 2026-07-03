@@ -453,7 +453,7 @@ class WaypointBackendApplicationTests {
     void refundsExistingSubscriptionWithoutCustomData() throws Exception {
         UserEntity user = createUser("google-123", "user@example.com");
         createSubscription(user, SubscriptionStatus.ACTIVE, Instant.now().plusSeconds(3600), "sub_refund_no_custom", "111", "MONTHLY");
-        String payload = subscriptionWebhook(null, "order_refunded", "sub_refund_no_custom", "active", "111", false, null);
+        String payload = subscriptionPaymentRefundedWebhook(null, "sub_refund_no_custom", false);
 
         mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -463,6 +463,35 @@ class WaypointBackendApplicationTests {
 
         assertThat(subscriptionRepository.findByExternalSubscriptionId("sub_refund_no_custom").orElseThrow().getStatus())
                 .isEqualTo(SubscriptionStatus.REFUNDED);
+    }
+
+    @Test
+    void retriesFailedWebhookDeliveryAfterExistingSubscriptionAppears() throws Exception {
+        String payload = subscriptionWebhook(null, "subscription_updated", "sub_retry_failed", "active", "111", false, null);
+        String signature = hmac(payload);
+
+        mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Signature", signature)
+                        .content(payload))
+                .andExpect(status().isBadRequest());
+
+        assertThat(webhookEventRepository.findAll()).singleElement()
+                .satisfies(event -> assertThat(event.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED));
+
+        UserEntity user = createUser("google-123", "user@example.com");
+        createSubscription(user, SubscriptionStatus.CANCELLED, null, "sub_retry_failed", "111", "MONTHLY");
+
+        mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Signature", signature)
+                        .content(payload))
+                .andExpect(status().isOk());
+
+        assertThat(webhookEventRepository.findAll()).singleElement()
+                .satisfies(event -> assertThat(event.getProcessingStatus()).isEqualTo(ProcessingStatus.PROCESSED));
+        assertThat(subscriptionRepository.findByExternalSubscriptionId("sub_retry_failed").orElseThrow().getStatus())
+                .isEqualTo(SubscriptionStatus.ACTIVE);
     }
 
     @Test
@@ -531,7 +560,7 @@ class WaypointBackendApplicationTests {
                         .content(activePayload))
                 .andExpect(status().isOk());
 
-        String refundPayload = subscriptionWebhook(user.getId(), "order_refunded", "sub_refund", "active");
+        String refundPayload = subscriptionPaymentRefundedWebhook(user.getId(), "sub_refund", true);
         mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("X-Signature", hmac(refundPayload))
@@ -636,6 +665,33 @@ class WaypointBackendApplicationTests {
                   }
                 }
                 """.formatted(eventName, customData, subscriptionId, variantId, status, endsAtJson));
+        return objectMapper.writeValueAsString(node);
+    }
+
+    private String subscriptionPaymentRefundedWebhook(UUID userId, String subscriptionId, boolean includeCustomData) throws Exception {
+        String customData = includeCustomData ? """
+                    "custom_data": {
+                      "waypoint_user_id": "%s",
+                      "waypoint_plan": "MONTHLY"
+                    }
+                """.formatted(userId) : "\"custom_data\": {}";
+        JsonNode node = objectMapper.readTree("""
+                {
+                  "meta": {
+                    "event_name": "subscription_payment_refunded",
+                    %s
+                  },
+                  "data": {
+                    "type": "subscription-invoices",
+                    "id": "subinv_%s",
+                    "attributes": {
+                      "subscription_id": "%s",
+                      "customer_id": "cus_123",
+                      "status": "refunded"
+                    }
+                  }
+                }
+                """.formatted(customData, subscriptionId, subscriptionId));
         return objectMapper.writeValueAsString(node);
     }
 

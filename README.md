@@ -89,13 +89,13 @@ Create two test-mode Premium variants in Lemon Squeezy: monthly and annual. Put 
 
 ## Webhook Configuration
 
-Configure Lemon Squeezy to send subscription and refund events to:
+Configure Lemon Squeezy to send subscription lifecycle events and `subscription_payment_refunded` events to:
 
 ```text
 POST https://your-backend.example/api/v1/webhooks/lemonsqueezy
 ```
 
-Set the webhook signing secret as `LEMON_SQUEEZY_WEBHOOK_SECRET`. The backend verifies `X-Signature` with HMAC-SHA256, stores the raw payload hash for idempotency, and links subscriptions by `meta.custom_data.waypoint_user_id`.
+Set the webhook signing secret as `LEMON_SQUEEZY_WEBHOOK_SECRET`. The backend verifies `X-Signature` with HMAC-SHA256, stores the raw payload hash for idempotency, and links subscriptions by `meta.custom_data.waypoint_user_id`. Do not subscribe to `order_refunded` until order-to-subscription mapping is implemented.
 
 ## Example Curl Requests
 

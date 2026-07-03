@@ -23,11 +23,11 @@ public class WebhookEventStore {
 
     public WebhookReception recordReceived(String eventHash, String payloadJson) {
         try {
-            return transactionTemplate.execute(status -> webhookEventRepository.findByEventHash(eventHash)
-                    .map(event -> new WebhookReception(event, false, false))
+            return transactionTemplate.execute(status -> webhookEventRepository.findByEventHashForUpdate(eventHash)
+                    .map(this::claimExisting)
                     .orElseGet(() -> insertReceived(eventHash, payloadJson)));
         } catch (DataIntegrityViolationException exception) {
-            return new WebhookReception(findExistingAfterRace(eventHash), false, false);
+            return findExistingAfterRace(eventHash);
         }
     }
 
@@ -60,19 +60,27 @@ public class WebhookEventStore {
         event.setEventName("UNKNOWN");
         event.setProcessingStatus(ProcessingStatus.RECEIVED);
         event.setReceivedAt(Instant.now());
-        try {
-            return new WebhookReception(webhookEventRepository.saveAndFlush(event), true, true);
-        } catch (DataIntegrityViolationException exception) {
-            WebhookEventEntity existing = findExistingAfterRace(eventHash);
-            return new WebhookReception(existing, false, false);
-        }
+        return new WebhookReception(webhookEventRepository.saveAndFlush(event), true, true);
     }
 
-    private WebhookEventEntity findExistingAfterRace(String eventHash) {
+    private WebhookReception claimExisting(WebhookEventEntity event) {
+        if (event.getProcessingStatus() != ProcessingStatus.FAILED) {
+            return new WebhookReception(event, false, false);
+        }
+        event.setProcessingStatus(ProcessingStatus.RECEIVED);
+        event.setErrorMessage(null);
+        event.setProcessedAt(null);
+        return new WebhookReception(webhookEventRepository.save(event), false, true);
+    }
+
+    private WebhookReception findExistingAfterRace(String eventHash) {
         for (int i = 0; i < 10; i++) {
-            WebhookEventEntity event = webhookEventRepository.findByEventHash(eventHash).orElse(null);
-            if (event != null) {
-                return event;
+            WebhookReception reception = transactionTemplate.execute(status -> webhookEventRepository
+                    .findByEventHashForUpdate(eventHash)
+                    .map(this::claimExisting)
+                    .orElse(null));
+            if (reception != null) {
+                return reception;
             }
             sleepBriefly();
         }
