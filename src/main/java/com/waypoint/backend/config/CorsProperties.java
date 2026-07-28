@@ -1,6 +1,5 @@
 package com.waypoint.backend.config;
 
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -11,7 +10,7 @@ import java.util.List;
 @Validated
 @ConfigurationProperties(prefix = "cors")
 public record CorsProperties(
-        @NotEmpty List<@Valid @NotBlank String> allowedOrigins
+        @NotEmpty List<@NotBlank String> allowedOrigins
 ) {
     public CorsProperties {
         allowedOrigins = allowedOrigins == null ? List.of() : List.copyOf(allowedOrigins);
