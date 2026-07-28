@@ -1,14 +1,18 @@
 package com.waypoint.backend.billing;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
+@Validated
 @ConfigurationProperties(prefix = "lemon-squeezy")
 public record LemonSqueezyProperties(
-        String apiKey,
-        String storeId,
-        String monthlyVariantId,
-        String annualVariantId,
-        String webhookSecret,
-        String apiBaseUrl
+        @NotBlank String apiKey,
+        @NotBlank String storeId,
+        @NotBlank String monthlyVariantId,
+        @NotBlank String annualVariantId,
+        @NotBlank String webhookSecret,
+        @NotBlank @Pattern(regexp = "https://.+") String apiBaseUrl
 ) {
 }
