@@ -6,6 +6,9 @@ RUN mvn -B -DskipTests package
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=build /workspace/target/waypoint-backend-0.0.1-SNAPSHOT.jar app.jar
+RUN groupadd --system waypoint && useradd --system --gid waypoint --home-dir /app waypoint
+COPY --from=build --chown=waypoint:waypoint /workspace/target/waypoint-backend-0.0.1-SNAPSHOT.jar app.jar
+USER waypoint
+ENV SPRING_PROFILES_ACTIVE=prod
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
