@@ -9,7 +9,7 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "google")
 public record GoogleProperties(
         @NotBlank String clientId,
-        @NotBlank @Pattern(regexp = "https://.+") String tokenInfoUrl,
-        @NotBlank @Pattern(regexp = "https://.+") String userInfoUrl
+        @NotBlank @Pattern(regexp = "https?://.+", message = "must be an absolute HTTP or HTTPS URL") String tokenInfoUrl,
+        @NotBlank @Pattern(regexp = "https?://.+", message = "must be an absolute HTTP or HTTPS URL") String userInfoUrl
 ) {
 }
