@@ -1,0 +1,34 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/waypoint}
+    username: ${DATABASE_USERNAME:waypoint}
+    password: ${DATABASE_PASSWORD:waypoint}
+
+management:
+  endpoint:
+    health:
+      show-details: always
+
+jwt:
+  secret: ${JWT_SECRET:waypoint-local-development-secret-change-before-production}
+  expiration-seconds: ${JWT_EXPIRATION_SECONDS:86400}
+
+google:
+  client-id: ${GOOGLE_CLIENT_ID:local-google-client-id}
+
+lemon-squeezy:
+  api-key: ${LEMON_SQUEEZY_API_KEY:local-lemon-squeezy-api-key}
+  store-id: ${LEMON_SQUEEZY_STORE_ID:local-store-id}
+  monthly-variant-id: ${LEMON_SQUEEZY_MONTHLY_VARIANT_ID:local-monthly-variant-id}
+  annual-variant-id: ${LEMON_SQUEEZY_ANNUAL_VARIANT_ID:local-annual-variant-id}
+  webhook-secret: ${LEMON_SQUEEZY_WEBHOOK_SECRET:local-webhook-secret}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,chrome-extension://local-dev}
+
+app:
+  base-url: ${APP_BASE_URL:http://localhost:8080}
+
+logging:
+  level:
+    com.waypoint.backend: ${LOG_LEVEL_WAYPOINT:DEBUG}
