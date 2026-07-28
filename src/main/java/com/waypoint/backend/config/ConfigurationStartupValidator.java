@@ -59,6 +59,8 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
 
     private void validateProductionConfiguration() {
         requireHttps("APP_BASE_URL", appProperties.baseUrl());
+        requireHttps("GOOGLE_TOKEN_INFO_URL", googleProperties.tokenInfoUrl());
+        requireHttps("GOOGLE_USER_INFO_URL", googleProperties.userInfoUrl());
         requireHttps("LEMON_SQUEEZY_API_BASE_URL", lemonSqueezyProperties.apiBaseUrl());
         rejectPlaceholder("GOOGLE_CLIENT_ID", googleProperties.clientId());
         rejectPlaceholder("LEMON_SQUEEZY_API_KEY", lemonSqueezyProperties.apiKey());
