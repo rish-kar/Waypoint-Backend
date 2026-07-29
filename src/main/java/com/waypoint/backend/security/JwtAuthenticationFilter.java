@@ -6,25 +6,40 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+    private static final Logger LOGGER = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+
     private final JwtService jwtService;
     private final ObjectMapper objectMapper;
 
     public JwtAuthenticationFilter(JwtService jwtService, ObjectMapper objectMapper) {
         this.jwtService = jwtService;
         this.objectMapper = objectMapper;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.equals("/api/v1/auth/google")
+                || path.equals("/api/v1/webhooks/lemonsqueezy")
+                || path.equals("/actuator/health")
+                || path.startsWith("/actuator/health/");
     }
 
     @Override
@@ -35,33 +50,69 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
-        if (!authorization.startsWith("Bearer ")) {
-            writeUnauthorized(request, response, "Invalid authorization header");
+
+        String token = extractBearerToken(authorization);
+        if (token == null) {
+            reject(request, response, "invalid_authorization_header");
             return;
         }
+
         try {
-            JwtClaims claims = jwtService.parseToken(authorization.substring(7));
+            JwtClaims claims = jwtService.parseToken(token);
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                     claims.userId(),
-                    claims.email(),
+                    null,
                     List.of()
             );
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+            SecurityContext context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(authentication);
+            SecurityContextHolder.setContext(context);
+
+            LOGGER.atDebug()
+                    .addKeyValue("event", "bearer_token_accepted")
+                    .addKeyValue("user_id", claims.userId())
+                    .addKeyValue("method", request.getMethod())
+                    .addKeyValue("path", request.getRequestURI())
+                    .log("Bearer token accepted");
+
             filterChain.doFilter(request, response);
         } catch (UnauthorizedException exception) {
             SecurityContextHolder.clearContext();
-            writeUnauthorized(request, response, exception.getMessage());
+            reject(request, response, "invalid_or_expired_token");
         }
     }
 
-    private void writeUnauthorized(HttpServletRequest request, HttpServletResponse response, String message) throws IOException {
+    private String extractBearerToken(String authorization) {
+        int separator = authorization.indexOf(' ');
+        if (separator <= 0 || !"Bearer".equalsIgnoreCase(authorization.substring(0, separator))) {
+            return null;
+        }
+
+        String token = authorization.substring(separator + 1);
+        if (token.isBlank()
+                || !token.equals(token.trim())
+                || token.chars().anyMatch(Character::isWhitespace)) {
+            return null;
+        }
+        return token;
+    }
+
+    private void reject(HttpServletRequest request, HttpServletResponse response, String reason) throws IOException {
+        LOGGER.atWarn()
+                .addKeyValue("event", "bearer_token_rejected")
+                .addKeyValue("reason", reason)
+                .addKeyValue("method", request.getMethod())
+                .addKeyValue("path", request.getRequestURI())
+                .log("Bearer token rejected");
+
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         objectMapper.writeValue(response.getOutputStream(), new ApiErrorResponse(
                 Instant.now(),
                 HttpServletResponse.SC_UNAUTHORIZED,
                 "UNAUTHORIZED",
-                message,
+                "Invalid or expired bearer token",
                 request.getRequestURI()
         ));
     }
