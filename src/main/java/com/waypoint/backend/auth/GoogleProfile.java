@@ -6,6 +6,17 @@ public record GoogleProfile(
         boolean emailVerified,
         String displayName,
         String pictureUrl,
-        String audience
+        String audience,
+        long expiresInSeconds
 ) {
+    public GoogleProfile(
+            String providerUserId,
+            String email,
+            boolean emailVerified,
+            String displayName,
+            String pictureUrl,
+            String audience
+    ) {
+        this(providerUserId, email, emailVerified, displayName, pictureUrl, audience, Long.MAX_VALUE);
+    }
 }
