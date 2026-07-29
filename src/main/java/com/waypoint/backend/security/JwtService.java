@@ -10,22 +10,34 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class JwtService {
     private static final String HMAC_ALGORITHM = "HmacSHA256";
+    private static final String TOKEN_TYPE = "JWT";
+    private static final String ISSUER = "waypoint-backend";
+    private static final String AUDIENCE = "waypoint-extension";
+    private static final long CLOCK_SKEW_SECONDS = 30;
+    private static final int MAX_TOKEN_LENGTH = 4096;
     private static final Base64.Encoder URL_ENCODER = Base64.getUrlEncoder().withoutPadding();
     private static final Base64.Decoder URL_DECODER = Base64.getUrlDecoder();
 
     private final byte[] secret;
     private final long expirationSeconds;
     private final ObjectMapper objectMapper;
+    private final Clock clock;
 
     public JwtService(JwtProperties properties, ObjectMapper objectMapper) {
+        this(properties, objectMapper, Clock.systemUTC());
+    }
+
+    JwtService(JwtProperties properties, ObjectMapper objectMapper, Clock clock) {
         if (properties.secret() == null || properties.secret().getBytes(StandardCharsets.UTF_8).length < 32) {
             throw new IllegalStateException("JWT_SECRET must be at least 32 bytes long");
         }
@@ -35,17 +47,29 @@ public class JwtService {
         this.secret = properties.secret().getBytes(StandardCharsets.UTF_8);
         this.expirationSeconds = properties.expirationSeconds();
         this.objectMapper = objectMapper;
+        this.clock = clock;
     }
 
     public String issueToken(UUID userId, String email) {
-        long now = Instant.now().getEpochSecond();
-        Map<String, Object> header = Map.of("alg", "HS256", "typ", "JWT");
-        Map<String, Object> payload = Map.of(
-                "sub", userId.toString(),
-                "email", email,
-                "iat", now,
-                "exp", now + expirationSeconds
+        if (userId == null || email == null || email.isBlank()) {
+            throw new IllegalArgumentException("JWT subject and email are required");
+        }
+
+        long now = clock.instant().getEpochSecond();
+        Map<String, Object> header = Map.of(
+                "alg", "HS256",
+                "typ", TOKEN_TYPE
         );
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("iss", ISSUER);
+        payload.put("aud", AUDIENCE);
+        payload.put("sub", userId.toString());
+        payload.put("email", email);
+        payload.put("jti", UUID.randomUUID().toString());
+        payload.put("iat", now);
+        payload.put("nbf", now);
+        payload.put("exp", now + expirationSeconds);
+
         String encodedHeader = encodeJson(header);
         String encodedPayload = encodeJson(payload);
         String signingInput = encodedHeader + "." + encodedPayload;
@@ -53,39 +77,74 @@ public class JwtService {
     }
 
     public JwtClaims parseToken(String token) {
-        String[] parts = token.split("\\.");
-        if (parts.length != 3) {
-            throw new UnauthorizedException("Invalid token");
+        if (token == null || token.isBlank() || token.length() > MAX_TOKEN_LENGTH) {
+            throw invalidToken();
         }
+
+        String[] parts = token.split("\\.", -1);
+        if (parts.length != 3 || parts[0].isBlank() || parts[1].isBlank() || parts[2].isBlank()) {
+            throw invalidToken();
+        }
+
         String signingInput = parts[0] + "." + parts[1];
-        byte[] expectedSignature = hmac(signingInput);
         byte[] actualSignature;
         try {
             actualSignature = URL_DECODER.decode(parts[2]);
         } catch (IllegalArgumentException exception) {
-            throw new UnauthorizedException("Invalid token");
+            throw invalidToken();
         }
-        if (!MessageDigest.isEqual(expectedSignature, actualSignature)) {
-            throw new UnauthorizedException("Invalid token");
+
+        if (!MessageDigest.isEqual(hmac(signingInput), actualSignature)) {
+            throw invalidToken();
         }
+
         try {
             JsonNode header = objectMapper.readTree(URL_DECODER.decode(parts[0]));
-            if (!"HS256".equals(header.path("alg").asText())) {
-                throw new UnauthorizedException("Invalid token");
+            if (!"HS256".equals(header.path("alg").asText())
+                    || !TOKEN_TYPE.equals(header.path("typ").asText())) {
+                throw invalidToken();
             }
+
             JsonNode payload = objectMapper.readTree(URL_DECODER.decode(parts[1]));
-            long exp = payload.path("exp").asLong(0);
-            if (exp <= Instant.now().getEpochSecond()) {
-                throw new UnauthorizedException("Token has expired");
+            String issuer = payload.path("iss").asText();
+            String audience = payload.path("aud").asText();
+            String subject = payload.path("sub").asText();
+            String email = payload.path("email").asText();
+            String tokenId = payload.path("jti").asText();
+            long issuedAt = payload.path("iat").asLong(0);
+            long notBefore = payload.path("nbf").asLong(0);
+            long expiresAt = payload.path("exp").asLong(0);
+            long now = clock.instant().getEpochSecond();
+
+            if (!ISSUER.equals(issuer)
+                    || !AUDIENCE.equals(audience)
+                    || subject.isBlank()
+                    || email.isBlank()
+                    || tokenId.isBlank()
+                    || issuedAt <= 0
+                    || notBefore <= 0
+                    || expiresAt <= 0
+                    || issuedAt > now + CLOCK_SKEW_SECONDS
+                    || notBefore > now + CLOCK_SKEW_SECONDS
+                    || expiresAt <= now
+                    || expiresAt <= issuedAt
+                    || expiresAt - issuedAt > expirationSeconds + CLOCK_SKEW_SECONDS) {
+                throw invalidToken();
             }
-            return new JwtClaims(UUID.fromString(payload.path("sub").asText()), payload.path("email").asText());
+
+            UUID.fromString(tokenId);
+            return new JwtClaims(UUID.fromString(subject), email);
         } catch (IllegalArgumentException | JacksonException exception) {
-            throw new UnauthorizedException("Invalid token");
+            throw invalidToken();
         }
     }
 
     public long expirationSeconds() {
         return expirationSeconds;
+    }
+
+    private UnauthorizedException invalidToken() {
+        return new UnauthorizedException("Invalid or expired token");
     }
 
     private String encodeJson(Object value) {
