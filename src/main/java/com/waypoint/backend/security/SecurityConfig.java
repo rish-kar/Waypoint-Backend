@@ -18,7 +18,6 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -40,7 +39,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/google").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/lemonsqueezy").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, authException) -> {
@@ -61,13 +60,10 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
         CorsConfiguration configuration = new CorsConfiguration();
-        List<String> origins = Arrays.stream((properties.allowedOrigins() == null ? "" : properties.allowedOrigins()).split(","))
-                .map(String::trim)
-                .filter(origin -> !origin.isBlank())
-                .toList();
-        configuration.setAllowedOrigins(origins);
+        configuration.setAllowedOrigins(properties.allowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Signature"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Signature", "X-Request-ID"));
+        configuration.setExposedHeaders(List.of("X-Request-ID"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

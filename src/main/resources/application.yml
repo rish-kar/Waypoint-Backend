@@ -1,12 +1,20 @@
 spring:
   application:
     name: Waypoint-Backend
+  profiles:
+    default: dev
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/waypoint}
-    username: ${DATABASE_USERNAME:waypoint}
-    password: ${DATABASE_PASSWORD:waypoint}
+    hikari:
+      connection-timeout: ${DATABASE_CONNECTION_TIMEOUT_MS:30000}
+      validation-timeout: ${DATABASE_VALIDATION_TIMEOUT_MS:5000}
+      maximum-pool-size: ${DATABASE_POOL_MAX_SIZE:10}
+      minimum-idle: ${DATABASE_POOL_MIN_IDLE:2}
   flyway:
     enabled: true
+    clean-disabled: true
+    validate-on-migrate: true
   jpa:
     hibernate:
       ddl-auto: validate
@@ -17,15 +25,40 @@ spring:
           time_zone: UTC
 
 server:
+  port: ${PORT:8080}
+  shutdown: graceful
+  forward-headers-strategy: framework
   error:
-    include-stacktrace: never
+    include-binding-errors: never
+    include-exception: false
     include-message: never
+    include-stacktrace: never
 
 management:
   endpoints:
     web:
       exposure:
         include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+    db:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 jwt:
   secret: ${JWT_SECRET:}
@@ -33,8 +66,8 @@ jwt:
 
 google:
   client-id: ${GOOGLE_CLIENT_ID:}
-  token-info-url: https://oauth2.googleapis.com/tokeninfo
-  user-info-url: https://www.googleapis.com/oauth2/v3/userinfo
+  token-info-url: ${GOOGLE_TOKEN_INFO_URL:https://oauth2.googleapis.com/tokeninfo}
+  user-info-url: ${GOOGLE_USER_INFO_URL:https://www.googleapis.com/oauth2/v3/userinfo}
 
 lemon-squeezy:
   api-key: ${LEMON_SQUEEZY_API_KEY:}
@@ -42,10 +75,17 @@ lemon-squeezy:
   monthly-variant-id: ${LEMON_SQUEEZY_MONTHLY_VARIANT_ID:}
   annual-variant-id: ${LEMON_SQUEEZY_ANNUAL_VARIANT_ID:}
   webhook-secret: ${LEMON_SQUEEZY_WEBHOOK_SECRET:}
-  api-base-url: https://api.lemonsqueezy.com/v1
+  api-base-url: ${LEMON_SQUEEZY_API_BASE_URL:https://api.lemonsqueezy.com/v1}
 
 cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,chrome-extension://local-dev}
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:}
 
 app:
-  base-url: ${APP_BASE_URL:http://localhost:8080}
+  base-url: ${APP_BASE_URL:}
+
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.waypoint.backend: ${LOG_LEVEL_WAYPOINT:INFO}
+    org.hibernate.SQL: WARN
+    org.springframework.security: WARN

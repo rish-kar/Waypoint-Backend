@@ -1,13 +1,15 @@
 package com.waypoint.backend;
 
-import com.waypoint.backend.billing.LemonSqueezyProperties;
 import com.waypoint.backend.auth.GoogleProperties;
+import com.waypoint.backend.billing.LemonSqueezyProperties;
 import com.waypoint.backend.config.AppProperties;
 import com.waypoint.backend.config.CorsProperties;
 import com.waypoint.backend.security.JwtProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+
+import java.util.TimeZone;
 
 @SpringBootApplication
 @EnableConfigurationProperties({
@@ -20,6 +22,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 public class WaypointBackendApplication {
 
     public static void main(String[] args) {
+        System.setProperty("user.timezone", "UTC");
+        TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
         SpringApplication.run(WaypointBackendApplication.class, args);
     }
 }
