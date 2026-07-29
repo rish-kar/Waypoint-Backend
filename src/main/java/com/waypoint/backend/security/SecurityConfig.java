@@ -2,6 +2,7 @@ package com.waypoint.backend.security;
 
 import com.waypoint.backend.common.ApiErrorResponse;
 import com.waypoint.backend.config.CorsProperties;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,6 +18,8 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tools.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 
@@ -33,26 +36,34 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
+                .requestCache(AbstractHttpConfigurer::disable)
                 .cors(cors -> {
                 })
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/google").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/lemonsqueezy").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                         .anyRequest().authenticated()
                 )
-                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, authException) -> {
-                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                    objectMapper.writeValue(response.getOutputStream(), new ApiErrorResponse(
-                            Instant.now(),
-                            HttpServletResponse.SC_UNAUTHORIZED,
-                            "UNAUTHORIZED",
-                            "Authentication required",
-                            request.getRequestURI()
-                    ));
-                }))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint((request, response, authException) -> writeSecurityError(
+                                objectMapper,
+                                request,
+                                response,
+                                HttpServletResponse.SC_UNAUTHORIZED,
+                                "UNAUTHORIZED",
+                                "Authentication required"
+                        ))
+                        .accessDeniedHandler((request, response, accessDeniedException) -> writeSecurityError(
+                                objectMapper,
+                                request,
+                                response,
+                                HttpServletResponse.SC_FORBIDDEN,
+                                "FORBIDDEN",
+                                "Access denied"
+                        )))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
@@ -69,5 +80,25 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    private void writeSecurityError(
+            ObjectMapper objectMapper,
+            HttpServletRequest request,
+            HttpServletResponse response,
+            int status,
+            String code,
+            String message
+    ) throws IOException {
+        response.setStatus(status);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        objectMapper.writeValue(response.getOutputStream(), new ApiErrorResponse(
+                Instant.now(),
+                status,
+                code,
+                message,
+                request.getRequestURI()
+        ));
     }
 }
