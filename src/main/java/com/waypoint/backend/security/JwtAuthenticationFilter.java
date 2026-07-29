@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
@@ -36,7 +37,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.equals("/api/v1/auth/google")
+        return HttpMethod.OPTIONS.matches(request.getMethod())
+                || path.equals("/api/v1/auth/google")
                 || path.equals("/api/v1/webhooks/lemonsqueezy")
                 || path.equals("/actuator/health")
                 || path.startsWith("/actuator/health/");
