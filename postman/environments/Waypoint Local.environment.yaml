@@ -1,0 +1,18 @@
+name: Waypoint Local
+values:
+  - key: baseUrl
+    value: 'http://localhost:8080'
+  - key: googleAccessToken
+    value: ''
+  - key: jwt
+    value: ''
+  - key: userId
+    value: ''
+  - key: jwtSecret
+    value: waypoint-local-development-secret-change-before-production
+  - key: webhookSecret
+    value: local-webhook-secret
+  - key: monthlyVariantId
+    value: local-monthly-variant-id
+  - key: subscriptionId
+    value: postman-subscription-001

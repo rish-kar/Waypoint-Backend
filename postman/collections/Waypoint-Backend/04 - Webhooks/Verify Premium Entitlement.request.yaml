@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/entitlements"
+method: GET
+headers:
+  Authorization: Bearer {{jwt}}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test('Premium is enabled', () => pm.expect(body.premium).to.eql(true));
+      pm.test('Plan is PREMIUM', () => pm.expect(body.plan).to.eql('PREMIUM'));
+    language: text/javascript
+order: 3000
