@@ -57,8 +57,11 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
             }
 
             String audience = text(tokenInfo, "aud");
-            if (!StringUtils.hasText(audience) || !properties.clientId().equals(audience)) {
-                throw new UnauthorizedException("Invalid Google access token");
+            if (!StringUtils.hasText(audience)) {
+                throw new UnauthorizedException("Google access token audience is missing");
+            }
+            if (!properties.clientId().equals(audience)) {
+                throw new UnauthorizedException("Google access token audience is invalid");
             }
 
             long expiresInSeconds = longValue(tokenInfo, "expires_in");
@@ -69,12 +72,12 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
             String tokenSubject = text(tokenInfo, "sub");
             String userSubject = text(userInfo, "sub");
             if (!StringUtils.hasText(tokenSubject) && !StringUtils.hasText(userSubject)) {
-                throw new UnauthorizedException("Invalid Google access token");
+                throw new UnauthorizedException("Google account is missing a provider user ID");
             }
             if (StringUtils.hasText(tokenSubject)
                     && StringUtils.hasText(userSubject)
                     && !tokenSubject.equals(userSubject)) {
-                throw new UnauthorizedException("Invalid Google access token");
+                throw new UnauthorizedException("Google account identity is inconsistent");
             }
 
             String tokenEmail = text(tokenInfo, "email");
@@ -82,7 +85,7 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
             if (StringUtils.hasText(tokenEmail)
                     && StringUtils.hasText(userEmail)
                     && !tokenEmail.equalsIgnoreCase(userEmail)) {
-                throw new UnauthorizedException("Invalid Google access token");
+                throw new UnauthorizedException("Google account email is inconsistent");
             }
 
             String providerUserId = StringUtils.hasText(userSubject) ? userSubject : tokenSubject;
