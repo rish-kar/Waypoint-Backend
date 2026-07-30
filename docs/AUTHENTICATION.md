@@ -112,16 +112,16 @@ Authentication coverage includes:
 
 ## Postman
 
-Import:
+Authentication tests are part of the existing backend Postman collection. Import only:
 
 ```text
-postman/Waypoint-Authentication.postman_collection.json
-postman/Waypoint-Authentication-Local.postman_environment.json
+postman/Waypoint-Backend.postman_collection.json
+postman/Waypoint-Local.postman_environment.json
 ```
 
-Select `Waypoint Authentication Local` and run folders in order. Set `googleAccessToken` before `Successful Google Login`. The login request automatically stores `jwt` and `userId`. The expired-token request generates and signs an already expired JWT using the local `jwtSecret` environment value.
+Select `Waypoint Local` and run `01 - Authentication`. Set `googleAccessToken` before `Google Login`. The successful login automatically stores `jwt` and `userId`. The expired-token request generates and signs an already expired JWT using the `jwtSecret` value from the same environment.
 
-When `JWT_SECRET` is overridden for the running backend, update `jwtSecret` in Postman to the same value.
+When `JWT_SECRET` is overridden for the running backend, update `jwtSecret` in `Waypoint Local` to the same value.
 
 ## Current limitation
 
