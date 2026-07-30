@@ -1,6 +1,7 @@
 package com.waypoint.backend.security;
 
 import com.waypoint.backend.common.UnauthorizedException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -33,6 +34,7 @@ public class JwtService {
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
+    @Autowired
     public JwtService(JwtProperties properties, ObjectMapper objectMapper) {
         this(properties, objectMapper, Clock.systemUTC());
     }
