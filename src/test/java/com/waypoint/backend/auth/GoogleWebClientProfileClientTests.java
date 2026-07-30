@@ -57,7 +57,8 @@ class GoogleWebClientProfileClientTests {
                 {
                   "sub": "google-123",
                   "email": "user@example.com",
-                  "email_verified": true
+                  "email_verified": true,
+                  "expires_in": 300
                 }
                 """;
 
@@ -73,7 +74,8 @@ class GoogleWebClientProfileClientTests {
                   "aud": "other-client",
                   "sub": "google-123",
                   "email": "user@example.com",
-                  "email_verified": true
+                  "email_verified": true,
+                  "expires_in": 300
                 }
                 """;
 
@@ -83,13 +85,31 @@ class GoogleWebClientProfileClientTests {
     }
 
     @Test
+    void rejectsExpiredTokenInfo() {
+        tokenInfoJson = """
+                {
+                  "aud": "expected-client",
+                  "sub": "google-123",
+                  "email": "user@example.com",
+                  "email_verified": true,
+                  "expires_in": 0
+                }
+                """;
+
+        assertThatThrownBy(() -> client().fetchProfile("google-token"))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessageContaining("expired");
+    }
+
+    @Test
     void acceptsTokenInfoWithMatchingAudience() {
         tokenInfoJson = """
                 {
                   "aud": "expected-client",
                   "sub": "google-123",
                   "email": "user@example.com",
-                  "email_verified": true
+                  "email_verified": true,
+                  "expires_in": 300
                 }
                 """;
 
@@ -98,6 +118,7 @@ class GoogleWebClientProfileClientTests {
         assertThat(profile.providerUserId()).isEqualTo("google-123");
         assertThat(profile.email()).isEqualTo("user@example.com");
         assertThat(profile.audience()).isEqualTo("expected-client");
+        assertThat(profile.expiresInSeconds()).isEqualTo(300);
     }
 
     private GoogleWebClientProfileClient client() {
