@@ -1,8 +1,12 @@
 package com.waypoint.backend.user;
 
+import com.waypoint.backend.plan.PlanEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -32,6 +36,10 @@ public class UserEntity {
 
     @Column(nullable = false)
     private String providerUserId;
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "plan_code")
+    private PlanEntity plan;
 
     @Column(nullable = false)
     private Instant createdAt;
@@ -110,6 +118,14 @@ public class UserEntity {
 
     public void setProviderUserId(String providerUserId) {
         this.providerUserId = providerUserId;
+    }
+
+    public PlanEntity getPlan() {
+        return plan;
+    }
+
+    public void setPlan(PlanEntity plan) {
+        this.plan = plan;
     }
 
     public Instant getCreatedAt() {
