@@ -1,6 +1,7 @@
 package com.waypoint.backend.webhook;
 
 import com.waypoint.backend.common.InvalidRequestException;
+import com.waypoint.backend.plan.PlanService;
 import com.waypoint.backend.subscription.SubscriptionAccessPolicy;
 import com.waypoint.backend.subscription.SubscriptionEntity;
 import com.waypoint.backend.subscription.SubscriptionRepository;
@@ -22,15 +23,18 @@ public class WebhookSubscriptionProcessor {
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
     private final SubscriptionAccessPolicy subscriptionAccessPolicy;
+    private final PlanService planService;
 
     public WebhookSubscriptionProcessor(
             SubscriptionRepository subscriptionRepository,
             UserRepository userRepository,
-            SubscriptionAccessPolicy subscriptionAccessPolicy
+            SubscriptionAccessPolicy subscriptionAccessPolicy,
+            PlanService planService
     ) {
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
         this.subscriptionAccessPolicy = subscriptionAccessPolicy;
+        this.planService = planService;
     }
 
     @Transactional
@@ -64,6 +68,7 @@ public class WebhookSubscriptionProcessor {
             subscription.setEndsAt(parseInstant(text(attributes, "ends_at")));
         }
         subscriptionRepository.save(subscription);
+        planService.synchronizeUserPlan(user);
     }
 
     public String subscriptionId(JsonNode data, JsonNode attributes) {
