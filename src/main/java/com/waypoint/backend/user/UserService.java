@@ -2,6 +2,8 @@ package com.waypoint.backend.user;
 
 import com.waypoint.backend.auth.GoogleProfile;
 import com.waypoint.backend.common.NotFoundException;
+import com.waypoint.backend.plan.PlanCode;
+import com.waypoint.backend.plan.PlanService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,9 +16,11 @@ public class UserService {
     public static final String GOOGLE_PROVIDER = "GOOGLE";
 
     private final UserRepository userRepository;
+    private final PlanService planService;
 
-    public UserService(UserRepository userRepository) {
+    public UserService(UserRepository userRepository, PlanService planService) {
         this.userRepository = userRepository;
+        this.planService = planService;
     }
 
     @Transactional
@@ -28,9 +32,13 @@ public class UserService {
                     created.setProvider(GOOGLE_PROVIDER);
                     created.setProviderUserId(profile.providerUserId());
                     created.setCreatedAt(Instant.now());
+                    created.setPlan(planService.require(PlanCode.FREE));
                     return created;
                 });
 
+        if (user.getPlan() == null) {
+            user.setPlan(planService.require(PlanCode.FREE));
+        }
         user.setEmail(normalizedEmail);
         user.setDisplayName(profile.displayName());
         user.setPictureUrl(profile.pictureUrl());
