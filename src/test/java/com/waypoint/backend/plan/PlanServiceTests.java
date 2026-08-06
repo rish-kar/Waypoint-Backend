@@ -17,6 +17,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -63,7 +65,7 @@ class PlanServiceTests {
         PlanEntity monthly = plan(PlanCode.PREMIUM_MONTHLY);
         when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(user.getId()))
                 .thenReturn(List.of(subscription));
-        when(subscriptionAccessPolicy.evaluate(subscription, org.mockito.ArgumentMatchers.any(Instant.class)))
+        when(subscriptionAccessPolicy.evaluate(eq(subscription), any(Instant.class)))
                 .thenReturn(new SubscriptionAccessDecision(true, SubscriptionStatus.ACTIVE, Instant.now().plusSeconds(3600)));
         when(planRepository.findById(PlanCode.PREMIUM_MONTHLY)).thenReturn(Optional.of(monthly));
 
@@ -82,7 +84,7 @@ class PlanServiceTests {
         PlanEntity free = plan(PlanCode.FREE);
         when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(user.getId()))
                 .thenReturn(List.of(subscription));
-        when(subscriptionAccessPolicy.evaluate(subscription, org.mockito.ArgumentMatchers.any(Instant.class)))
+        when(subscriptionAccessPolicy.evaluate(eq(subscription), any(Instant.class)))
                 .thenReturn(new SubscriptionAccessDecision(false, SubscriptionStatus.REFUNDED, null));
         when(planRepository.findById(PlanCode.FREE)).thenReturn(Optional.of(free));
 
