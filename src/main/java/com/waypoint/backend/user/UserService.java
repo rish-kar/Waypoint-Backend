@@ -43,7 +43,10 @@ public class UserService {
         user.setDisplayName(profile.displayName());
         user.setPictureUrl(profile.pictureUrl());
         user.setLastLoginAt(Instant.now());
-        return userRepository.save(user);
+
+        UserEntity saved = userRepository.save(user);
+        planService.synchronizeUserPlan(saved);
+        return saved;
     }
 
     @Transactional(readOnly = true)
