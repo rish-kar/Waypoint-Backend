@@ -2,6 +2,7 @@ package com.waypoint.backend.user;
 
 import com.waypoint.backend.entitlement.EntitlementResponse;
 import com.waypoint.backend.entitlement.EntitlementService;
+import com.waypoint.backend.plan.PlanResponse;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,6 +25,13 @@ public class MeController {
     public MeResponse me(@AuthenticationPrincipal UUID userId) {
         UserEntity user = userService.requireById(userId);
         EntitlementResponse entitlement = entitlementService.currentEntitlement(userId, false);
-        return new MeResponse(user.getId(), user.getEmail(), user.getDisplayName(), user.getPictureUrl(), entitlement);
+        return new MeResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getDisplayName(),
+                user.getPictureUrl(),
+                PlanResponse.from(user.getPlan()),
+                entitlement
+        );
     }
 }
