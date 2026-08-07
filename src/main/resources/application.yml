@@ -66,7 +66,7 @@ jwt:
 
 google:
   client-id: ${GOOGLE_CLIENT_ID:}
-  token-info-url: ${GOOGLE_TOKEN_INFO_URL:https://oauth2.googleapis.com/tokeninfo}
+  token-info-url: ${GOOGLE_TOKEN_INFO_URL:https://www.googleapis.com/oauth2/v2/tokeninfo}
   user-info-url: ${GOOGLE_USER_INFO_URL:https://www.googleapis.com/oauth2/v3/userinfo}
 
 lemon-squeezy:
