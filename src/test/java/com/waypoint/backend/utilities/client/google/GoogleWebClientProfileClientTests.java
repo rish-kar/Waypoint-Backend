@@ -58,9 +58,9 @@ class GoogleWebClientProfileClientTests {
     void rejectsTokenInfoWithoutAudience() {
         tokenInfoJson = """
                 {
-                  "sub": "google-123",
+                  "user_id": "google-123",
                   "email": "user@example.com",
-                  "email_verified": true,
+                  "verified_email": true,
                   "expires_in": 300
                 }
                 """;
@@ -74,10 +74,11 @@ class GoogleWebClientProfileClientTests {
     void rejectsTokenInfoWithMismatchedAudience() {
         tokenInfoJson = """
                 {
-                  "aud": "other-client",
-                  "sub": "google-123",
+                  "audience": "other-client",
+                  "issued_to": "other-client",
+                  "user_id": "google-123",
                   "email": "user@example.com",
-                  "email_verified": true,
+                  "verified_email": true,
                   "expires_in": 300
                 }
                 """;
@@ -91,10 +92,11 @@ class GoogleWebClientProfileClientTests {
     void rejectsExpiredTokenInfo() {
         tokenInfoJson = """
                 {
-                  "aud": "expected-client",
-                  "sub": "google-123",
+                  "audience": "expected-client",
+                  "issued_to": "expected-client",
+                  "user_id": "google-123",
                   "email": "user@example.com",
-                  "email_verified": true,
+                  "verified_email": true,
                   "expires_in": 0
                 }
                 """;
@@ -105,7 +107,29 @@ class GoogleWebClientProfileClientTests {
     }
 
     @Test
-    void acceptsTokenInfoWithMatchingAudience() {
+    void acceptsGoogleOauth2AccessTokenInfoSchema() {
+        tokenInfoJson = """
+                {
+                  "audience": "expected-client",
+                  "issued_to": "expected-client",
+                  "user_id": "google-123",
+                  "email": "user@example.com",
+                  "verified_email": true,
+                  "expires_in": 300
+                }
+                """;
+
+        GoogleProfile profile = client().fetchProfile("google-token");
+
+        assertThat(profile.providerUserId()).isEqualTo("google-123");
+        assertThat(profile.email()).isEqualTo("user@example.com");
+        assertThat(profile.emailVerified()).isTrue();
+        assertThat(profile.audience()).isEqualTo("expected-client");
+        assertThat(profile.expiresInSeconds()).isEqualTo(300);
+    }
+
+    @Test
+    void acceptsOidcCompatibleTokenInfoFieldNames() {
         tokenInfoJson = """
                 {
                   "aud": "expected-client",
@@ -119,9 +143,7 @@ class GoogleWebClientProfileClientTests {
         GoogleProfile profile = client().fetchProfile("google-token");
 
         assertThat(profile.providerUserId()).isEqualTo("google-123");
-        assertThat(profile.email()).isEqualTo("user@example.com");
         assertThat(profile.audience()).isEqualTo("expected-client");
-        assertThat(profile.expiresInSeconds()).isEqualTo(300);
     }
 
     private GoogleWebClientProfileClient client() {
