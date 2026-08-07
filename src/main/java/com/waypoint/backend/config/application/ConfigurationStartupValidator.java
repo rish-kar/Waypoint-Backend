@@ -55,6 +55,7 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
                 .addKeyValue("base_url", appProperties.baseUrl())
                 .addKeyValue("cors_origin_count", corsProperties.allowedOrigins().size())
                 .addKeyValue("jwt_expiration_seconds", jwtProperties.expirationSeconds())
+                .addKeyValue("google_client_id", googleProperties.clientId())
                 .log("Application configuration validated");
     }
 
