@@ -12,4 +12,9 @@ public record GoogleProperties(
         @NotBlank @Pattern(regexp = "https?://.+", message = "must be an absolute HTTP or HTTPS URL") String tokenInfoUrl,
         @NotBlank @Pattern(regexp = "https?://.+", message = "must be an absolute HTTP or HTTPS URL") String userInfoUrl
 ) {
+    public GoogleProperties {
+        clientId = clientId == null ? null : clientId.trim();
+        tokenInfoUrl = tokenInfoUrl == null ? null : tokenInfoUrl.trim();
+        userInfoUrl = userInfoUrl == null ? null : userInfoUrl.trim();
+    }
 }
