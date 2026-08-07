@@ -5,6 +5,8 @@ import com.waypoint.backend.model.auth.GoogleProfile;
 import com.waypoint.backend.utilities.exception.UnauthorizedException;
 import com.waypoint.backend.utilities.exception.UpstreamServiceException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -18,6 +20,7 @@ import java.time.Duration;
 
 @Component
 public class GoogleWebClientProfileClient implements GoogleProfileClient {
+    private static final Logger LOGGER = LoggerFactory.getLogger(GoogleWebClientProfileClient.class);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
 
     private final WebClient webClient;
@@ -33,54 +36,44 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
 
     @Override
     public GoogleProfile fetchProfile(String accessToken) {
-        if (!StringUtils.hasText(accessToken)) {
-            throw new UnauthorizedException("Invalid Google access token");
+        String normalizedAccessToken = accessToken == null ? null : accessToken.trim();
+        if (!StringUtils.hasText(normalizedAccessToken)) {
+            throw rejected("blank_token", "Invalid Google access token");
         }
 
         try {
-            JsonNode tokenInfo = webClient.get()
-                    .uri(properties.tokenInfoUrl() + "?access_token={accessToken}", accessToken)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .bodyToMono(JsonNode.class)
-                    .timeout(REQUEST_TIMEOUT)
-                    .block();
+            JsonNode tokenInfo = fetchTokenInfo(normalizedAccessToken);
+            JsonNode userInfo = fetchUserInfo(normalizedAccessToken);
 
-            JsonNode userInfo = webClient.get()
-                    .uri(properties.userInfoUrl())
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .bodyToMono(JsonNode.class)
-                    .timeout(REQUEST_TIMEOUT)
-                    .block();
-
-            if (tokenInfo == null || userInfo == null) {
-                throw new UnauthorizedException("Invalid Google access token");
+            if (tokenInfo == null) {
+                throw rejected("missing_tokeninfo", "Invalid Google access token");
+            }
+            if (userInfo == null) {
+                throw rejected("missing_userinfo", "Invalid Google access token");
             }
 
             String audience = firstText(tokenInfo, "aud", "audience", "issued_to");
             if (!StringUtils.hasText(audience)) {
-                throw new UnauthorizedException("Google access token audience is missing");
+                throw rejected("missing_audience", "Google access token audience is missing");
             }
             if (!properties.clientId().equals(audience)) {
-                throw new UnauthorizedException("Google access token audience is invalid");
+                throw rejected("invalid_audience", "Google access token audience is invalid");
             }
 
             long expiresInSeconds = longValue(tokenInfo, "expires_in");
             if (expiresInSeconds <= 0) {
-                throw new UnauthorizedException("Google access token has expired");
+                throw rejected("expired_token", "Google access token has expired");
             }
 
             String tokenSubject = firstText(tokenInfo, "sub", "user_id");
             String userSubject = text(userInfo, "sub");
             if (!StringUtils.hasText(tokenSubject) && !StringUtils.hasText(userSubject)) {
-                throw new UnauthorizedException("Google account is missing a provider user ID");
+                throw rejected("missing_subject", "Google account is missing a provider user ID");
             }
             if (StringUtils.hasText(tokenSubject)
                     && StringUtils.hasText(userSubject)
                     && !tokenSubject.equals(userSubject)) {
-                throw new UnauthorizedException("Google account identity is inconsistent");
+                throw rejected("subject_mismatch", "Google account identity is inconsistent");
             }
 
             String tokenEmail = text(tokenInfo, "email");
@@ -88,7 +81,7 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
             if (StringUtils.hasText(tokenEmail)
                     && StringUtils.hasText(userEmail)
                     && !tokenEmail.equalsIgnoreCase(userEmail)) {
-                throw new UnauthorizedException("Google account email is inconsistent");
+                throw rejected("email_mismatch", "Google account email is inconsistent");
             }
 
             String providerUserId = StringUtils.hasText(userSubject) ? userSubject : tokenSubject;
@@ -108,16 +101,56 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
             );
         } catch (UnauthorizedException | UpstreamServiceException exception) {
             throw exception;
+        } catch (RuntimeException exception) {
+            throw new UpstreamServiceException("Google authentication service is unavailable");
+        }
+    }
+
+    private JsonNode fetchTokenInfo(String accessToken) {
+        try {
+            return webClient.get()
+                    .uri(properties.tokenInfoUrl() + "?access_token={accessToken}", accessToken)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .timeout(REQUEST_TIMEOUT)
+                    .block();
         } catch (WebClientResponseException exception) {
             if (exception.getStatusCode().is4xxClientError()) {
-                throw new UnauthorizedException("Invalid Google access token");
+                throw rejected("tokeninfo_rejected", "Invalid Google access token");
             }
             throw new UpstreamServiceException("Google authentication service is unavailable");
         } catch (WebClientRequestException exception) {
             throw new UpstreamServiceException("Google authentication service is unavailable");
-        } catch (RuntimeException exception) {
+        }
+    }
+
+    private JsonNode fetchUserInfo(String accessToken) {
+        try {
+            return webClient.get()
+                    .uri(properties.userInfoUrl())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .timeout(REQUEST_TIMEOUT)
+                    .block();
+        } catch (WebClientResponseException exception) {
+            if (exception.getStatusCode().is4xxClientError()) {
+                throw rejected("userinfo_rejected", "Invalid Google access token");
+            }
+            throw new UpstreamServiceException("Google authentication service is unavailable");
+        } catch (WebClientRequestException exception) {
             throw new UpstreamServiceException("Google authentication service is unavailable");
         }
+    }
+
+    private UnauthorizedException rejected(String reason, String message) {
+        LOGGER.atWarn()
+                .addKeyValue("event", "google_auth_validation_rejected")
+                .addKeyValue("reason", reason)
+                .log("Google authentication validation rejected");
+        return new UnauthorizedException(message);
     }
 
     private String firstText(JsonNode node, String... fields) {

@@ -29,7 +29,7 @@ services:
       DATABASE_USERNAME: ${POSTGRES_USER:-waypoint}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-waypoint}
       JWT_SECRET: ${JWT_SECRET:-waypoint-local-development-secret-change-before-production}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-local-google-client-id}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       LEMON_SQUEEZY_API_KEY: ${LEMON_SQUEEZY_API_KEY:-local-lemon-squeezy-api-key}
       LEMON_SQUEEZY_STORE_ID: ${LEMON_SQUEEZY_STORE_ID:-local-store-id}
       LEMON_SQUEEZY_MONTHLY_VARIANT_ID: ${LEMON_SQUEEZY_MONTHLY_VARIANT_ID:-local-monthly-variant-id}
