@@ -59,7 +59,7 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
                 throw new UnauthorizedException("Invalid Google access token");
             }
 
-            String audience = text(tokenInfo, "aud");
+            String audience = firstText(tokenInfo, "aud", "audience", "issued_to");
             if (!StringUtils.hasText(audience)) {
                 throw new UnauthorizedException("Google access token audience is missing");
             }
@@ -72,7 +72,7 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
                 throw new UnauthorizedException("Google access token has expired");
             }
 
-            String tokenSubject = text(tokenInfo, "sub");
+            String tokenSubject = firstText(tokenInfo, "sub", "user_id");
             String userSubject = text(userInfo, "sub");
             if (!StringUtils.hasText(tokenSubject) && !StringUtils.hasText(userSubject)) {
                 throw new UnauthorizedException("Google account is missing a provider user ID");
@@ -93,7 +93,9 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
 
             String providerUserId = StringUtils.hasText(userSubject) ? userSubject : tokenSubject;
             String email = StringUtils.hasText(userEmail) ? userEmail : tokenEmail;
-            boolean emailVerified = bool(userInfo, "email_verified") || bool(tokenInfo, "email_verified");
+            boolean emailVerified = bool(userInfo, "email_verified")
+                    || bool(tokenInfo, "email_verified")
+                    || bool(tokenInfo, "verified_email");
 
             return new GoogleProfile(
                     providerUserId,
@@ -116,6 +118,16 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
         } catch (RuntimeException exception) {
             throw new UpstreamServiceException("Google authentication service is unavailable");
         }
+    }
+
+    private String firstText(JsonNode node, String... fields) {
+        for (String field : fields) {
+            String value = text(node, field);
+            if (StringUtils.hasText(value)) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private String text(JsonNode node, String field) {
