@@ -3,8 +3,6 @@ spring:
     name: Waypoint-Backend
   profiles:
     default: dev
-  config:
-    import: optional:file:./.env[.properties]
   lifecycle:
     timeout-per-shutdown-phase: 20s
   datasource:
