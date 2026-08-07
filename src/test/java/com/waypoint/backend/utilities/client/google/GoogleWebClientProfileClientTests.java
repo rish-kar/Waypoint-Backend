@@ -129,6 +129,25 @@ class GoogleWebClientProfileClientTests {
     }
 
     @Test
+    void prefersIssuedToForOauthAccessTokenClientBinding() {
+        tokenInfoJson = """
+                {
+                  "issued_to": "expected-client",
+                  "audience": "expected-client",
+                  "aud": "different-resource-audience",
+                  "user_id": "google-123",
+                  "email": "user@example.com",
+                  "verified_email": true,
+                  "expires_in": 300
+                }
+                """;
+
+        GoogleProfile profile = client().fetchProfile("google-token");
+
+        assertThat(profile.audience()).isEqualTo("expected-client");
+    }
+
+    @Test
     void acceptsOidcCompatibleTokenInfoFieldNames() {
         tokenInfoJson = """
                 {
