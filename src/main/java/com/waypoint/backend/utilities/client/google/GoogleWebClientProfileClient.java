@@ -52,12 +52,14 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
                 throw rejected("missing_userinfo", "Invalid Google access token");
             }
 
-            String audience = firstText(tokenInfo, "aud", "audience", "issued_to");
-            if (!StringUtils.hasText(audience)) {
+            String tokenClientId = firstText(tokenInfo, "issued_to", "audience", "azp", "aud");
+            if (!StringUtils.hasText(tokenClientId)) {
                 throw rejected("missing_audience", "Google access token audience is missing");
             }
-            if (!properties.clientId().equals(audience)) {
-                throw rejected("invalid_audience", "Google access token audience is invalid");
+
+            String configuredClientId = properties.clientId().trim();
+            if (!configuredClientId.equals(tokenClientId.trim())) {
+                throw rejectedAudience(configuredClientId, tokenClientId.trim());
             }
 
             long expiresInSeconds = longValue(tokenInfo, "expires_in");
@@ -96,7 +98,7 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
                     emailVerified,
                     text(userInfo, "name"),
                     text(userInfo, "picture"),
-                    audience,
+                    tokenClientId.trim(),
                     expiresInSeconds
             );
         } catch (UnauthorizedException | UpstreamServiceException exception) {
@@ -143,6 +145,16 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
         } catch (WebClientRequestException exception) {
             throw new UpstreamServiceException("Google authentication service is unavailable");
         }
+    }
+
+    private UnauthorizedException rejectedAudience(String configuredClientId, String tokenClientId) {
+        LOGGER.atWarn()
+                .addKeyValue("event", "google_auth_validation_rejected")
+                .addKeyValue("reason", "invalid_audience")
+                .addKeyValue("configured_client_id", configuredClientId)
+                .addKeyValue("token_client_id", tokenClientId)
+                .log("Google authentication validation rejected");
+        return new UnauthorizedException("Google access token audience is invalid");
     }
 
     private UnauthorizedException rejected(String reason, String message) {
