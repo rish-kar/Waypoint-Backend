@@ -100,7 +100,7 @@ Run the `02 - Account and Entitlements` folder after `Google Login`.
 
 It verifies:
 
-- `/api/v1/me` returns the logged-in user;
+- `/api/v1/account` returns the logged-in account;
 - `/api/v1/entitlements` returns a valid plan and feature list.
 
 A newly created user should initially receive the `FREE` plan with `instant-tab-search`.

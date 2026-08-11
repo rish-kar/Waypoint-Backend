@@ -1,5 +1,5 @@
 $kind: http-request
-url: "{{baseUrl}}/api/v1/me"
+url: "{{baseUrl}}/api/v1/account"
 method: GET
 headers:
   Authorization: Bearer invalid-token

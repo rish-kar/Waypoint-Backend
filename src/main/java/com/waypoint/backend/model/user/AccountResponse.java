@@ -5,7 +5,7 @@ import com.waypoint.backend.model.plan.PlanResponse;
 
 import java.util.UUID;
 
-public record MeResponse(
+public record AccountResponse(
         UUID id,
         String email,
         String displayName,

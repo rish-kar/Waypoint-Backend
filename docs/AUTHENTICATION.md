@@ -61,7 +61,7 @@ The verifier checks the signature with constant-time comparison and validates to
 Protected request example:
 
 ```http
-GET /api/v1/me
+GET /api/v1/account
 Authorization: Bearer waypoint-jwt
 ```
 

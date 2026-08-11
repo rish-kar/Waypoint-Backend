@@ -172,7 +172,7 @@ The backend verifies `X-Signature` using HMAC-SHA256, stores a raw payload hash 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
 | `POST` | `/api/v1/auth/google` | Public | Validate Google access token and issue a Waypoint JWT |
-| `GET` | `/api/v1/me` | JWT | Return user profile and entitlement |
+| `GET` | `/api/v1/account` | JWT | Return user profile and entitlement |
 | `GET` | `/api/v1/entitlements` | JWT | Return current feature entitlement |
 | `POST` | `/api/v1/billing/checkout` | JWT | Create Lemon Squeezy hosted checkout |
 | `GET` | `/api/v1/billing/status` | JWT | Return stored subscription status |

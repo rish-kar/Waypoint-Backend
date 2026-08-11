@@ -212,11 +212,11 @@ class WaypointBackendApplicationTests {
         UserEntity user = createUser("google-123", "user@example.com");
         String token = jwtService.issueToken(user.getId(), user.getEmail());
 
-        mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/api/v1/account").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(user.getId().toString()));
 
-        mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer invalid-token"))
+        mockMvc.perform(get("/api/v1/account").header("Authorization", "Bearer invalid-token"))
                 .andExpect(status().isUnauthorized());
     }
 
