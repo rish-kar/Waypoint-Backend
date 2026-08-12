@@ -1,0 +1,11 @@
+$kind: collection
+id: aa93dc55-52d9-4b40-84f0-0d397a7301a8
+name: Waypoint Backend API
+description: Run folders in order. Health checks need only the backend and PostgreSQL. Authentication requests cover request validation, Google token validation and Waypoint bearer-token enforcement. Successful Google Login requires a real Google access token and matching backend GOOGLE_CLIENT_ID. Checkout requests require Lemon Squeezy test-mode credentials. Webhook requests generate X-Signature automatically from webhookSecret.
+scripts:
+  - type: http:beforeRequest
+    code: |-
+      if (!pm.environment.get('baseUrl')) {
+          throw new Error('Select the Waypoint Local environment.');
+      }
+    language: text/javascript

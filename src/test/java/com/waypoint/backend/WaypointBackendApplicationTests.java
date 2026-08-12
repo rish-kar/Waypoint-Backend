@@ -1,19 +1,19 @@
 package com.waypoint.backend;
 
-import com.waypoint.backend.auth.GoogleProfile;
-import com.waypoint.backend.auth.GoogleProfileClient;
-import com.waypoint.backend.billing.LemonSqueezyClient;
-import com.waypoint.backend.common.UnauthorizedException;
-import com.waypoint.backend.security.JwtService;
-import com.waypoint.backend.subscription.CheckoutPlan;
-import com.waypoint.backend.subscription.SubscriptionEntity;
-import com.waypoint.backend.subscription.SubscriptionRepository;
-import com.waypoint.backend.subscription.SubscriptionStatus;
-import com.waypoint.backend.user.UserEntity;
-import com.waypoint.backend.user.UserRepository;
-import com.waypoint.backend.webhook.ProcessingStatus;
-import com.waypoint.backend.webhook.WebhookEventStore;
-import com.waypoint.backend.webhook.WebhookEventRepository;
+import com.waypoint.backend.model.auth.GoogleProfile;
+import com.waypoint.backend.model.subscription.SubscriptionEntity;
+import com.waypoint.backend.model.subscription.SubscriptionStatus;
+import com.waypoint.backend.model.user.UserEntity;
+import com.waypoint.backend.model.webhook.ProcessingStatus;
+import com.waypoint.backend.repository.subscription.SubscriptionRepository;
+import com.waypoint.backend.repository.user.UserRepository;
+import com.waypoint.backend.repository.webhook.WebhookEventRepository;
+import com.waypoint.backend.security.jwt.JwtService;
+import com.waypoint.backend.service.webhook.WebhookEventStore;
+import com.waypoint.backend.utilities.client.google.GoogleProfileClient;
+import com.waypoint.backend.utilities.client.lemonsqueezy.LemonSqueezyClient;
+import com.waypoint.backend.utilities.exception.UnauthorizedException;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -212,11 +212,11 @@ class WaypointBackendApplicationTests {
         UserEntity user = createUser("google-123", "user@example.com");
         String token = jwtService.issueToken(user.getId(), user.getEmail());
 
-        mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/api/v1/account").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(user.getId().toString()));
 
-        mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer invalid-token"))
+        mockMvc.perform(get("/api/v1/account").header("Authorization", "Bearer invalid-token"))
                 .andExpect(status().isUnauthorized());
     }
 

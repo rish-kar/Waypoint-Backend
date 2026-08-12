@@ -1,0 +1,3 @@
+$kind: collection
+description: Run validation and rejection cases first. Set googleAccessToken before Google Login. The successful login stores jwt and userId for later folders.
+order: 2000

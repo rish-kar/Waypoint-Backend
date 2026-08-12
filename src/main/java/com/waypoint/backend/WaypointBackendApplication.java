@@ -1,10 +1,11 @@
 package com.waypoint.backend;
 
-import com.waypoint.backend.auth.GoogleProperties;
-import com.waypoint.backend.billing.LemonSqueezyProperties;
-import com.waypoint.backend.config.AppProperties;
-import com.waypoint.backend.config.CorsProperties;
-import com.waypoint.backend.security.JwtProperties;
+import com.waypoint.backend.config.application.AppProperties;
+import com.waypoint.backend.config.application.CorsProperties;
+import com.waypoint.backend.config.auth.GoogleProperties;
+import com.waypoint.backend.config.billing.LemonSqueezyProperties;
+import com.waypoint.backend.security.jwt.JwtProperties;
+
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/actuator/health"
+method: GET
+headers:
+  X-Request-ID: postman-health
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      pm.test('Health is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));
+      pm.test('Request ID returned', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-health'));
+    language: text/javascript
+order: 1000

@@ -1,0 +1,20 @@
+$kind: http-request
+description: Requires valid Lemon Squeezy test-mode configuration.
+url: "{{baseUrl}}/api/v1/billing/checkout"
+method: POST
+headers:
+  Authorization: Bearer {{jwt}}
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "plan": "MONTHLY"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      pm.test('Checkout URL returned', () => pm.expect(pm.response.json().checkoutUrl).to.match(/^https:\/\//));
+    language: text/javascript
+order: 2000

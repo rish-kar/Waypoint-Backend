@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/account"
+method: GET
+headers:
+  Authorization: Bearer invalid-token
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 401', () => pm.response.to.have.status(401));
+      pm.test('Unauthorized code returned', () => pm.expect(pm.response.json().code).to.eql('UNAUTHORIZED'));
+      pm.test('Generic bearer failure returned', () => pm.expect(pm.response.json().message).to.eql('Invalid or expired bearer token'));
+    language: text/javascript
+order: 8000

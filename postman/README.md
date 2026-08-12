@@ -2,7 +2,7 @@
 
 ## Files
 
-- `Waypoint-Backend.postman_collection.json` — requests and automated assertions
+- `Waypoint-Backend.postman_collection.json` — all backend requests and automated assertions, including authentication
 - `Waypoint-Local.postman_environment.json` — local variables and generated session values
 
 ## 1. Start the backend
@@ -10,9 +10,11 @@
 From the repository root:
 
 ```bash
-git checkout project-configuration
-docker compose up --build
+git switch Authentication
+docker compose up -d postgres
 ```
+
+Start `WaypointBackendApplication` from IntelliJ using Java 21 and the `dev` profile.
 
 The backend runs at `http://localhost:8080` and PostgreSQL at `localhost:5432`.
 
@@ -36,6 +38,8 @@ Expected result:
 4. Import `postman/Waypoint-Local.postman_environment.json`.
 5. Select the **Waypoint Local** environment.
 
+Only these two Postman files are used for the backend.
+
 ## 3. Run configuration checks
 
 Run the `00 - Health and Configuration` folder.
@@ -51,34 +55,52 @@ They do not require Google or Lemon Squeezy credentials.
 
 ## 4. Test authentication
 
+Run the `01 - Authentication` folder.
+
+The requests cover:
+
+- missing request body;
+- blank Google token;
+- public login-route behavior;
+- invalid Google token rejection;
+- successful Google login;
+- missing bearer token;
+- invalid authorization scheme;
+- malformed JWT;
+- expired signed JWT.
+
 For a real login, the running backend must use the same Google OAuth client ID as the token:
 
 ```text
 GOOGLE_CLIENT_ID=<real Google OAuth client ID>
 ```
 
-Obtain a Google access token using the Waypoint extension's existing Google sign-in flow, then paste it into the Postman environment variable:
+Obtain a Google access token using the Waypoint extension's Google sign-in flow, then paste it into:
 
 ```text
 googleAccessToken
 ```
 
-Run `01 - Authentication > Google Login`.
-
-A successful request automatically saves:
+Run the rejection and validation requests first, then run `Google Login`. A successful request automatically saves:
 
 - `jwt` — Waypoint bearer token;
 - `userId` — Waypoint database user ID.
 
-The other authentication requests verify missing-token validation and unauthenticated endpoint protection.
+The `Protected Endpoint - Expired Signed JWT` request signs an expired token using:
+
+```text
+jwtSecret=waypoint-local-development-secret-change-before-production
+```
+
+When the backend uses a different `JWT_SECRET`, change `jwtSecret` in the Postman environment to the same value.
 
 ## 5. Test account and entitlement APIs
 
-Run the `02 - Account and Entitlements` folder after Google Login.
+Run the `02 - Account and Entitlements` folder after `Google Login`.
 
 It verifies:
 
-- `/api/v1/me` returns the logged-in user;
+- `/api/v1/account` returns the logged-in account;
 - `/api/v1/entitlements` returns a valid plan and feature list.
 
 A newly created user should initially receive the `FREE` plan with `instant-tab-search`.
@@ -105,7 +127,7 @@ Expected result: HTTP `200` with an HTTPS `checkoutUrl`.
 
 ## 7. Test signed webhooks locally
 
-Run the `04 - Webhooks` folder after Google Login.
+Run the `04 - Webhooks` folder after `Google Login`.
 
 The Postman pre-request scripts automatically:
 
@@ -136,4 +158,4 @@ The webhook simulation does not call Lemon Squeezy. It tests signature verificat
 
 Use Postman's Collection Runner after setting `googleAccessToken` and selecting **Waypoint Local**.
 
-Do not run the entire collection before configuring real Google and Lemon Squeezy credentials because the Google Login and checkout requests are real provider integrations.
+Do not run the complete collection before configuring real Google and Lemon Squeezy credentials because `Google Login` and checkout requests are real provider integrations.
