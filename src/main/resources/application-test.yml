@@ -10,6 +10,10 @@ spring:
   flyway:
     enabled: true
 
+admin:
+  id: test-admin
+  password: test-admin-password-12345
+
 jwt:
   secret: test-secret-that-is-long-enough-for-hmac
   expiration-seconds: 86400

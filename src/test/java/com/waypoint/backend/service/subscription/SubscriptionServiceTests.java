@@ -1,19 +1,22 @@
 package com.waypoint.backend.service.subscription;
 
+import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.subscription.CheckoutPlan;
 import com.waypoint.backend.model.subscription.SubscriptionAccessDecision;
 import com.waypoint.backend.model.subscription.SubscriptionEntity;
 import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.model.subscription.SubscriptionStatus;
-import com.waypoint.backend.repository.subscription.SubscriptionRepository;
 import com.waypoint.backend.model.user.UserEntity;
+import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
+import com.waypoint.backend.repository.subscription.SubscriptionRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,6 +26,7 @@ import static org.mockito.Mockito.when;
 class SubscriptionServiceTests {
     private SubscriptionRepository subscriptionRepository;
     private SubscriptionAccessPolicy subscriptionAccessPolicy;
+    private SpecialPremiumGrantRepository specialPremiumGrantRepository;
     private SubscriptionService subscriptionService;
     private UUID userId;
     private Instant now;
@@ -31,9 +35,15 @@ class SubscriptionServiceTests {
     void setUp() {
         subscriptionRepository = mock(SubscriptionRepository.class);
         subscriptionAccessPolicy = mock(SubscriptionAccessPolicy.class);
-        subscriptionService = new SubscriptionService(subscriptionRepository, subscriptionAccessPolicy);
+        specialPremiumGrantRepository = mock(SpecialPremiumGrantRepository.class);
+        subscriptionService = new SubscriptionService(
+                subscriptionRepository,
+                subscriptionAccessPolicy,
+                specialPremiumGrantRepository
+        );
         userId = UUID.randomUUID();
         now = Instant.parse("2026-08-12T08:00:00Z");
+        when(specialPremiumGrantRepository.findByUserId(userId)).thenReturn(Optional.empty());
     }
 
     @Test
@@ -46,6 +56,35 @@ class SubscriptionServiceTests {
         assertThat(result.status()).isEqualTo(SubscriptionStatus.INACTIVE);
         assertThat(result.premium()).isFalse();
         assertThat(result.checkedAt()).isEqualTo(now);
+    }
+
+    @Test
+    void returnsPremiumSpecialBeforePaidSubscription() {
+        SpecialPremiumGrantEntity grant = new SpecialPremiumGrantEntity();
+        grant.setActive(true);
+        grant.setValidUntil(now.plusSeconds(86400));
+        when(specialPremiumGrantRepository.findByUserId(userId)).thenReturn(Optional.of(grant));
+
+        SubscriptionSnapshot result = subscriptionService.current(userId, now);
+
+        assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_SPECIAL);
+        assertThat(result.status()).isEqualTo(SubscriptionStatus.PREMIUM_SPECIAL);
+        assertThat(result.premium()).isTrue();
+        assertThat(result.validUntil()).isEqualTo(grant.getValidUntil());
+    }
+
+    @Test
+    void ignoresExpiredPremiumSpecialGrant() {
+        SpecialPremiumGrantEntity grant = new SpecialPremiumGrantEntity();
+        grant.setActive(true);
+        grant.setValidUntil(now.minusSeconds(1));
+        when(specialPremiumGrantRepository.findByUserId(userId)).thenReturn(Optional.of(grant));
+        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(List.of());
+
+        SubscriptionSnapshot result = subscriptionService.current(userId, now);
+
+        assertThat(result.planCode()).isEqualTo(PlanCode.FREE);
+        assertThat(result.premium()).isFalse();
     }
 
     @Test

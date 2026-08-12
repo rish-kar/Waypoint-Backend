@@ -1,11 +1,13 @@
 package com.waypoint.backend.service.subscription;
 
+import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.subscription.CheckoutPlan;
 import com.waypoint.backend.model.subscription.SubscriptionAccessDecision;
 import com.waypoint.backend.model.subscription.SubscriptionEntity;
 import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.model.subscription.SubscriptionStatus;
+import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
 import com.waypoint.backend.repository.subscription.SubscriptionRepository;
 
 import org.springframework.stereotype.Service;
@@ -20,13 +22,16 @@ import java.util.UUID;
 public class SubscriptionService {
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionAccessPolicy subscriptionAccessPolicy;
+    private final SpecialPremiumGrantRepository specialPremiumGrantRepository;
 
     public SubscriptionService(
             SubscriptionRepository subscriptionRepository,
-            SubscriptionAccessPolicy subscriptionAccessPolicy
+            SubscriptionAccessPolicy subscriptionAccessPolicy,
+            SpecialPremiumGrantRepository specialPremiumGrantRepository
     ) {
         this.subscriptionRepository = subscriptionRepository;
         this.subscriptionAccessPolicy = subscriptionAccessPolicy;
+        this.specialPremiumGrantRepository = specialPremiumGrantRepository;
     }
 
     @Transactional(readOnly = true)
@@ -36,6 +41,22 @@ public class SubscriptionService {
 
     @Transactional(readOnly = true)
     public SubscriptionSnapshot current(UUID userId, Instant now) {
+        SpecialPremiumGrantEntity specialGrant = specialPremiumGrantRepository.findByUserId(userId)
+                .filter(grant -> isActiveSpecialGrant(grant, now))
+                .orElse(null);
+        if (specialGrant != null) {
+            return new SubscriptionSnapshot(
+                    PlanCode.PREMIUM_SPECIAL,
+                    SubscriptionStatus.PREMIUM_SPECIAL,
+                    true,
+                    null,
+                    null,
+                    null,
+                    specialGrant.getValidUntil(),
+                    now
+            );
+        }
+
         List<SubscriptionEntity> subscriptions = subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId);
         if (subscriptions.isEmpty()) {
             return freeSnapshot(SubscriptionStatus.INACTIVE, null, now);
@@ -58,6 +79,10 @@ public class SubscriptionService {
                             : latest.getStatus();
                     return freeSnapshot(status, latest, now);
                 });
+    }
+
+    private boolean isActiveSpecialGrant(SpecialPremiumGrantEntity grant, Instant now) {
+        return grant.isActive() && (grant.getValidUntil() == null || grant.getValidUntil().isAfter(now));
     }
 
     private SubscriptionSnapshot premiumSnapshot(Candidate candidate, Instant checkedAt) {

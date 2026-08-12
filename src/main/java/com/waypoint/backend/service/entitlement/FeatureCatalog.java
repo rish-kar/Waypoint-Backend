@@ -25,7 +25,9 @@ public class FeatureCatalog {
     }
 
     private List<FeatureCode> featureCodesFor(PlanCode planCode) {
-        if (planCode == PlanCode.PREMIUM_MONTHLY || planCode == PlanCode.PREMIUM_ANNUAL) {
+        if (planCode == PlanCode.PREMIUM_MONTHLY
+                || planCode == PlanCode.PREMIUM_ANNUAL
+                || planCode == PlanCode.PREMIUM_SPECIAL) {
             return PREMIUM_FEATURES;
         }
         return FREE_FEATURES;
