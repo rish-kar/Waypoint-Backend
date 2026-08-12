@@ -2,7 +2,7 @@
 
 ## Files
 
-- `Waypoint-Backend.postman_collection.json` — all backend requests and automated assertions, including authentication
+- `Waypoint-Backend.postman_collection.json` — all backend requests and automated assertions, including authentication, subscriptions and entitlements
 - `Waypoint-Local.postman_environment.json` — local variables and generated session values
 
 ## 1. Start the backend
@@ -10,7 +10,7 @@
 From the repository root:
 
 ```bash
-git switch Authentication
+git switch Subscription-and-Entitlement
 docker compose up -d postgres
 ```
 
@@ -38,7 +38,7 @@ Expected result:
 4. Import `postman/Waypoint-Local.postman_environment.json`.
 5. Select the **Waypoint Local** environment.
 
-Only these two Postman files are used for the backend.
+Only these two Postman files are needed for normal backend testing.
 
 ## 3. Run configuration checks
 
@@ -75,35 +75,38 @@ For a real login, the running backend must use the same Google OAuth client ID a
 GOOGLE_CLIENT_ID=<real Google OAuth client ID>
 ```
 
-Obtain a Google access token using the Waypoint extension's Google sign-in flow, then paste it into:
+Paste the real Google access token into the `googleAccessToken` environment variable and run `Google Login`.
 
-```text
-googleAccessToken
-```
-
-Run the rejection and validation requests first, then run `Google Login`. A successful request automatically saves:
+A successful request automatically saves:
 
 - `jwt` — Waypoint bearer token;
 - `userId` — Waypoint database user ID.
 
-The `Protected Endpoint - Expired Signed JWT` request signs an expired token using:
+The `Protected Endpoint - Expired Signed JWT` request signs an expired token using `jwtSecret`. When the backend uses a different `JWT_SECRET`, set `jwtSecret` to the same value.
 
-```text
-jwtSecret=waypoint-local-development-secret-change-before-production
-```
-
-When the backend uses a different `JWT_SECRET`, change `jwtSecret` in the Postman environment to the same value.
-
-## 5. Test account and entitlement APIs
+## 5. Test account, subscription and entitlement APIs
 
 Run the `02 - Account and Entitlements` folder after `Google Login`.
 
-It verifies:
+It now verifies:
 
-- `/api/v1/account` returns the logged-in account;
-- `/api/v1/entitlements` returns a valid plan and feature list.
+- `Account Details` — `GET /api/v1/account` returns the logged-in account;
+- `Current Entitlements` — `GET /api/v1/entitlements` returns the effective entitlement and feature list;
+- `Current Subscription` — `GET /api/v1/subscriptions/current` returns the effective stored subscription state;
+- `Free Feature Access` — `instant-tab-search` is available to both FREE and PREMIUM users;
+- `Premium Feature Access` — `ai-summary` is available only when the effective entitlement plan is PREMIUM.
 
-A newly created user should initially receive the `FREE` plan with `instant-tab-search`.
+For a newly created user with no subscription, the expected state is:
+
+```text
+subscription plan = FREE
+subscription status = INACTIVE
+premium = false
+instant-tab-search allowed = true
+ai-summary allowed = false
+```
+
+After a premium subscription is activated, the subscription plan becomes `PREMIUM_MONTHLY` or `PREMIUM_ANNUAL`, and premium feature checks become allowed.
 
 ## 6. Test billing
 
@@ -135,14 +138,7 @@ The Postman pre-request scripts automatically:
 2. calculate HMAC-SHA256 using `webhookSecret`;
 3. add the generated `X-Signature` header.
 
-The environment defaults match the development profile:
-
-```text
-webhookSecret=local-webhook-secret
-monthlyVariantId=local-monthly-variant-id
-```
-
-Change these variables when the backend is started with different values.
+The environment defaults match the development profile. Change them when the backend is started with different values.
 
 Run requests in this order:
 
@@ -158,4 +154,4 @@ The webhook simulation does not call Lemon Squeezy. It tests signature verificat
 
 Use Postman's Collection Runner after setting `googleAccessToken` and selecting **Waypoint Local**.
 
-Do not run the complete collection before configuring real Google and Lemon Squeezy credentials because `Google Login` and checkout requests are real provider integrations.
+Do not run the complete collection before configuring the provider credentials needed by the real Google Login and checkout requests.
