@@ -40,6 +40,11 @@ public class WebhookEventEntity {
 
     private Instant processedAt;
 
+    @Column(nullable = false)
+    private int attemptCount;
+
+    private Instant lastAttemptAt;
+
     @PrePersist
     void prePersist() {
         if (id == null) {
@@ -47,6 +52,12 @@ public class WebhookEventEntity {
         }
         if (receivedAt == null) {
             receivedAt = Instant.now();
+        }
+        if (attemptCount <= 0) {
+            attemptCount = 1;
+        }
+        if (lastAttemptAt == null) {
+            lastAttemptAt = receivedAt;
         }
     }
 
@@ -120,5 +131,21 @@ public class WebhookEventEntity {
 
     public void setProcessedAt(Instant processedAt) {
         this.processedAt = processedAt;
+    }
+
+    public int getAttemptCount() {
+        return attemptCount;
+    }
+
+    public void setAttemptCount(int attemptCount) {
+        this.attemptCount = attemptCount;
+    }
+
+    public Instant getLastAttemptAt() {
+        return lastAttemptAt;
+    }
+
+    public void setLastAttemptAt(Instant lastAttemptAt) {
+        this.lastAttemptAt = lastAttemptAt;
     }
 }
