@@ -2,10 +2,13 @@ package com.waypoint.backend.service.billing;
 
 import com.waypoint.backend.config.billing.LemonSqueezyProperties;
 import com.waypoint.backend.model.billing.BillingStatusResponse;
+import com.waypoint.backend.model.plan.PlanCode;
+import com.waypoint.backend.model.plan.PlanResponse;
 import com.waypoint.backend.model.subscription.CheckoutPlan;
 import com.waypoint.backend.model.subscription.SubscriptionEntity;
 import com.waypoint.backend.model.subscription.SubscriptionStatus;
 import com.waypoint.backend.model.user.UserEntity;
+import com.waypoint.backend.repository.plan.PlanRepository;
 import com.waypoint.backend.repository.subscription.SubscriptionRepository;
 import com.waypoint.backend.service.subscription.SubscriptionAccessPolicy;
 import com.waypoint.backend.utilities.client.lemonsqueezy.LemonSqueezyClient;
@@ -26,17 +29,27 @@ public class BillingService {
     private final LemonSqueezyProperties properties;
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionAccessPolicy subscriptionAccessPolicy;
+    private final PlanRepository planRepository;
 
     public BillingService(
             LemonSqueezyClient lemonSqueezyClient,
             LemonSqueezyProperties properties,
             SubscriptionRepository subscriptionRepository,
-            SubscriptionAccessPolicy subscriptionAccessPolicy
+            SubscriptionAccessPolicy subscriptionAccessPolicy,
+            PlanRepository planRepository
     ) {
         this.lemonSqueezyClient = lemonSqueezyClient;
         this.properties = properties;
         this.subscriptionRepository = subscriptionRepository;
         this.subscriptionAccessPolicy = subscriptionAccessPolicy;
+        this.planRepository = planRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public List<PlanResponse> availablePlans() {
+        return planRepository.findByActiveTrueAndPremiumTrueOrderByPriceCentsAsc().stream()
+                .map(PlanResponse::from)
+                .toList();
     }
 
     public String createCheckout(UserEntity user, CheckoutPlan plan) {
@@ -62,12 +75,20 @@ public class BillingService {
                 .max(Comparator.comparing(SubscriptionEntity::getUpdatedAt))
                 .map(subscription -> new BillingStatusResponse(
                         "PREMIUM",
+                        planCodeFor(subscription),
                         subscription.getStatus().name(),
                         subscription.getExternalSubscriptionId(),
                         subscription.getRenewsAt(),
                         subscription.getEndsAt()
                 ))
-                .orElseGet(() -> new BillingStatusResponse("FREE", latestStatus(subscriptions), null, null, null));
+                .orElseGet(() -> new BillingStatusResponse(
+                        "FREE",
+                        PlanCode.FREE,
+                        latestStatus(subscriptions),
+                        null,
+                        null,
+                        null
+                ));
     }
 
     private String latestStatus(List<SubscriptionEntity> subscriptions) {
@@ -76,5 +97,15 @@ public class BillingService {
         }
         SubscriptionStatus status = subscriptions.getFirst().getStatus();
         return status == null ? SubscriptionStatus.INACTIVE.name() : status.name();
+    }
+
+    private PlanCode planCodeFor(SubscriptionEntity subscription) {
+        if (CheckoutPlan.ANNUAL.name().equals(subscription.getPlan())) {
+            return PlanCode.PREMIUM_ANNUAL;
+        }
+        if (CheckoutPlan.MONTHLY.name().equals(subscription.getPlan())) {
+            return PlanCode.PREMIUM_MONTHLY;
+        }
+        return PlanCode.FREE;
     }
 }

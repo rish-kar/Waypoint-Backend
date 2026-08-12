@@ -11,9 +11,11 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import tools.jackson.databind.JsonNode;
 
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -33,10 +35,15 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
         if (!StringUtils.hasText(properties.apiKey()) || !StringUtils.hasText(properties.storeId())) {
             throw new InvalidRequestException("Lemon Squeezy checkout is not configured");
         }
+
+        long enabledVariantId = parseVariantId(variantId);
         Map<String, Object> body = Map.of(
                 "data", Map.of(
                         "type", "checkouts",
                         "attributes", Map.of(
+                                "product_options", Map.of(
+                                        "enabled_variants", List.of(enabledVariantId)
+                                ),
                                 "checkout_data", Map.of(
                                         "email", user.getEmail(),
                                         "custom", Map.of(
@@ -66,8 +73,20 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
                 throw new ExternalServiceException("Lemon Squeezy did not return a checkout URL");
             }
             return url;
-        } catch (WebClientResponseException exception) {
+        } catch (WebClientResponseException | WebClientRequestException exception) {
             throw new ExternalServiceException("Unable to create Lemon Squeezy checkout");
+        }
+    }
+
+    private long parseVariantId(String variantId) {
+        try {
+            long parsed = Long.parseLong(variantId);
+            if (parsed <= 0) {
+                throw new NumberFormatException("Variant ID must be positive");
+            }
+            return parsed;
+        } catch (NumberFormatException exception) {
+            throw new ExternalServiceException("Lemon Squeezy variant configuration is invalid");
         }
     }
 }

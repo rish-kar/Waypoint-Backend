@@ -2,6 +2,7 @@ package com.waypoint.backend.controller.billing;
 
 import com.waypoint.backend.model.billing.BillingStatusResponse;
 import com.waypoint.backend.model.billing.CheckoutResponse;
+import com.waypoint.backend.model.plan.PlanResponse;
 import com.waypoint.backend.model.subscription.CheckoutPlan;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.service.billing.BillingService;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -27,6 +29,11 @@ public class BillingController {
     public BillingController(BillingService billingService, UserService userService) {
         this.billingService = billingService;
         this.userService = userService;
+    }
+
+    @GetMapping("/plans")
+    public List<PlanResponse> plans() {
+        return billingService.availablePlans();
     }
 
     @PostMapping("/checkout")
