@@ -2,7 +2,7 @@
 
 ## Files
 
-- `Waypoint-Backend.postman_collection.json` — all backend requests and automated assertions, including authentication, subscriptions and entitlements
+- `Waypoint-Backend.postman_collection.json` — all backend requests and automated assertions, including authentication, subscriptions, entitlements and admin operations
 - `Waypoint-Local.postman_environment.json` — local variables and generated session values
 
 ## 1. Start the backend
@@ -14,7 +14,14 @@ git switch Subscription-and-Entitlement
 docker compose up -d postgres
 ```
 
-Start `WaypointBackendApplication` from IntelliJ using Java 21 and the `dev` profile.
+Before starting `WaypointBackendApplication`, add these to the same IntelliJ Run Configuration environment variables used by the backend:
+
+```text
+ADMIN_ID=<your-admin-id>
+ADMIN_PASSWORD=<a-strong-password-with-at-least-16-characters>
+```
+
+There are no default admin credentials. Start `WaypointBackendApplication` from IntelliJ using Java 21 and the `dev` profile.
 
 The backend runs at `http://localhost:8080` and PostgreSQL at `localhost:5432`.
 
@@ -37,8 +44,7 @@ Expected result:
 3. Import `postman/Waypoint-Backend.postman_collection.json`.
 4. Import `postman/Waypoint-Local.postman_environment.json`.
 5. Select the **Waypoint Local** environment.
-
-Only these two Postman files are needed for normal backend testing.
+6. Set `adminId` and `adminPassword` to the same values as `ADMIN_ID` and `ADMIN_PASSWORD` in IntelliJ.
 
 ## 3. Run configuration checks
 
@@ -88,7 +94,7 @@ The `Protected Endpoint - Expired Signed JWT` request signs an expired token usi
 
 Run the `02 - Account and Entitlements` folder after `Google Login`.
 
-It now verifies:
+It verifies:
 
 - `Account Details` — `GET /api/v1/account` returns the logged-in account;
 - `Current Entitlements` — `GET /api/v1/entitlements` returns the effective entitlement and feature list;
@@ -106,7 +112,7 @@ instant-tab-search allowed = true
 ai-summary allowed = false
 ```
 
-After a premium subscription is activated, the subscription plan becomes `PREMIUM_MONTHLY` or `PREMIUM_ANNUAL`, and premium feature checks become allowed.
+After a paid premium subscription is activated, the subscription plan becomes `PREMIUM_MONTHLY` or `PREMIUM_ANNUAL`.
 
 ## 6. Test billing
 
@@ -138,8 +144,6 @@ The Postman pre-request scripts automatically:
 2. calculate HMAC-SHA256 using `webhookSecret`;
 3. add the generated `X-Signature` header.
 
-The environment defaults match the development profile. Change them when the backend is started with different values.
-
 Run requests in this order:
 
 1. `Invalid Signature` — expects `401`.
@@ -148,10 +152,41 @@ Run requests in this order:
 4. `Refund Subscription` — expects `200`.
 5. `Verify Free Entitlement After Refund` — expects `FREE`.
 
-The webhook simulation does not call Lemon Squeezy. It tests signature verification, webhook persistence, subscription updates and entitlement calculation against the local database.
+## 8. Test admin Premium Special access
 
-## 8. Run the collection
+Run `Google Login` first so `userId` identifies the account being modified. Then run the `05 - Admin` folder in order.
 
-Use Postman's Collection Runner after setting `googleAccessToken` and selecting **Waypoint Local**.
+Admin requests use HTTP Basic authentication with the `adminId` and `adminPassword` Postman variables. These must exactly match the backend `ADMIN_ID` and `ADMIN_PASSWORD` environment variables.
+
+The folder verifies:
+
+1. invalid admin credentials are rejected with `401`;
+2. the admin can inspect a Waypoint user;
+3. `POST /api/v1/admin/users/{userId}/premium-special` grants Premium Special;
+4. `GET /api/v1/admin/premium-special` returns the active Premium Special count and users;
+5. the user's effective subscription becomes `PREMIUM_SPECIAL` with status `PREMIUM_SPECIAL`;
+6. `DELETE /api/v1/admin/users/{userId}/premium-special` revokes the grant;
+7. Premium Special is no longer effective after revocation.
+
+A grant body can optionally include `validUntil`. Omitting it creates lifetime Premium Special access:
+
+```json
+{
+  "reason": "Friends and family"
+}
+```
+
+For time-limited access:
+
+```json
+{
+  "validUntil": "2027-08-12T00:00:00Z",
+  "reason": "Friends and family"
+}
+```
+
+## 9. Run the collection
+
+Use Postman's Collection Runner after setting `googleAccessToken`, `adminId`, and `adminPassword` and selecting **Waypoint Local**.
 
 Do not run the complete collection before configuring the provider credentials needed by the real Google Login and checkout requests.
