@@ -1,0 +1,41 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/admin/users/{{userId}}/premium-special"
+method: POST
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+  Content-Type: application/json
+body:
+  mode: raw
+  raw: |-
+    {
+      "reason": "Friends and family"
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      if (!adminId || !adminPassword) {
+          throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      }
+      const raw = `${adminId}:${adminPassword}`;
+      pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(raw)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test('Premium Special granted', () => {
+          pm.expect(body.plan).to.eql('PREMIUM_SPECIAL');
+          pm.expect(body.status).to.eql('PREMIUM_SPECIAL');
+          pm.expect(body.active).to.eql(true);
+      });
+      pm.test('User matches login', () => pm.expect(body.userId).to.eql(pm.environment.get('userId')));
+    language: text/javascript
+order: 3000
