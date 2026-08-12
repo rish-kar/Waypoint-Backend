@@ -8,7 +8,7 @@ scripts:
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const body = pm.response.json();
-      pm.test('Valid subscription plan', () => pm.expect(body.plan).to.be.oneOf(['FREE', 'PREMIUM_MONTHLY', 'PREMIUM_ANNUAL']));
+      pm.test('Valid subscription plan', () => pm.expect(body.plan).to.be.oneOf(['FREE', 'PREMIUM_MONTHLY', 'PREMIUM_ANNUAL', 'PREMIUM_SPECIAL']));
       pm.test('Premium flag returned', () => pm.expect(body.premium).to.be.a('boolean'));
       pm.test('Subscription status returned', () => pm.expect(body.status).to.be.a('string'));
       pm.test('Checked at returned', () => pm.expect(body.checkedAt).to.be.a('string'));
