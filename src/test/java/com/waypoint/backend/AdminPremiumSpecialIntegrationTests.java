@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -66,12 +66,12 @@ class AdminPremiumSpecialIntegrationTests {
     void adminCredentialsAreRequired() throws Exception {
         UserEntity user = createUser();
 
-        mockMvc.perform(post("/api/v1/admin/users/{userId}/premium-special", user.getId())
+        mockMvc.perform(put("/api/v1/admin/users/{userId}/premium-special", user.getId())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"Friends and family\"}"))
                 .andExpect(status().isUnauthorized());
 
-        mockMvc.perform(post("/api/v1/admin/users/{userId}/premium-special", user.getId())
+        mockMvc.perform(put("/api/v1/admin/users/{userId}/premium-special", user.getId())
                         .with(httpBasic("test-admin", "wrong-password"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"Friends and family\"}"))
@@ -83,7 +83,7 @@ class AdminPremiumSpecialIntegrationTests {
         UserEntity user = createUser();
         String jwt = jwtService.issueToken(user.getId(), user.getEmail());
 
-        mockMvc.perform(post("/api/v1/admin/users/{userId}/premium-special", user.getId())
+        mockMvc.perform(put("/api/v1/admin/users/{userId}/premium-special", user.getId())
                         .with(httpBasic("test-admin", "test-admin-password-12345"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"Friends and family\"}"))
@@ -130,7 +130,7 @@ class AdminPremiumSpecialIntegrationTests {
         UserEntity user = createUser();
         String expired = Instant.now().minusSeconds(60).toString();
 
-        mockMvc.perform(post("/api/v1/admin/users/{userId}/premium-special", user.getId())
+        mockMvc.perform(put("/api/v1/admin/users/{userId}/premium-special", user.getId())
                         .with(httpBasic("test-admin", "test-admin-password-12345"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"validUntil\":\"" + expired + "\",\"reason\":\"Expired test\"}"))
