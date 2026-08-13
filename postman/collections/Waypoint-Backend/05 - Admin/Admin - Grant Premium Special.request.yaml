@@ -5,8 +5,8 @@ headers:
   Authorization: Basic {{adminBasicAuth}}
   Content-Type: application/json
 body:
-  mode: raw
-  raw: |-
+  type: json
+  content: |-
     {
       "reason": "Friends and family"
     }
