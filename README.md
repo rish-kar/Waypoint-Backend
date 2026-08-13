@@ -51,7 +51,7 @@ Never commit real secrets. For local IntelliJ development, set runtime values in
 | `DATABASE_CONNECTION_TIMEOUT_MS` | Hikari connection timeout |
 | `DATABASE_VALIDATION_TIMEOUT_MS` | Hikari validation timeout |
 | `ADMIN_ID` | Admin ID used only for `/api/v1/admin/**` HTTP Basic authentication |
-| `ADMIN_PASSWORD` | Admin password used only for `/api/v1/admin/**`; minimum 16 characters |
+| `ADMIN_PASSWORD` | Admin password used only for `/api/v1/admin/**`; must be non-empty |
 | `JWT_SECRET` | HMAC secret; minimum 32 characters and 32 bytes |
 | `JWT_EXPIRATION_SECONDS` | JWT validity; defaults to `86400` |
 | `GOOGLE_CLIENT_ID` | Expected Google OAuth client ID |
@@ -81,7 +81,7 @@ The admin API has no default credentials. Add these to the same IntelliJ Run Con
 
 ```text
 ADMIN_ID=<your-admin-id>
-ADMIN_PASSWORD=<strong-password-at-least-16-characters>
+ADMIN_PASSWORD=<your-admin-password>
 ```
 
 The development profile supplies safe local placeholders for Google and Lemon Squeezy, so the application can start before real provider credentials are added. Authentication, checkout and webhook calls still require valid provider configuration to work.
