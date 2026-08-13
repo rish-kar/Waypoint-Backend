@@ -31,6 +31,17 @@ jobs:
           cat .admin_payload_1.txt .admin_payload_2.txt | base64 -d > /tmp/admin-management.tar.gz
           tar -xzf /tmp/admin-management.tar.gz
           python3 .admin_apply.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/test/java/com/waypoint/backend/AdminDataManagementIntegrationTests.java')
+          text = path.read_text()
+          text = text.replace(
+              'import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.HttpBasicRequestPostProcessor;',
+              'import org.springframework.test.web.servlet.request.RequestPostProcessor;'
+          )
+          text = text.replace('private HttpBasicRequestPostProcessor admin()', 'private RequestPostProcessor admin()')
+          path.write_text(text)
+          PY
 
       - name: Verify
         run: mvn -B clean verify
