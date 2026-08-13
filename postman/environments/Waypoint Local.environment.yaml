@@ -8,9 +8,17 @@ values:
     value: ''
   - key: userId
     value: ''
+  - key: userEmail
+    value: ''
   - key: adminId
     value: ''
   - key: adminPassword
+    value: ''
+  - key: adminSubscriptionId
+    value: ''
+  - key: adminGrantId
+    value: ''
+  - key: adminWebhookEventId
     value: ''
   - key: jwtSecret
     value: waypoint-local-development-secret-change-before-production

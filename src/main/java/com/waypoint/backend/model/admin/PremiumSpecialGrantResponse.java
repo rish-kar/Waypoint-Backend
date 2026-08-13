@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record PremiumSpecialGrantResponse(
+        UUID id,
         UUID userId,
         String email,
         String plan,

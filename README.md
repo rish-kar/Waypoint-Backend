@@ -163,6 +163,8 @@ A Premium Special grant can be lifetime (`validUntil` omitted) or time-limited. 
 
 Admin endpoints use a separate stateless HTTP Basic security chain. A normal Waypoint JWT cannot authorize `/api/v1/admin/**`.
 
+The admin surface is a typed management API rather than a raw database/SQL endpoint. It exposes paginated, filterable reads across users, subscriptions, Premium Special grants, webhook events, plans and admin audit history. Controlled mutations are available for subscription lifecycle fields, Premium Special access and webhook processing metadata. All admin mutations are audited.
+
 ## API Endpoints
 
 | Method | Path | Auth | Purpose |
@@ -175,11 +177,23 @@ Admin endpoints use a separate stateless HTTP Basic security chain. A normal Way
 | `POST` | `/api/v1/billing/checkout` | JWT | Create Lemon Squeezy hosted checkout |
 | `GET` | `/api/v1/billing/status` | JWT | Return stored subscription status |
 | `POST` | `/api/v1/webhooks/lemonsqueezy` | Signed webhook | Process subscription and refund events |
-| `GET` | `/api/v1/admin/users/{userId}` | Admin Basic | Inspect a user and effective plan |
-| `GET` | `/api/v1/admin/users?email=...` | Admin Basic | Find a user by email |
-| `GET` | `/api/v1/admin/premium-special` | Admin Basic | Count and list active Premium Special users |
-| `POST` | `/api/v1/admin/users/{userId}/premium-special` | Admin Basic | Grant or update Premium Special access |
+| `GET` | `/api/v1/admin/overview` | Admin Basic | Aggregate admin data counts |
+| `GET` | `/api/v1/admin/users` | Admin Basic | Page/filter all users |
+| `GET` | `/api/v1/admin/users/{userId}` | Admin Basic | Inspect one user and effective plan |
+| `GET` | `/api/v1/admin/users/by-email?email=...` | Admin Basic | Find a user by exact email |
+| `GET` | `/api/v1/admin/subscriptions` | Admin Basic | Page/filter subscription records |
+| `GET` | `/api/v1/admin/subscriptions/{subscriptionId}` | Admin Basic | Inspect a subscription |
+| `PATCH` | `/api/v1/admin/subscriptions/{subscriptionId}` | Admin Basic | Correct subscription status/timestamps |
+| `GET` | `/api/v1/admin/premium-special` | Admin Basic | Count/list active Premium Special users |
+| `PUT` | `/api/v1/admin/users/{userId}/premium-special` | Admin Basic | Grant/replace Premium Special access |
 | `DELETE` | `/api/v1/admin/users/{userId}/premium-special` | Admin Basic | Revoke Premium Special access |
+| `GET` | `/api/v1/admin/special-grants` | Admin Basic | Page/filter all special grants |
+| `GET` | `/api/v1/admin/special-grants/{grantId}` | Admin Basic | Inspect one special grant |
+| `GET` | `/api/v1/admin/webhook-events` | Admin Basic | Page/filter webhook event records |
+| `GET` | `/api/v1/admin/webhook-events/{eventId}` | Admin Basic | Inspect webhook event including payload |
+| `PATCH` | `/api/v1/admin/webhook-events/{eventId}` | Admin Basic | Correct webhook processing metadata |
+| `GET` | `/api/v1/admin/plans` | Admin Basic | View complete local plan catalogue |
+| `GET` | `/api/v1/admin/audit-events` | Admin Basic | Page/filter admin mutation audit trail |
 | `GET` | `/actuator/health/**` | Public | Health, liveness and readiness checks |
 
 ## Subscription Rules
@@ -208,7 +222,7 @@ To explicitly load the isolated test profile:
 mvn verify -Dspring.profiles.active=test
 ```
 
-The main integration suite uses H2 in PostgreSQL compatibility mode and mocks Google and Lemon Squeezy clients. Admin integration tests verify credential rejection, Premium Special grant/list/revoke flows, and effective entitlement changes.
+The main integration suite uses H2 in PostgreSQL compatibility mode and mocks Google and Lemon Squeezy clients. Admin integration tests verify credential rejection, Premium Special flows, paged/filterable data reads, controlled mutations, audit history and effective entitlement changes.
 
 ## Docker Image
 

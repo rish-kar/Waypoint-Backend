@@ -10,9 +10,16 @@ public record AdminUserResponse(
         UUID id,
         String email,
         String displayName,
+        String pictureUrl,
+        String provider,
+        String providerUserId,
+        PlanCode persistedPlan,
         PlanCode plan,
         SubscriptionStatus status,
         boolean premium,
-        Instant validUntil
+        Instant validUntil,
+        Instant createdAt,
+        Instant updatedAt,
+        Instant lastLoginAt
 ) {
 }
