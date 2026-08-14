@@ -2,160 +2,107 @@
 
 ## Files
 
-- `Waypoint-Backend.postman_collection.json` — all backend requests and automated assertions, including authentication
-- `Waypoint-Local.postman_environment.json` — local variables and generated session values
+- `Waypoint-Backend.postman_collection.json` — importable collection
+- `Waypoint-Local.postman_environment.json` — importable local environment
+- `collections/Waypoint-Backend/` — Git-synced Postman source
+- `environments/Waypoint Local.environment.yaml` — Git-synced environment source
 
-## 1. Start the backend
+## Local setup
 
-From the repository root:
+Run the backend with the normal local configuration plus:
 
-```bash
-git switch Authentication
-docker compose up -d postgres
+```text
+ADMIN_ID=<your-admin-id>
+ADMIN_PASSWORD=<your-admin-password>
 ```
 
-Start `WaypointBackendApplication` from IntelliJ using Java 21 and the `dev` profile.
+`ADMIN_PASSWORD` only needs to be non-empty. There is no application character-count limit.
 
-The backend runs at `http://localhost:8080` and PostgreSQL at `localhost:5432`.
+In Postman, set:
 
-Confirm startup before opening Postman:
-
-```bash
-curl http://localhost:8080/actuator/health/readiness
+```text
+adminId = same value as ADMIN_ID
+adminPassword = same value as ADMIN_PASSWORD
 ```
 
-Expected result:
+Run `Google Login` once to populate `jwt`, `userId`, and `userEmail`.
+
+## Admin management
+
+The `05 - Admin` folder is the operational admin surface. Admin requests use HTTP Basic authentication and are separate from normal Waypoint JWT authentication.
+
+### Read and filter data
+
+- `Admin - Overview` — aggregate counts for users, premium users, subscriptions, active special grants and webhook processing.
+- `Admin - List Users` — paged users. Supports `q`, `provider`, `plan`, `premium`, created-date and last-login filters.
+- `Admin - Find User by Email` — exact email lookup.
+- `Admin - List Subscriptions` — paged subscriptions. Supports user, email, provider, plan, status, external IDs and date filters.
+- `Admin - List Special Grants` — all active, expired and revoked Premium Special grants with filters.
+- `Admin - List Webhook Events` — paged webhook records. Raw payloads are omitted by default; use `includePayload=true` only when required.
+- `Admin - List Plans` — complete local plan catalogue.
+- `Admin - Audit Events` — audit trail for admin mutations.
+
+All list endpoints default to 50 rows per page and allow at most 500 rows per request. Use `page`, `size`, `sort`, and `direction` to navigate the entire data set.
+
+### Manage data
+
+- `PUT /api/v1/admin/users/{userId}/premium-special` — grant or replace Premium Special access.
+- `DELETE /api/v1/admin/users/{userId}/premium-special` — revoke Premium Special access.
+- `PATCH /api/v1/admin/subscriptions/{subscriptionId}` — controlled internal correction of subscription status and renewal/end timestamps.
+- `PATCH /api/v1/admin/webhook-events/{eventId}` — controlled correction of webhook processing metadata.
+
+The admin API intentionally does not expose arbitrary SQL or unrestricted table mutation. Billing-provider IDs, raw plan mappings, authentication identities and schema-level data are not blindly writable through one generic endpoint.
+
+Every admin mutation writes an `admin_audit_events` record containing the admin ID, action, resource type, resource ID, details and timestamp.
+
+## Premium Special grant body
+
+Lifetime:
 
 ```json
-{"status":"UP"}
+{
+  "reason": "Friends and family"
+}
 ```
 
-## 2. Import into Postman
+Time-limited:
 
-1. Open Postman.
-2. Select **Import**.
-3. Import `postman/Waypoint-Backend.postman_collection.json`.
-4. Import `postman/Waypoint-Local.postman_environment.json`.
-5. Select the **Waypoint Local** environment.
-
-Only these two Postman files are used for the backend.
-
-## 3. Run configuration checks
-
-Run the `00 - Health and Configuration` folder.
-
-These requests test:
-
-- general application health;
-- liveness;
-- readiness and database connectivity;
-- `X-Request-ID` propagation.
-
-They do not require Google or Lemon Squeezy credentials.
-
-## 4. Test authentication
-
-Run the `01 - Authentication` folder.
-
-The requests cover:
-
-- missing request body;
-- blank Google token;
-- public login-route behavior;
-- invalid Google token rejection;
-- successful Google login;
-- missing bearer token;
-- invalid authorization scheme;
-- malformed JWT;
-- expired signed JWT.
-
-For a real login, the running backend must use the same Google OAuth client ID as the token:
-
-```text
-GOOGLE_CLIENT_ID=<real Google OAuth client ID>
+```json
+{
+  "validUntil": "2027-08-12T00:00:00Z",
+  "reason": "Friends and family"
+}
 ```
 
-Obtain a Google access token using the Waypoint extension's Google sign-in flow, then paste it into:
+## Subscription update body
 
-```text
-googleAccessToken
+Examples:
+
+```json
+{
+  "status": "ACTIVE"
+}
 ```
 
-Run the rejection and validation requests first, then run `Google Login`. A successful request automatically saves:
-
-- `jwt` — Waypoint bearer token;
-- `userId` — Waypoint database user ID.
-
-The `Protected Endpoint - Expired Signed JWT` request signs an expired token using:
-
-```text
-jwtSecret=waypoint-local-development-secret-change-before-production
+```json
+{
+  "status": "CANCELLED",
+  "endsAt": "2027-01-31T00:00:00Z"
+}
 ```
 
-When the backend uses a different `JWT_SECRET`, change `jwtSecret` in the Postman environment to the same value.
+Use `clearRenewsAt` or `clearEndsAt` to explicitly clear those timestamps.
 
-## 5. Test account and entitlement APIs
+## Webhook metadata update body
 
-Run the `02 - Account and Entitlements` folder after `Google Login`.
+Example:
 
-It verifies:
-
-- `/api/v1/account` returns the logged-in account;
-- `/api/v1/entitlements` returns a valid plan and feature list.
-
-A newly created user should initially receive the `FREE` plan with `instant-tab-search`.
-
-## 6. Test billing
-
-`Billing Status` reads only the local database and can be tested after login.
-
-The checkout requests require real Lemon Squeezy test-mode values in the backend:
-
-```text
-LEMON_SQUEEZY_API_KEY
-LEMON_SQUEEZY_STORE_ID
-LEMON_SQUEEZY_MONTHLY_VARIANT_ID
-LEMON_SQUEEZY_ANNUAL_VARIANT_ID
+```json
+{
+  "processingStatus": "PROCESSED",
+  "clearErrorMessage": true,
+  "processedAt": "2026-08-13T12:00:00Z"
+}
 ```
 
-Run either:
-
-- `Create Monthly Checkout`
-- `Create Annual Checkout`
-
-Expected result: HTTP `200` with an HTTPS `checkoutUrl`.
-
-## 7. Test signed webhooks locally
-
-Run the `04 - Webhooks` folder after `Google Login`.
-
-The Postman pre-request scripts automatically:
-
-1. construct the Lemon Squeezy payload;
-2. calculate HMAC-SHA256 using `webhookSecret`;
-3. add the generated `X-Signature` header.
-
-The environment defaults match the development profile:
-
-```text
-webhookSecret=local-webhook-secret
-monthlyVariantId=local-monthly-variant-id
-```
-
-Change these variables when the backend is started with different values.
-
-Run requests in this order:
-
-1. `Invalid Signature` — expects `401`.
-2. `Activate Monthly Subscription` — expects `200`.
-3. `Verify Premium Entitlement` — expects `PREMIUM`.
-4. `Refund Subscription` — expects `200`.
-5. `Verify Free Entitlement After Refund` — expects `FREE`.
-
-The webhook simulation does not call Lemon Squeezy. It tests signature verification, webhook persistence, subscription updates and entitlement calculation against the local database.
-
-## 8. Run the collection
-
-Use Postman's Collection Runner after setting `googleAccessToken` and selecting **Waypoint Local**.
-
-Do not run the complete collection before configuring real Google and Lemon Squeezy credentials because `Google Login` and checkout requests are real provider integrations.
+This changes stored processing metadata only. It does not replay a webhook.

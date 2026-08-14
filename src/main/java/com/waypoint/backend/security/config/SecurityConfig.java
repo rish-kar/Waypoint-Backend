@@ -1,5 +1,6 @@
 package com.waypoint.backend.security.config;
 
+import com.waypoint.backend.config.admin.AdminProperties;
 import com.waypoint.backend.config.application.CorsProperties;
 import com.waypoint.backend.model.common.ApiErrorResponse;
 import com.waypoint.backend.security.jwt.JwtAuthenticationFilter;
@@ -8,11 +9,17 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -28,6 +35,64 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
     @Bean
+    PasswordEncoder adminPasswordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
+
+    @Bean
+    UserDetailsService adminUserDetailsService(
+            AdminProperties properties,
+            PasswordEncoder adminPasswordEncoder
+    ) {
+        return new InMemoryUserDetailsManager(User.withUsername(properties.id())
+                .password(adminPasswordEncoder.encode(properties.password()))
+                .roles("ADMIN")
+                .build());
+    }
+
+    @Bean
+    @Order(1)
+    SecurityFilterChain adminSecurityFilterChain(HttpSecurity http, ObjectMapper objectMapper) throws Exception {
+        return http
+                .securityMatcher("/api/v1/admin/**")
+                .csrf(AbstractHttpConfigurer::disable)
+                .cors(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .logout(AbstractHttpConfigurer::disable)
+                .requestCache(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .httpBasic(basic -> basic.authenticationEntryPoint((request, response, authException) ->
+                        writeSecurityError(
+                                objectMapper,
+                                request,
+                                response,
+                                HttpServletResponse.SC_UNAUTHORIZED,
+                                "UNAUTHORIZED",
+                                "Invalid admin credentials"
+                        )))
+                .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("ADMIN"))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint((request, response, authException) -> writeSecurityError(
+                                objectMapper,
+                                request,
+                                response,
+                                HttpServletResponse.SC_UNAUTHORIZED,
+                                "UNAUTHORIZED",
+                                "Invalid admin credentials"
+                        ))
+                        .accessDeniedHandler((request, response, accessDeniedException) -> writeSecurityError(
+                                objectMapper,
+                                request,
+                                response,
+                                HttpServletResponse.SC_FORBIDDEN,
+                                "FORBIDDEN",
+                                "Admin access denied"
+                        )))
+                .build();
+    }
+
+    @Bean
+    @Order(2)
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             JwtAuthenticationFilter jwtAuthenticationFilter,
@@ -74,7 +139,7 @@ public class SecurityConfig {
     CorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(properties.allowedOrigins());
-        configuration.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Signature", "X-Request-ID"));
         configuration.setExposedHeaders(List.of("X-Request-ID"));
         configuration.setAllowCredentials(true);

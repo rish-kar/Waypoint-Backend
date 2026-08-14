@@ -1,0 +1,15 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/entitlements/features/ai-summary"
+method: GET
+headers:
+  Authorization: Bearer {{jwt}}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test('Feature is ai-summary', () => pm.expect(body.feature).to.eql('ai-summary'));
+      pm.test('Premium feature matches plan', () => pm.expect(body.allowed).to.eql(body.plan === 'PREMIUM'));
+      pm.test('Valid entitlement plan', () => pm.expect(body.plan).to.be.oneOf(['FREE', 'PREMIUM']));
+    language: text/javascript
+order: 5000

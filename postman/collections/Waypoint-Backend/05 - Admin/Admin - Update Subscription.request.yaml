@@ -1,0 +1,35 @@
+$kind: http-request
+description: Controlled internal update of subscription status and renewal/end timestamps. Does not alter provider IDs or billing plan mapping.
+url: "{{baseUrl}}/api/v1/admin/subscriptions/{{adminSubscriptionId}}"
+method: PATCH
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "status": "ACTIVE"
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      if (!adminId || !adminPassword) {
+          throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      }
+      pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      pm.test('Subscription updated', () => pm.expect(pm.response.json().status).to.eql('ACTIVE'));
+    language: text/javascript
+order: 3500
