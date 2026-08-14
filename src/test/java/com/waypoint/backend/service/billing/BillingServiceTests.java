@@ -117,17 +117,19 @@ class BillingServiceTests {
         assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_MONTHLY);
         assertThat(result.status()).isEqualTo("ACTIVE");
         assertThat(result.externalSubscriptionId()).isEqualTo("sub_123");
+        assertThat(result.trialEndsAt()).isNull();
     }
 
     @Test
-    void exposesOnTrialBillingSubscriptionInsteadOfEffectiveSpecialGrant() {
+    void exposesOnTrialBillingSubscriptionAndLemonSqueezyTrialEndDate() {
         UserEntity user = user();
-        when(subscriptionService.currentBilling(user.getId())).thenReturn(snapshot(
+        SubscriptionSnapshot snapshot = snapshot(
                 PlanCode.PREMIUM_MONTHLY,
                 SubscriptionStatus.ON_TRIAL,
                 true,
                 "sub_trial"
-        ));
+        );
+        when(subscriptionService.currentBilling(user.getId())).thenReturn(snapshot);
 
         BillingStatusResponse result = billingService.billingStatus(user.getId());
 
@@ -135,6 +137,7 @@ class BillingServiceTests {
         assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_MONTHLY);
         assertThat(result.status()).isEqualTo("ON_TRIAL");
         assertThat(result.externalSubscriptionId()).isEqualTo("sub_trial");
+        assertThat(result.trialEndsAt()).isEqualTo(snapshot.trialEndsAt());
     }
 
     @Test
@@ -181,14 +184,18 @@ class BillingServiceTests {
             String externalSubscriptionId
     ) {
         Instant now = Instant.now();
+        Instant trialEndsAt = status == SubscriptionStatus.ON_TRIAL ? now.plusSeconds(604800) : null;
+        Instant renewsAt = premium ? now.plusSeconds(3600) : null;
+        Instant validUntil = trialEndsAt != null ? trialEndsAt : renewsAt;
         return new SubscriptionSnapshot(
                 planCode,
                 status,
                 premium,
                 externalSubscriptionId,
-                premium ? now.plusSeconds(3600) : null,
+                trialEndsAt,
+                renewsAt,
                 null,
-                premium ? now.plusSeconds(3600) : null,
+                validUntil,
                 now
         );
     }

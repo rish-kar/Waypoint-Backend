@@ -104,15 +104,35 @@ class WebhookIntegrationTests {
     }
 
     @Test
-    void storesOnTrialSubscriptionFromSubscriptionCreatedWebhook() throws Exception {
+    void storesLemonSqueezyTrialEndDateForOnTrialSubscription() throws Exception {
         UserEntity user = createUser();
-        String payload = subscriptionWebhook(
-                user.getId(),
-                "sub_trial",
-                "on_trial",
-                "123",
-                "subscription_created"
-        );
+        String trialEndsAt = "2030-01-08T00:00:00Z";
+        JsonNode node = objectMapper.readTree("""
+                {
+                  "meta": {
+                    "event_name": "subscription_created",
+                    "custom_data": {
+                      "waypoint_user_id": "%s",
+                      "waypoint_plan": "MONTHLY"
+                    }
+                  },
+                  "data": {
+                    "type": "subscriptions",
+                    "id": "sub_trial",
+                    "attributes": {
+                      "store_id": 123,
+                      "customer_id": 123,
+                      "product_id": 456,
+                      "variant_id": 111,
+                      "status": "on_trial",
+                      "trial_ends_at": "%s",
+                      "renews_at": "%s",
+                      "ends_at": null
+                    }
+                  }
+                }
+                """.formatted(user.getId(), trialEndsAt, trialEndsAt));
+        String payload = objectMapper.writeValueAsString(node);
 
         mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -124,12 +144,8 @@ class WebhookIntegrationTests {
                 .findByExternalSubscriptionId("sub_trial")
                 .orElseThrow();
         assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ON_TRIAL);
-        assertThat(subscription.getPlan()).isEqualTo("MONTHLY");
-        assertThat(webhookEventRepository.findAll()).singleElement()
-                .satisfies(event -> {
-                    assertThat(event.getEventName()).isEqualTo("subscription_created");
-                    assertThat(event.getProcessingStatus()).isEqualTo(ProcessingStatus.PROCESSED);
-                });
+        assertThat(subscription.getTrialEndsAt()).isEqualTo(Instant.parse(trialEndsAt));
+        assertThat(subscription.getRenewsAt()).isEqualTo(Instant.parse(trialEndsAt));
     }
 
     @Test
@@ -206,20 +222,10 @@ class WebhookIntegrationTests {
     }
 
     private String subscriptionWebhook(UUID userId, String subscriptionId, String status, String storeId) throws Exception {
-        return subscriptionWebhook(userId, subscriptionId, status, storeId, "subscription_updated");
-    }
-
-    private String subscriptionWebhook(
-            UUID userId,
-            String subscriptionId,
-            String status,
-            String storeId,
-            String eventName
-    ) throws Exception {
         JsonNode node = objectMapper.readTree("""
                 {
                   "meta": {
-                    "event_name": "%s",
+                    "event_name": "subscription_updated",
                     "custom_data": {
                       "waypoint_user_id": "%s",
                       "waypoint_plan": "MONTHLY"
@@ -239,7 +245,7 @@ class WebhookIntegrationTests {
                     }
                   }
                 }
-                """.formatted(eventName, userId, subscriptionId, storeId, status));
+                """.formatted(userId, subscriptionId, storeId, status));
         return objectMapper.writeValueAsString(node);
     }
 

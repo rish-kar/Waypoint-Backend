@@ -71,6 +71,7 @@ class SubscriptionServiceTests {
         assertThat(result.status()).isEqualTo(SubscriptionStatus.PREMIUM_SPECIAL);
         assertThat(result.premium()).isTrue();
         assertThat(result.validUntil()).isEqualTo(grant.getValidUntil());
+        assertThat(result.trialEndsAt()).isNull();
     }
 
     @Test
@@ -82,6 +83,7 @@ class SubscriptionServiceTests {
 
         SubscriptionEntity trial = subscription(CheckoutPlan.MONTHLY, SubscriptionStatus.ON_TRIAL, now.minusSeconds(60));
         Instant trialEndsAt = now.plusSeconds(604800);
+        trial.setTrialEndsAt(trialEndsAt);
         trial.setRenewsAt(trialEndsAt);
         when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(List.of(trial));
         when(subscriptionAccessPolicy.evaluate(trial, now))
@@ -93,6 +95,8 @@ class SubscriptionServiceTests {
         assertThat(result.status()).isEqualTo(SubscriptionStatus.ON_TRIAL);
         assertThat(result.premium()).isTrue();
         assertThat(result.externalSubscriptionId()).isEqualTo(trial.getExternalSubscriptionId());
+        assertThat(result.trialEndsAt()).isEqualTo(trialEndsAt);
+        assertThat(result.validUntil()).isEqualTo(trialEndsAt);
     }
 
     @Test

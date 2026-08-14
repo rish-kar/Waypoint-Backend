@@ -61,21 +61,12 @@ public class BillingService {
 
     public BillingStatusResponse billingStatus(UUID userId) {
         SubscriptionSnapshot subscription = subscriptionService.currentBilling(userId);
-        if (!subscription.premium()) {
-            return new BillingStatusResponse(
-                    "FREE",
-                    subscription.planCode(),
-                    subscription.status().name(),
-                    null,
-                    null,
-                    null
-            );
-        }
         return new BillingStatusResponse(
-                "PREMIUM",
+                subscription.premium() ? "PREMIUM" : "FREE",
                 subscription.planCode(),
                 subscription.status().name(),
                 subscription.externalSubscriptionId(),
+                subscription.trialEndsAt(),
                 subscription.renewsAt(),
                 subscription.endsAt()
         );

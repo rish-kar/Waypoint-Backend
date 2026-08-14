@@ -20,5 +20,10 @@ scripts:
         }
       });
       pm.test('Subscription status is returned', () => pm.expect(body.status).to.be.a('string').and.not.empty);
+      if (body.status === 'ON_TRIAL') {
+        pm.test('Trial end date comes from billing state', () => {
+          pm.expect(body.trialEndsAt).to.be.a('string').and.not.empty;
+        });
+      }
     language: text/javascript
 order: 1000

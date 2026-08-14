@@ -52,6 +52,7 @@ public class SubscriptionService {
                     null,
                     null,
                     null,
+                    null,
                     specialGrant.getValidUntil(),
                     now
             );
@@ -102,6 +103,7 @@ public class SubscriptionService {
                 decision.status(),
                 true,
                 subscription.getExternalSubscriptionId(),
+                subscription.getTrialEndsAt(),
                 subscription.getRenewsAt(),
                 subscription.getEndsAt(),
                 decision.validUntil(),
@@ -119,6 +121,7 @@ public class SubscriptionService {
                 status,
                 false,
                 subscription == null ? null : subscription.getExternalSubscriptionId(),
+                subscription == null ? null : subscription.getTrialEndsAt(),
                 subscription == null ? null : subscription.getRenewsAt(),
                 subscription == null ? null : subscription.getEndsAt(),
                 null,

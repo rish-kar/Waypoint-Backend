@@ -72,6 +72,9 @@ public class WebhookSubscriptionProcessor {
 
         subscription.setStatus(resolveStatus(eventName, attributes));
 
+        if (attributes.get("trial_ends_at") != null) {
+            subscription.setTrialEndsAt(parseInstant(text(attributes, "trial_ends_at")));
+        }
         if (attributes.get("renews_at") != null) {
             subscription.setRenewsAt(parseInstant(text(attributes, "renews_at")));
         }
