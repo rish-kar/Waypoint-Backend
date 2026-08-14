@@ -57,6 +57,15 @@ public class SubscriptionService {
             );
         }
 
+        return currentBilling(userId, now);
+    }
+
+    @Transactional(readOnly = true)
+    public SubscriptionSnapshot currentBilling(UUID userId) {
+        return currentBilling(userId, Instant.now());
+    }
+
+    SubscriptionSnapshot currentBilling(UUID userId, Instant now) {
         List<SubscriptionEntity> subscriptions = subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId);
         if (subscriptions.isEmpty()) {
             return freeSnapshot(SubscriptionStatus.INACTIVE, null, now);

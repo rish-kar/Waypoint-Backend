@@ -104,7 +104,7 @@ class BillingServiceTests {
     @Test
     void exposesExactMonthlyPlanCodeForActiveSubscription() {
         UserEntity user = user();
-        when(subscriptionService.current(user.getId())).thenReturn(snapshot(
+        when(subscriptionService.currentBilling(user.getId())).thenReturn(snapshot(
                 PlanCode.PREMIUM_MONTHLY,
                 SubscriptionStatus.ACTIVE,
                 true,
@@ -120,26 +120,27 @@ class BillingServiceTests {
     }
 
     @Test
-    void preservesPremiumSpecialFromEffectiveSubscriptionModel() {
+    void exposesOnTrialBillingSubscriptionInsteadOfEffectiveSpecialGrant() {
         UserEntity user = user();
-        when(subscriptionService.current(user.getId())).thenReturn(snapshot(
-                PlanCode.PREMIUM_SPECIAL,
-                SubscriptionStatus.PREMIUM_SPECIAL,
+        when(subscriptionService.currentBilling(user.getId())).thenReturn(snapshot(
+                PlanCode.PREMIUM_MONTHLY,
+                SubscriptionStatus.ON_TRIAL,
                 true,
-                null
+                "sub_trial"
         ));
 
         BillingStatusResponse result = billingService.billingStatus(user.getId());
 
         assertThat(result.plan()).isEqualTo("PREMIUM");
-        assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_SPECIAL);
-        assertThat(result.status()).isEqualTo("PREMIUM_SPECIAL");
+        assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_MONTHLY);
+        assertThat(result.status()).isEqualTo("ON_TRIAL");
+        assertThat(result.externalSubscriptionId()).isEqualTo("sub_trial");
     }
 
     @Test
-    void returnsFreePlanCodeWithoutPremiumAccess() {
+    void returnsFreePlanCodeWithoutPaidPremiumAccess() {
         UserEntity user = user();
-        when(subscriptionService.current(user.getId())).thenReturn(snapshot(
+        when(subscriptionService.currentBilling(user.getId())).thenReturn(snapshot(
                 PlanCode.FREE,
                 SubscriptionStatus.INACTIVE,
                 false,

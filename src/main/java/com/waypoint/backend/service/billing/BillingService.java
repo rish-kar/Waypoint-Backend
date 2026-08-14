@@ -60,7 +60,7 @@ public class BillingService {
     }
 
     public BillingStatusResponse billingStatus(UUID userId) {
-        SubscriptionSnapshot subscription = subscriptionService.current(userId);
+        SubscriptionSnapshot subscription = subscriptionService.currentBilling(userId);
         if (!subscription.premium()) {
             return new BillingStatusResponse(
                     "FREE",

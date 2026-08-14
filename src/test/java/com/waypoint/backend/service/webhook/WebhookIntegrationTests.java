@@ -104,6 +104,35 @@ class WebhookIntegrationTests {
     }
 
     @Test
+    void storesOnTrialSubscriptionFromSubscriptionCreatedWebhook() throws Exception {
+        UserEntity user = createUser();
+        String payload = subscriptionWebhook(
+                user.getId(),
+                "sub_trial",
+                "on_trial",
+                "123",
+                "subscription_created"
+        );
+
+        mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Signature", hmac(payload))
+                        .content(payload))
+                .andExpect(status().isOk());
+
+        SubscriptionEntity subscription = subscriptionRepository
+                .findByExternalSubscriptionId("sub_trial")
+                .orElseThrow();
+        assertThat(subscription.getStatus()).isEqualTo(SubscriptionStatus.ON_TRIAL);
+        assertThat(subscription.getPlan()).isEqualTo("MONTHLY");
+        assertThat(webhookEventRepository.findAll()).singleElement()
+                .satisfies(event -> {
+                    assertThat(event.getEventName()).isEqualTo("subscription_created");
+                    assertThat(event.getProcessingStatus()).isEqualTo(ProcessingStatus.PROCESSED);
+                });
+    }
+
+    @Test
     void storesPastDueSubscriptionStatus() throws Exception {
         UserEntity user = createUser();
         String payload = subscriptionWebhook(user.getId(), "sub_past_due", "past_due", "123");
@@ -177,10 +206,20 @@ class WebhookIntegrationTests {
     }
 
     private String subscriptionWebhook(UUID userId, String subscriptionId, String status, String storeId) throws Exception {
+        return subscriptionWebhook(userId, subscriptionId, status, storeId, "subscription_updated");
+    }
+
+    private String subscriptionWebhook(
+            UUID userId,
+            String subscriptionId,
+            String status,
+            String storeId,
+            String eventName
+    ) throws Exception {
         JsonNode node = objectMapper.readTree("""
                 {
                   "meta": {
-                    "event_name": "subscription_updated",
+                    "event_name": "%s",
                     "custom_data": {
                       "waypoint_user_id": "%s",
                       "waypoint_plan": "MONTHLY"
@@ -200,7 +239,7 @@ class WebhookIntegrationTests {
                     }
                   }
                 }
-                """.formatted(userId, subscriptionId, storeId, status));
+                """.formatted(eventName, userId, subscriptionId, storeId, status));
         return objectMapper.writeValueAsString(node);
     }
 
