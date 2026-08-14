@@ -1,5 +1,6 @@
 package com.waypoint.backend;
 
+import com.waypoint.backend.config.admin.AdminProperties;
 import com.waypoint.backend.config.application.AppProperties;
 import com.waypoint.backend.config.application.CorsProperties;
 import com.waypoint.backend.config.auth.GoogleProperties;
@@ -14,6 +15,7 @@ import java.util.TimeZone;
 
 @SpringBootApplication
 @EnableConfigurationProperties({
+        AdminProperties.class,
         AppProperties.class,
         CorsProperties.class,
         GoogleProperties.class,

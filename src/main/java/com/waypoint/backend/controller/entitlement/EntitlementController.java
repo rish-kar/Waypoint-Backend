@@ -1,10 +1,12 @@
 package com.waypoint.backend.controller.entitlement;
 
 import com.waypoint.backend.model.entitlement.EntitlementResponse;
+import com.waypoint.backend.model.entitlement.FeatureEntitlementResponse;
 import com.waypoint.backend.service.entitlement.EntitlementService;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -22,5 +24,13 @@ public class EntitlementController {
     @GetMapping
     public EntitlementResponse current(@AuthenticationPrincipal UUID userId) {
         return entitlementService.currentEntitlement(userId, true);
+    }
+
+    @GetMapping("/features/{feature}")
+    public FeatureEntitlementResponse feature(
+            @AuthenticationPrincipal UUID userId,
+            @PathVariable String feature
+    ) {
+        return entitlementService.featureAccess(userId, feature);
     }
 }

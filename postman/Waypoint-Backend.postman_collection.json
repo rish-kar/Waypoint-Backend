@@ -1,1 +1,2184 @@
-{"info":{"_postman_id":"aa93dc55-52d9-4b40-84f0-0d397a7301a8","name":"Waypoint Backend API","description":"Run folders in order. Health checks need only the backend and PostgreSQL. Authentication requests cover request validation, Google token validation and Waypoint bearer-token enforcement. Successful Google Login requires a real Google access token and matching backend GOOGLE_CLIENT_ID. Checkout requests require Lemon Squeezy test-mode credentials. Webhook requests generate X-Signature automatically from webhookSecret.","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"event":[{"listen":"prerequest","script":{"type":"text/javascript","exec":["if (!pm.environment.get('baseUrl')) {","    throw new Error('Select the Waypoint Local environment.');","}"]}}],"item":[{"name":"00 - Health and Configuration","item":[{"name":"Health","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));","pm.test('Health is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));","pm.test('Request ID returned', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-health'));"]}}],"request":{"method":"GET","header":[{"key":"X-Request-ID","value":"postman-health"}],"url":{"raw":"{{baseUrl}}/actuator/health","host":["{{baseUrl}}"],"path":["actuator","health"]}}},{"name":"Liveness","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));","pm.test('Health is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));","pm.test('Request ID returned', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-liveness'));"]}}],"request":{"method":"GET","header":[{"key":"X-Request-ID","value":"postman-liveness"}],"url":{"raw":"{{baseUrl}}/actuator/health/liveness","host":["{{baseUrl}}"],"path":["actuator","health","liveness"]}}},{"name":"Readiness","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));","pm.test('Health is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));","pm.test('Request ID returned', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-readiness'));"]}}],"request":{"method":"GET","header":[{"key":"X-Request-ID","value":"postman-readiness"}],"url":{"raw":"{{baseUrl}}/actuator/health/readiness","host":["{{baseUrl}}"],"path":["actuator","health","readiness"]}}}]},{"name":"01 - Authentication","description":"Run validation and rejection cases first. Set googleAccessToken before Google Login. The successful login stores jwt and userId for later folders.","item":[{"name":"Google Login - Missing Body","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 400', () => pm.response.to.have.status(400));","pm.test('Invalid request code returned', () => pm.expect(pm.response.json().code).to.eql('INVALID_REQUEST'));"]}}],"request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":{"raw":"{{baseUrl}}/api/v1/auth/google","host":["{{baseUrl}}"],"path":["api","v1","auth","google"]},"body":{"mode":"raw","raw":"{}","options":{"raw":{"language":"json"}}}}},{"name":"Google Login - Blank Token","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 400', () => pm.response.to.have.status(400));","pm.test('Invalid request code returned', () => pm.expect(pm.response.json().code).to.eql('INVALID_REQUEST'));"]}}],"request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":{"raw":"{{baseUrl}}/api/v1/auth/google","host":["{{baseUrl}}"],"path":["api","v1","auth","google"]},"body":{"mode":"raw","raw":"{\n  \"accessToken\": \"\"\n}","options":{"raw":{"language":"json"}}}}},{"name":"Public Login Route Ignores Invalid Authorization Header","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Public route reaches request validation', () => pm.response.to.have.status(400));"]}}],"request":{"method":"POST","header":[{"key":"Authorization","value":"NotBearer invalid"},{"key":"Content-Type","value":"application/json"}],"url":{"raw":"{{baseUrl}}/api/v1/auth/google","host":["{{baseUrl}}"],"path":["api","v1","auth","google"]},"body":{"mode":"raw","raw":"{}","options":{"raw":{"language":"json"}}}}},{"name":"Google Login - Invalid Token","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 401', () => pm.response.to.have.status(401));","const body = pm.response.json();","pm.test('Generic authentication failure returned', () => {","    pm.expect(body.code).to.eql('UNAUTHORIZED');","    pm.expect(body.message).to.eql('Google authentication failed');","});"]}}],"request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":{"raw":"{{baseUrl}}/api/v1/auth/google","host":["{{baseUrl}}"],"path":["api","v1","auth","google"]},"body":{"mode":"raw","raw":"{\n  \"accessToken\": \"invalid-google-access-token\"\n}","options":{"raw":{"language":"json"}}},"description":"Requires network access from the backend to Google."}},{"name":"Google Login","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));","const body = pm.response.json();","pm.test('Bearer token returned', () => {","    pm.expect(body.tokenType).to.eql('Bearer');","    pm.expect(body.accessToken).to.be.a('string').and.not.empty;","    pm.expect(body.expiresIn).to.be.above(0);","});","pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-auth-login'));","pm.environment.set('jwt', body.accessToken);","pm.environment.set('userId', body.user.id);"]}}],"request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"},{"key":"X-Request-ID","value":"postman-auth-login"}],"url":{"raw":"{{baseUrl}}/api/v1/auth/google","host":["{{baseUrl}}"],"path":["api","v1","auth","google"]},"body":{"mode":"raw","raw":"{\n  \"accessToken\": \"{{googleAccessToken}}\"\n}","options":{"raw":{"language":"json"}}},"description":"Requires a real Google access token whose audience matches GOOGLE_CLIENT_ID. Saves jwt and userId into the selected environment."}},{"name":"Protected Endpoint - No JWT","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 401', () => pm.response.to.have.status(401));","pm.test('Authentication required', () => pm.expect(pm.response.json().message).to.eql('Authentication required'));"]}}],"request":{"method":"GET","header":[],"url":{"raw":"{{baseUrl}}/api/v1/account","host":["{{baseUrl}}"],"path":["api","v1","account"]}}},{"name":"Protected Endpoint - Invalid Scheme","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 401', () => pm.response.to.have.status(401));","pm.test('Generic bearer failure returned', () => pm.expect(pm.response.json().message).to.eql('Invalid or expired bearer token'));"]}}],"request":{"method":"GET","header":[{"key":"Authorization","value":"Token invalid"}],"url":{"raw":"{{baseUrl}}/api/v1/account","host":["{{baseUrl}}"],"path":["api","v1","account"]}}},{"name":"Protected Endpoint - Malformed JWT","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 401', () => pm.response.to.have.status(401));","pm.test('Unauthorized code returned', () => pm.expect(pm.response.json().code).to.eql('UNAUTHORIZED'));","pm.test('Generic bearer failure returned', () => pm.expect(pm.response.json().message).to.eql('Invalid or expired bearer token'));"]}}],"request":{"method":"GET","header":[{"key":"Authorization","value":"Bearer invalid-token"}],"url":{"raw":"{{baseUrl}}/api/v1/account","host":["{{baseUrl}}"],"path":["api","v1","account"]}}},{"name":"Protected Endpoint - Expired Signed JWT","event":[{"listen":"prerequest","script":{"type":"text/javascript","exec":["let CryptoJS;","try {","    CryptoJS = pm.require('npm:crypto-js@4.2.0');","} catch (error) {","    CryptoJS = require('crypto-js');","}","const secret = pm.environment.get('jwtSecret');","if (!secret) {","    throw new Error('Set jwtSecret to the JWT_SECRET used by the backend.');","}","const base64Url = (value) => CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(value))","    .replace(/=+$/g, '')","    .replace(/\\+/g, '-')","    .replace(/\\//g, '_');","const signatureBase64Url = (value) => CryptoJS.enc.Base64.stringify(value)","    .replace(/=+$/g, '')","    .replace(/\\+/g, '-')","    .replace(/\\//g, '_');","const now = Math.floor(Date.now() / 1000);","const header = base64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));","const payload = base64Url(JSON.stringify({","    iss: 'waypoint-backend',","    aud: 'waypoint-extension',","    sub: '00000000-0000-0000-0000-000000000001',","    email: 'expired@example.com',","    jti: '00000000-0000-0000-0000-000000000002',","    iat: now - 7200,","    nbf: now - 7200,","    exp: now - 3600","}));","const signingInput = `${header}.${payload}`;","const signature = signatureBase64Url(CryptoJS.HmacSHA256(signingInput, secret));","pm.variables.set('expiredJwt', `${signingInput}.${signature}`);"]}},{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 401', () => pm.response.to.have.status(401));","pm.test('Expired token is generic to client', () => pm.expect(pm.response.json().message).to.eql('Invalid or expired bearer token'));"]}}],"request":{"method":"GET","header":[{"key":"Authorization","value":"Bearer {{expiredJwt}}"}],"url":{"raw":"{{baseUrl}}/api/v1/account","host":["{{baseUrl}}"],"path":["api","v1","account"]},"description":"The pre-request script signs an already expired JWT using jwtSecret."}}]},{"name":"02 - Account and Entitlements","item":[{"name":"Account Details","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));","const body = pm.response.json();","pm.test('Account ID matches login', () => pm.expect(body.id).to.eql(pm.environment.get('userId')));","pm.test('Entitlement included', () => pm.expect(body.entitlement.features).to.be.an('array'));"]}}],"request":{"method":"GET","header":[{"key":"Authorization","value":"Bearer {{jwt}}"}],"url":{"raw":"{{baseUrl}}/api/v1/account","host":["{{baseUrl}}"],"path":["api","v1","account"]}}},{"name":"Current Entitlements","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));","const body = pm.response.json();","pm.test('Valid plan', () => pm.expect(body.plan).to.be.oneOf(['FREE', 'PREMIUM']));","pm.test('Features returned', () => pm.expect(body.features).to.be.an('array').and.not.empty);"]}}],"request":{"method":"GET","header":[{"key":"Authorization","value":"Bearer {{jwt}}"}],"url":{"raw":"{{baseUrl}}/api/v1/entitlements","host":["{{baseUrl}}"],"path":["api","v1","entitlements"]}}}]},{"name":"03 - Billing","item":[{"name":"Billing Status","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));","pm.test('Valid plan', () => pm.expect(pm.response.json().plan).to.be.oneOf(['FREE', 'PREMIUM']));"]}}],"request":{"method":"GET","header":[{"key":"Authorization","value":"Bearer {{jwt}}"}],"url":{"raw":"{{baseUrl}}/api/v1/billing/status","host":["{{baseUrl}}"],"path":["api","v1","billing","status"]}}},{"name":"Create Monthly Checkout","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));","pm.test('Checkout URL returned', () => pm.expect(pm.response.json().checkoutUrl).to.match(/^https:\\/\\//));"]}}],"request":{"method":"POST","header":[{"key":"Authorization","value":"Bearer {{jwt}}"},{"key":"Content-Type","value":"application/json"}],"url":{"raw":"{{baseUrl}}/api/v1/billing/checkout","host":["{{baseUrl}}"],"path":["api","v1","billing","checkout"]},"body":{"mode":"raw","raw":"{\n  \"plan\": \"MONTHLY\"\n}","options":{"raw":{"language":"json"}}},"description":"Requires valid Lemon Squeezy test-mode configuration."}},{"name":"Create Annual Checkout","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));","pm.test('Checkout URL returned', () => pm.expect(pm.response.json().checkoutUrl).to.match(/^https:\\/\\//));"]}}],"request":{"method":"POST","header":[{"key":"Authorization","value":"Bearer {{jwt}}"},{"key":"Content-Type","value":"application/json"}],"url":{"raw":"{{baseUrl}}/api/v1/billing/checkout","host":["{{baseUrl}}"],"path":["api","v1","billing","checkout"]},"body":{"mode":"raw","raw":"{\n  \"plan\": \"ANNUAL\"\n}","options":{"raw":{"language":"json"}}},"description":"Requires valid Lemon Squeezy test-mode configuration."}}]},{"name":"04 - Webhooks","description":"Run after Google Login so userId exists. webhookSecret and monthlyVariantId must match the running backend.","item":[{"name":"Invalid Signature","event":[{"listen":"prerequest","script":{"type":"text/javascript","exec":["let CryptoJS;","try {","    CryptoJS = pm.require('npm:crypto-js@4.2.0');","} catch (error) {","    CryptoJS = require('crypto-js');","}","const secret = pm.environment.get('webhookSecret');","if (!secret) {","    throw new Error('Set webhookSecret in the environment.');","}","const payload = JSON.stringify({","  meta: {","    event_name: 'subscription_created',","    custom_data: { waypoint_user_id: pm.environment.get('userId'), waypoint_plan: 'MONTHLY' }","  },","  data: {","    type: 'subscriptions',","    id: pm.environment.get('subscriptionId'),","    attributes: {","      customer_id: 'postman-customer',","      product_id: 'postman-product',","      variant_id: pm.environment.get('monthlyVariantId'),","      status: 'active',","      renews_at: '2030-01-01T00:00:00Z',","      ends_at: null","    }","  }","});","pm.variables.set('webhookBody', payload);","pm.variables.set('webhookSignature', CryptoJS.HmacSHA256(payload, secret).toString(CryptoJS.enc.Hex));"]}},{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 401', () => pm.response.to.have.status(401));"]}}],"request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"},{"key":"X-Signature","value":"bad-signature"}],"url":{"raw":"{{baseUrl}}/api/v1/webhooks/lemonsqueezy","host":["{{baseUrl}}"],"path":["api","v1","webhooks","lemonsqueezy"]},"body":{"mode":"raw","raw":"{{webhookBody}}","options":{"raw":{"language":"json"}}},"description":"Confirms that unsigned or incorrectly signed payloads are rejected."}},{"name":"Activate Monthly Subscription","event":[{"listen":"prerequest","script":{"type":"text/javascript","exec":["let CryptoJS;","try {","    CryptoJS = pm.require('npm:crypto-js@4.2.0');","} catch (error) {","    CryptoJS = require('crypto-js');","}","const secret = pm.environment.get('webhookSecret');","if (!secret) {","    throw new Error('Set webhookSecret in the environment.');","}","const payload = JSON.stringify({","  meta: {","    event_name: 'subscription_created',","    custom_data: { waypoint_user_id: pm.environment.get('userId'), waypoint_plan: 'MONTHLY' }","  },","  data: {","    type: 'subscriptions',","    id: pm.environment.get('subscriptionId'),","    attributes: {","      customer_id: 'postman-customer',","      product_id: 'postman-product',","      variant_id: pm.environment.get('monthlyVariantId'),","      status: 'active',","      renews_at: '2030-01-01T00:00:00Z',","      ends_at: null","    }","  }","});","pm.variables.set('webhookBody', payload);","pm.variables.set('webhookSignature', CryptoJS.HmacSHA256(payload, secret).toString(CryptoJS.enc.Hex));"]}},{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));"]}}],"request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"},{"key":"X-Signature","value":"{{webhookSignature}}"}],"url":{"raw":"{{baseUrl}}/api/v1/webhooks/lemonsqueezy","host":["{{baseUrl}}"],"path":["api","v1","webhooks","lemonsqueezy"]},"body":{"mode":"raw","raw":"{{webhookBody}}","options":{"raw":{"language":"json"}}},"description":"Creates or updates an ACTIVE subscription for the logged-in user."}},{"name":"Verify Premium Entitlement","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));","const body = pm.response.json();","pm.test('Premium is enabled', () => pm.expect(body.premium).to.eql(true));","pm.test('Plan is PREMIUM', () => pm.expect(body.plan).to.eql('PREMIUM'));"]}}],"request":{"method":"GET","header":[{"key":"Authorization","value":"Bearer {{jwt}}"}],"url":{"raw":"{{baseUrl}}/api/v1/entitlements","host":["{{baseUrl}}"],"path":["api","v1","entitlements"]}}},{"name":"Refund Subscription","event":[{"listen":"prerequest","script":{"type":"text/javascript","exec":["let CryptoJS;","try {","    CryptoJS = pm.require('npm:crypto-js@4.2.0');","} catch (error) {","    CryptoJS = require('crypto-js');","}","const secret = pm.environment.get('webhookSecret');","if (!secret) {","    throw new Error('Set webhookSecret in the environment.');","}","const subscriptionId = pm.environment.get('subscriptionId');","const payload = JSON.stringify({","  meta: {","    event_name: 'subscription_payment_refunded',","    custom_data: { waypoint_user_id: pm.environment.get('userId'), waypoint_plan: 'MONTHLY' }","  },","  data: {","    type: 'subscription-invoices',","    id: `subinv_${subscriptionId}`,","    attributes: {","      subscription_id: subscriptionId,","      customer_id: 'postman-customer',","      status: 'refunded'","    }","  }","});","pm.variables.set('webhookBody', payload);","pm.variables.set('webhookSignature', CryptoJS.HmacSHA256(payload, secret).toString(CryptoJS.enc.Hex));"]}},{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));"]}}],"request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"},{"key":"X-Signature","value":"{{webhookSignature}}"}],"url":{"raw":"{{baseUrl}}/api/v1/webhooks/lemonsqueezy","host":["{{baseUrl}}"],"path":["api","v1","webhooks","lemonsqueezy"]},"body":{"mode":"raw","raw":"{{webhookBody}}","options":{"raw":{"language":"json"}}},"description":"Marks the same subscription as REFUNDED."}},{"name":"Verify Free Entitlement After Refund","event":[{"listen":"test","script":{"type":"text/javascript","exec":["pm.test('Status is 200', () => pm.response.to.have.status(200));","const body = pm.response.json();","pm.test('Premium is disabled', () => pm.expect(body.premium).to.eql(false));","pm.test('Plan is FREE', () => pm.expect(body.plan).to.eql('FREE'));"]}}],"request":{"method":"GET","header":[{"key":"Authorization","value":"Bearer {{jwt}}"}],"url":{"raw":"{{baseUrl}}/api/v1/entitlements","host":["{{baseUrl}}"],"path":["api","v1","entitlements"]}}}]}]}
+{
+  "info": {
+    "_postman_id": "aa93dc55-52d9-4b40-84f0-0d397a7301a8",
+    "name": "Waypoint Backend API",
+    "description": "Run folders in order. Authentication stores jwt, userId and userEmail. Admin operations use separate Basic credentials and include paged/filterable data management, Premium Special management and audit history. Checkout requires Lemon Squeezy test-mode credentials.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.environment.get('baseUrl')) {",
+          "    throw new Error('Select the Waypoint Local environment.');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 - Health and Configuration",
+      "item": [
+        {
+          "name": "Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Health is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));",
+                  "pm.test('Request ID returned', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-health'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-ID",
+                "value": "postman-health"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Liveness",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Health is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));",
+                  "pm.test('Request ID returned', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-liveness'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-ID",
+                "value": "postman-liveness"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health/liveness",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health",
+                "liveness"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Readiness",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Health is UP', () => pm.expect(pm.response.json().status).to.eql('UP'));",
+                  "pm.test('Request ID returned', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-readiness'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-ID",
+                "value": "postman-readiness"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health/readiness",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health",
+                "readiness"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Authentication",
+      "description": "Run validation and rejection cases first. Set googleAccessToken before Google Login. The successful login stores jwt and userId for later folders.",
+      "item": [
+        {
+          "name": "Google Login - Missing Body",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Invalid request code returned', () => pm.expect(pm.response.json().code).to.eql('INVALID_REQUEST'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Google Login - Blank Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Invalid request code returned', () => pm.expect(pm.response.json().code).to.eql('INVALID_REQUEST'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accessToken\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Public Login Route Ignores Invalid Authorization Header",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Public route reaches request validation', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "NotBearer invalid"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Google Login - Invalid Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('Generic authentication failure returned', () => { pm.expect(body.code).to.eql('UNAUTHORIZED'); pm.expect(body.message).to.eql('Google authentication failed'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accessToken\": \"invalid-google-access-token\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Requires network access from the backend to Google."
+          }
+        },
+        {
+          "name": "Google Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Bearer token returned', () => { pm.expect(body.tokenType).to.eql('Bearer'); pm.expect(body.accessToken).to.be.a('string').and.not.empty; pm.expect(body.expiresIn).to.be.above(0); });",
+                  "pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-auth-login'));",
+                  "pm.environment.set('jwt', body.accessToken);",
+                  "pm.environment.set('userId', body.user.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Request-ID",
+                "value": "postman-auth-login"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/google",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accessToken\": \"{{googleAccessToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Requires a real Google access token whose audience matches GOOGLE_CLIENT_ID. Saves jwt and userId into the selected environment."
+          }
+        },
+        {
+          "name": "Protected Endpoint - No JWT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Authentication required', () => pm.expect(pm.response.json().message).to.eql('Authentication required'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "account"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Protected Endpoint - Invalid Scheme",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Generic bearer failure returned', () => pm.expect(pm.response.json().message).to.eql('Invalid or expired bearer token'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Token invalid"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "account"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Protected Endpoint - Malformed JWT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Unauthorized code returned', () => pm.expect(pm.response.json().code).to.eql('UNAUTHORIZED'));",
+                  "pm.test('Generic bearer failure returned', () => pm.expect(pm.response.json().message).to.eql('Invalid or expired bearer token'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer invalid-token"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "account"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Protected Endpoint - Expired Signed JWT",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const secret = pm.environment.get('jwtSecret');",
+                  "if (!secret) { throw new Error('Set jwtSecret to the JWT_SECRET used by the backend.'); }",
+                  "const base64Url = (value) => CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(value)).replace(/=+$/g, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "const signatureBase64Url = (value) => CryptoJS.enc.Base64.stringify(value).replace(/=+$/g, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+                  "const now = Math.floor(Date.now() / 1000);",
+                  "const header = base64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));",
+                  "const payload = base64Url(JSON.stringify({ iss: 'waypoint-backend', aud: 'waypoint-extension', sub: '00000000-0000-0000-0000-000000000001', email: 'expired@example.com', jti: '00000000-0000-0000-0000-000000000002', iat: now - 7200, nbf: now - 7200, exp: now - 3600 }));",
+                  "const signingInput = `${header}.${payload}`;",
+                  "const signature = signatureBase64Url(CryptoJS.HmacSHA256(signingInput, secret));",
+                  "pm.variables.set('expiredJwt', `${signingInput}.${signature}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Expired token is generic to client', () => pm.expect(pm.response.json().message).to.eql('Invalid or expired bearer token'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{expiredJwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "account"
+              ]
+            },
+            "description": "The pre-request script signs an already expired JWT using jwtSecret."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Account and Entitlements",
+      "description": "Run after Google Login. Covers account, effective subscription state and feature-level entitlement checks.",
+      "item": [
+        {
+          "name": "Account Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Account ID matches login', () => pm.expect(body.id).to.eql(pm.environment.get('userId')));",
+                  "pm.test('Entitlement included', () => pm.expect(body.entitlement.features).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "account"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Current Entitlements",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Valid plan', () => pm.expect(body.plan).to.be.oneOf(['FREE', 'PREMIUM']));",
+                  "pm.test('Features returned', () => pm.expect(body.features).to.be.an('array').and.not.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/entitlements",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "entitlements"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Current Subscription",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Valid subscription plan', () => pm.expect(body.plan).to.be.oneOf(['FREE', 'PREMIUM_MONTHLY', 'PREMIUM_ANNUAL', 'PREMIUM_SPECIAL']));",
+                  "pm.test('Premium flag returned', () => pm.expect(body.premium).to.be.a('boolean'));",
+                  "pm.test('Subscription status returned', () => pm.expect(body.status).to.be.a('string'));",
+                  "pm.test('Checked at returned', () => pm.expect(body.checkedAt).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/subscriptions/current",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "subscriptions",
+                "current"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Free Feature Access",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Feature is instant-tab-search', () => pm.expect(body.feature).to.eql('instant-tab-search'));",
+                  "pm.test('Free feature is allowed', () => pm.expect(body.allowed).to.eql(true));",
+                  "pm.test('Valid entitlement plan', () => pm.expect(body.plan).to.be.oneOf(['FREE', 'PREMIUM']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/entitlements/features/instant-tab-search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "entitlements",
+                "features",
+                "instant-tab-search"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Premium Feature Access",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Feature is ai-summary', () => pm.expect(body.feature).to.eql('ai-summary'));",
+                  "pm.test('Premium feature matches plan', () => pm.expect(body.allowed).to.eql(body.plan === 'PREMIUM'));",
+                  "pm.test('Valid entitlement plan', () => pm.expect(body.plan).to.be.oneOf(['FREE', 'PREMIUM']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/entitlements/features/ai-summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "entitlements",
+                "features",
+                "ai-summary"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Billing",
+      "item": [
+        {
+          "name": "Billing Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Valid plan', () => pm.expect(pm.response.json().plan).to.be.oneOf(['FREE', 'PREMIUM']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/billing/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "billing",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Monthly Checkout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Checkout URL returned', () => pm.expect(pm.response.json().checkoutUrl).to.match(/^https:\\/\\//));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/billing/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "billing",
+                "checkout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan\": \"MONTHLY\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Requires valid Lemon Squeezy test-mode configuration."
+          }
+        },
+        {
+          "name": "Create Annual Checkout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Checkout URL returned', () => pm.expect(pm.response.json().checkoutUrl).to.match(/^https:\\/\\//));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/billing/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "billing",
+                "checkout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan\": \"ANNUAL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Requires valid Lemon Squeezy test-mode configuration."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Webhooks",
+      "description": "Run after Google Login so userId exists. webhookSecret and monthlyVariantId must match the running backend.",
+      "item": [
+        {
+          "name": "Invalid Signature",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try { CryptoJS = pm.require('npm:crypto-js@4.2.0'); } catch (error) { CryptoJS = require('crypto-js'); }",
+                  "const secret = pm.environment.get('webhookSecret');",
+                  "if (!secret) { throw new Error('Set webhookSecret in the environment.'); }",
+                  "const payload = JSON.stringify({",
+                  "  meta: { event_name: 'subscription_created', custom_data: { waypoint_user_id: pm.environment.get('userId'), waypoint_plan: 'MONTHLY' } },",
+                  "  data: { type: 'subscriptions', id: pm.environment.get('subscriptionId'), attributes: { customer_id: 'postman-customer', product_id: 'postman-product', variant_id: pm.environment.get('monthlyVariantId'), status: 'active', renews_at: '2030-01-01T00:00:00Z', ends_at: null } }",
+                  "});",
+                  "pm.variables.set('webhookBody', payload);",
+                  "pm.variables.set('webhookSignature', CryptoJS.HmacSHA256(payload, secret).toString(CryptoJS.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Signature",
+                "value": "bad-signature"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/lemonsqueezy",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "lemonsqueezy"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{{webhookBody}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Confirms that unsigned or incorrectly signed payloads are rejected."
+          }
+        },
+        {
+          "name": "Activate Monthly Subscription",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try { CryptoJS = pm.require('npm:crypto-js@4.2.0'); } catch (error) { CryptoJS = require('crypto-js'); }",
+                  "const secret = pm.environment.get('webhookSecret');",
+                  "if (!secret) { throw new Error('Set webhookSecret in the environment.'); }",
+                  "const payload = JSON.stringify({",
+                  "  meta: { event_name: 'subscription_created', custom_data: { waypoint_user_id: pm.environment.get('userId'), waypoint_plan: 'MONTHLY' } },",
+                  "  data: { type: 'subscriptions', id: pm.environment.get('subscriptionId'), attributes: { customer_id: 'postman-customer', product_id: 'postman-product', variant_id: pm.environment.get('monthlyVariantId'), status: 'active', renews_at: '2030-01-01T00:00:00Z', ends_at: null } }",
+                  "});",
+                  "pm.variables.set('webhookBody', payload);",
+                  "pm.variables.set('webhookSignature', CryptoJS.HmacSHA256(payload, secret).toString(CryptoJS.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Signature",
+                "value": "{{webhookSignature}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/lemonsqueezy",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "lemonsqueezy"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{{webhookBody}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Creates or updates an ACTIVE subscription for the logged-in user."
+          }
+        },
+        {
+          "name": "Verify Premium Entitlement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Premium is enabled', () => pm.expect(body.premium).to.eql(true));",
+                  "pm.test('Plan is PREMIUM', () => pm.expect(body.plan).to.eql('PREMIUM'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/entitlements",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "entitlements"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Refund Subscription",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try { CryptoJS = pm.require('npm:crypto-js@4.2.0'); } catch (error) { CryptoJS = require('crypto-js'); }",
+                  "const secret = pm.environment.get('webhookSecret');",
+                  "if (!secret) { throw new Error('Set webhookSecret in the environment.'); }",
+                  "const subscriptionId = pm.environment.get('subscriptionId');",
+                  "const payload = JSON.stringify({",
+                  "  meta: { event_name: 'subscription_payment_refunded', custom_data: { waypoint_user_id: pm.environment.get('userId'), waypoint_plan: 'MONTHLY' } },",
+                  "  data: { type: 'subscription-invoices', id: `subinv_${subscriptionId}`, attributes: { subscription_id: subscriptionId, customer_id: 'postman-customer', status: 'refunded' } }",
+                  "});",
+                  "pm.variables.set('webhookBody', payload);",
+                  "pm.variables.set('webhookSignature', CryptoJS.HmacSHA256(payload, secret).toString(CryptoJS.enc.Hex));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Signature",
+                "value": "{{webhookSignature}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/lemonsqueezy",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "lemonsqueezy"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{{webhookBody}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Marks the same subscription as REFUNDED."
+          }
+        },
+        {
+          "name": "Verify Free Entitlement After Refund",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Premium is disabled', () => pm.expect(body.premium).to.eql(false));",
+                  "pm.test('Plan is FREE', () => pm.expect(body.plan).to.eql('FREE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/entitlements",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "entitlements"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Admin",
+      "description": "Admin-only Premium Special management. Run Google Login first so userId is set. Admin requests require adminId/adminPassword matching backend ADMIN_ID/ADMIN_PASSWORD.",
+      "item": [
+        {
+          "name": "Admin - Invalid Credentials",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Admin credentials rejected', () => pm.expect(pm.response.json().message).to.eql('Invalid admin credentials'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic Zm9vOmJhcg=="
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/premium-special",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "premium-special"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin - Get User",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "const raw = `${adminId}:${adminPassword}`;",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(raw)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('User ID matches login', () => pm.expect(body.id).to.eql(pm.environment.get('userId')));",
+                  "pm.test('Plan returned', () => pm.expect(body.plan).to.be.oneOf(['FREE', 'PREMIUM_MONTHLY', 'PREMIUM_ANNUAL', 'PREMIUM_SPECIAL']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{userId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin - Grant Premium Special",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "const raw = `${adminId}:${adminPassword}`;",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(raw)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Premium Special granted', () => {",
+                  "    pm.expect(body.plan).to.eql('PREMIUM_SPECIAL');",
+                  "    pm.expect(body.status).to.eql('PREMIUM_SPECIAL');",
+                  "    pm.expect(body.active).to.eql(true);",
+                  "});",
+                  "pm.test('User matches login', () => pm.expect(body.userId).to.eql(pm.environment.get('userId')));",
+                  "pm.environment.set('adminGrantId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/premium-special",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{userId}}",
+                "premium-special"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Friends and family\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Omit validUntil for lifetime Premium Special access. Add a future ISO-8601 validUntil to make the grant temporary."
+          }
+        },
+        {
+          "name": "Admin - Premium Special Count",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "const raw = `${adminId}:${adminPassword}`;",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(raw)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('At least one Premium Special user exists', () => pm.expect(body.count).to.be.at.least(1));",
+                  "pm.test('Granted user is listed', () => {",
+                  "    pm.expect(body.users.some(user => user.userId === pm.environment.get('userId'))).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/premium-special",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "premium-special"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verify Premium Special Subscription",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Premium Special is effective', () => {",
+                  "    pm.expect(body.plan).to.eql('PREMIUM_SPECIAL');",
+                  "    pm.expect(body.status).to.eql('PREMIUM_SPECIAL');",
+                  "    pm.expect(body.premium).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/subscriptions/current",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "subscriptions",
+                "current"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin - Revoke Premium Special",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "const raw = `${adminId}:${adminPassword}`;",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(raw)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Premium Special revoked', () => {",
+                  "    pm.expect(body.status).to.eql('REVOKED');",
+                  "    pm.expect(body.active).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{userId}}/premium-special",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{userId}}",
+                "premium-special"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verify Premium Special Revoked",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Premium Special no longer effective', () => pm.expect(body.plan).to.not.eql('PREMIUM_SPECIAL'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/subscriptions/current",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "subscriptions",
+                "current"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin - Overview",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Admin counts returned', () => { pm.expect(body.users).to.be.a('number'); pm.expect(body.subscriptions).to.be.a('number'); pm.expect(body.webhookEvents).to.be.a('number'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/overview",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin - List Users",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Paged users returned', () => pm.expect(pm.response.json().items).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users?size=50&sort=createdAt&direction=DESC",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Optional filters: q, provider, plan, premium, createdFrom, createdTo, lastLoginFrom, lastLoginTo."
+          }
+        },
+        {
+          "name": "Admin - Find User by Email",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('User email matches', () => pm.expect(pm.response.json().email).to.eql(pm.environment.get('userEmail')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/by-email?email={{userEmail}}",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin - List Subscriptions",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Paged subscriptions returned', () => pm.expect(body.items).to.be.an('array'));",
+                  "if (body.items.length > 0) { pm.environment.set('adminSubscriptionId', body.items[0].id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/subscriptions?userId={{userId}}&size=50&sort=updatedAt&direction=DESC",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Optional filters: userId, email, provider, plan, status, externalCustomerId, externalSubscriptionId and date ranges."
+          }
+        },
+        {
+          "name": "Admin - Update Subscription",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Subscription updated', () => pm.expect(pm.response.json().status).to.eql('ACTIVE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/subscriptions/{{adminSubscriptionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Controlled internal status/timestamp correction.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Admin - List Special Grants",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Paged grants returned', () => pm.expect(body.items).to.be.an('array'));",
+                  "if (body.items.length > 0) { pm.environment.set('adminGrantId', body.items[0].id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/special-grants?size=50&sort=grantedAt&direction=DESC",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin - Get Special Grant",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/special-grants/{{adminGrantId}}",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin - List Webhook Events",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Paged webhook events returned', () => pm.expect(body.items).to.be.an('array'));",
+                  "if (body.items.length > 0) { pm.environment.set('adminWebhookEventId', body.items[0].id); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/webhook-events?size=50&sort=receivedAt&direction=DESC&includePayload=false",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin - Get Webhook Event",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Webhook payload included', () => pm.expect(pm.response.json()).to.have.property('payloadJson'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/webhook-events/{{adminWebhookEventId}}",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin - Update Webhook Event",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Webhook metadata updated', () => pm.expect(pm.response.json().processingStatus).to.eql('PROCESSED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/webhook-events/{{adminWebhookEventId}}",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Stored processing metadata only; does not replay webhook.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"processingStatus\": \"PROCESSED\",\n  \"clearErrorMessage\": true,\n  \"processedAt\": \"2026-08-13T12:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Admin - List Plans",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Plans returned', () => pm.expect(pm.response.json()).to.be.an('array').and.not.empty);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/plans",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin - Audit Events",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let CryptoJS;",
+                  "try {",
+                  "    CryptoJS = pm.require('npm:crypto-js@4.2.0');",
+                  "} catch (error) {",
+                  "    CryptoJS = require('crypto-js');",
+                  "}",
+                  "const adminId = pm.environment.get('adminId');",
+                  "const adminPassword = pm.environment.get('adminPassword');",
+                  "if (!adminId || !adminPassword) {",
+                  "    throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');",
+                  "}",
+                  "pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Paged audit events returned', () => pm.expect(pm.response.json().items).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Basic {{adminBasicAuth}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/audit-events?size=50&sort=createdAt&direction=DESC",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

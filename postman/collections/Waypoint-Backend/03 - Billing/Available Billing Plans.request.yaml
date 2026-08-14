@@ -1,0 +1,27 @@
+$kind: http-request
+description: Returns the active premium plans configured in the Waypoint database. Requires a valid Waypoint JWT but does not call Lemon Squeezy.
+url: "{{baseUrl}}/api/v1/billing/plans"
+method: GET
+headers:
+  Authorization: Bearer {{jwt}}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test('Plans are returned as an array', () => pm.expect(body).to.be.an('array'));
+      pm.test('Monthly and annual premium plans are available', () => {
+        const codes = body.map(plan => plan.code);
+        pm.expect(codes).to.include('PREMIUM_MONTHLY');
+        pm.expect(codes).to.include('PREMIUM_ANNUAL');
+      });
+      pm.test('Returned plans are premium and active billing options', () => {
+        body.forEach(plan => {
+          pm.expect(plan.premium).to.eql(true);
+          pm.expect(plan.billingInterval).to.be.oneOf(['MONTHLY', 'ANNUAL']);
+          pm.expect(plan.priceCents).to.be.at.least(0);
+          pm.expect(plan.currency).to.be.a('string').and.not.empty;
+        });
+      });
+    language: text/javascript
+order: 500

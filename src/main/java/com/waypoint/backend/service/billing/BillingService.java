@@ -2,21 +2,19 @@ package com.waypoint.backend.service.billing;
 
 import com.waypoint.backend.config.billing.LemonSqueezyProperties;
 import com.waypoint.backend.model.billing.BillingStatusResponse;
+import com.waypoint.backend.model.plan.BillingInterval;
+import com.waypoint.backend.model.plan.PlanResponse;
 import com.waypoint.backend.model.subscription.CheckoutPlan;
-import com.waypoint.backend.model.subscription.SubscriptionEntity;
-import com.waypoint.backend.model.subscription.SubscriptionStatus;
+import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.model.user.UserEntity;
-import com.waypoint.backend.repository.subscription.SubscriptionRepository;
-import com.waypoint.backend.service.subscription.SubscriptionAccessPolicy;
+import com.waypoint.backend.repository.plan.PlanRepository;
+import com.waypoint.backend.service.subscription.SubscriptionService;
 import com.waypoint.backend.utilities.client.lemonsqueezy.LemonSqueezyClient;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,19 +22,27 @@ import java.util.UUID;
 public class BillingService {
     private final LemonSqueezyClient lemonSqueezyClient;
     private final LemonSqueezyProperties properties;
-    private final SubscriptionRepository subscriptionRepository;
-    private final SubscriptionAccessPolicy subscriptionAccessPolicy;
+    private final SubscriptionService subscriptionService;
+    private final PlanRepository planRepository;
 
     public BillingService(
             LemonSqueezyClient lemonSqueezyClient,
             LemonSqueezyProperties properties,
-            SubscriptionRepository subscriptionRepository,
-            SubscriptionAccessPolicy subscriptionAccessPolicy
+            SubscriptionService subscriptionService,
+            PlanRepository planRepository
     ) {
         this.lemonSqueezyClient = lemonSqueezyClient;
         this.properties = properties;
-        this.subscriptionRepository = subscriptionRepository;
-        this.subscriptionAccessPolicy = subscriptionAccessPolicy;
+        this.subscriptionService = subscriptionService;
+        this.planRepository = planRepository;
+    }
+
+    public List<PlanResponse> availablePlans() {
+        return planRepository
+                .findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceCentsAsc(BillingInterval.NONE)
+                .stream()
+                .map(PlanResponse::from)
+                .toList();
     }
 
     public String createCheckout(UserEntity user, CheckoutPlan plan) {
@@ -53,28 +59,25 @@ public class BillingService {
         return lemonSqueezyClient.createCheckout(user, plan, variantId);
     }
 
-    @Transactional(readOnly = true)
     public BillingStatusResponse billingStatus(UUID userId) {
-        Instant now = Instant.now();
-        List<SubscriptionEntity> subscriptions = subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId);
-        return subscriptions.stream()
-                .filter(subscription -> subscriptionAccessPolicy.evaluate(subscription, now).premium())
-                .max(Comparator.comparing(SubscriptionEntity::getUpdatedAt))
-                .map(subscription -> new BillingStatusResponse(
-                        "PREMIUM",
-                        subscription.getStatus().name(),
-                        subscription.getExternalSubscriptionId(),
-                        subscription.getRenewsAt(),
-                        subscription.getEndsAt()
-                ))
-                .orElseGet(() -> new BillingStatusResponse("FREE", latestStatus(subscriptions), null, null, null));
-    }
-
-    private String latestStatus(List<SubscriptionEntity> subscriptions) {
-        if (subscriptions.isEmpty()) {
-            return SubscriptionStatus.INACTIVE.name();
+        SubscriptionSnapshot subscription = subscriptionService.current(userId);
+        if (!subscription.premium()) {
+            return new BillingStatusResponse(
+                    "FREE",
+                    subscription.planCode(),
+                    subscription.status().name(),
+                    null,
+                    null,
+                    null
+            );
         }
-        SubscriptionStatus status = subscriptions.getFirst().getStatus();
-        return status == null ? SubscriptionStatus.INACTIVE.name() : status.name();
+        return new BillingStatusResponse(
+                "PREMIUM",
+                subscription.planCode(),
+                subscription.status().name(),
+                subscription.externalSubscriptionId(),
+                subscription.renewsAt(),
+                subscription.endsAt()
+        );
     }
 }

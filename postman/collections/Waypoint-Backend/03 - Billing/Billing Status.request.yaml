@@ -7,6 +7,18 @@ scripts:
   - type: afterResponse
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
-      pm.test('Valid plan', () => pm.expect(pm.response.json().plan).to.be.oneOf(['FREE', 'PREMIUM']));
+      const body = pm.response.json();
+      pm.test('Valid plan', () => pm.expect(body.plan).to.be.oneOf(['FREE', 'PREMIUM']));
+      pm.test('Exact plan code is returned', () => {
+        pm.expect(body.planCode).to.be.oneOf(['FREE', 'PREMIUM_MONTHLY', 'PREMIUM_ANNUAL']);
+      });
+      pm.test('Plan and plan code are consistent', () => {
+        if (body.plan === 'FREE') {
+          pm.expect(body.planCode).to.eql('FREE');
+        } else {
+          pm.expect(body.planCode).to.be.oneOf(['PREMIUM_MONTHLY', 'PREMIUM_ANNUAL']);
+        }
+      });
+      pm.test('Subscription status is returned', () => pm.expect(body.status).to.be.a('string').and.not.empty);
     language: text/javascript
 order: 1000
