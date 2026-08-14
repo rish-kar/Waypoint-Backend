@@ -1,0 +1,15 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/entitlements/features/instant-tab-search"
+method: GET
+headers:
+  Authorization: Bearer {{jwt}}
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test('Feature is instant-tab-search', () => pm.expect(body.feature).to.eql('instant-tab-search'));
+      pm.test('Free feature is allowed', () => pm.expect(body.allowed).to.eql(true));
+      pm.test('Valid entitlement plan', () => pm.expect(body.plan).to.be.oneOf(['FREE', 'PREMIUM']));
+    language: text/javascript
+order: 4000

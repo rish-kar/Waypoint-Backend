@@ -7,13 +7,11 @@ import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.plan.PlanEntity;
 import com.waypoint.backend.model.plan.PlanResponse;
 import com.waypoint.backend.model.subscription.CheckoutPlan;
-import com.waypoint.backend.model.subscription.SubscriptionAccessDecision;
-import com.waypoint.backend.model.subscription.SubscriptionEntity;
+import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.model.subscription.SubscriptionStatus;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.plan.PlanRepository;
-import com.waypoint.backend.repository.subscription.SubscriptionRepository;
-import com.waypoint.backend.service.subscription.SubscriptionAccessPolicy;
+import com.waypoint.backend.service.subscription.SubscriptionService;
 import com.waypoint.backend.utilities.client.lemonsqueezy.LemonSqueezyClient;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
 
@@ -26,24 +24,20 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class BillingServiceTests {
     private LemonSqueezyClient lemonSqueezyClient;
-    private SubscriptionRepository subscriptionRepository;
-    private SubscriptionAccessPolicy subscriptionAccessPolicy;
+    private SubscriptionService subscriptionService;
     private PlanRepository planRepository;
     private BillingService billingService;
 
     @BeforeEach
     void setUp() {
         lemonSqueezyClient = mock(LemonSqueezyClient.class);
-        subscriptionRepository = mock(SubscriptionRepository.class);
-        subscriptionAccessPolicy = mock(SubscriptionAccessPolicy.class);
+        subscriptionService = mock(SubscriptionService.class);
         planRepository = mock(PlanRepository.class);
         LemonSqueezyProperties properties = new LemonSqueezyProperties(
                 "test-api-key",
@@ -56,8 +50,7 @@ class BillingServiceTests {
         billingService = new BillingService(
                 lemonSqueezyClient,
                 properties,
-                subscriptionRepository,
-                subscriptionAccessPolicy,
+                subscriptionService,
                 planRepository
         );
     }
@@ -94,51 +87,71 @@ class BillingServiceTests {
     }
 
     @Test
-    void returnsActivePremiumPlansFromDatabase() {
+    void returnsOnlyPaidPremiumPlansFromDatabase() {
         PlanEntity monthly = plan(PlanCode.PREMIUM_MONTHLY, BillingInterval.MONTHLY, 499);
         PlanEntity annual = plan(PlanCode.PREMIUM_ANNUAL, BillingInterval.ANNUAL, 3999);
-        when(planRepository.findByActiveTrueAndPremiumTrueOrderByPriceCentsAsc())
+        when(planRepository.findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceCentsAsc(BillingInterval.NONE))
                 .thenReturn(List.of(monthly, annual));
 
         List<PlanResponse> result = billingService.availablePlans();
 
         assertThat(result).extracting(PlanResponse::code)
                 .containsExactly(PlanCode.PREMIUM_MONTHLY, PlanCode.PREMIUM_ANNUAL);
-        assertThat(result).extracting(PlanResponse::priceCents)
-                .containsExactly(499, 3999);
+        verify(planRepository)
+                .findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceCentsAsc(BillingInterval.NONE);
     }
 
     @Test
     void exposesExactMonthlyPlanCodeForActiveSubscription() {
         UserEntity user = user();
-        SubscriptionEntity subscription = subscription(user, CheckoutPlan.MONTHLY);
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(user.getId()))
-                .thenReturn(List.of(subscription));
-        when(subscriptionAccessPolicy.evaluate(eq(subscription), any(Instant.class)))
-                .thenReturn(new SubscriptionAccessDecision(
-                        true,
-                        SubscriptionStatus.ACTIVE,
-                        Instant.now().plusSeconds(3600)
-                ));
+        when(subscriptionService.current(user.getId())).thenReturn(snapshot(
+                PlanCode.PREMIUM_MONTHLY,
+                SubscriptionStatus.ACTIVE,
+                true,
+                "sub_123"
+        ));
 
         BillingStatusResponse result = billingService.billingStatus(user.getId());
 
         assertThat(result.plan()).isEqualTo("PREMIUM");
         assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_MONTHLY);
         assertThat(result.status()).isEqualTo("ACTIVE");
+        assertThat(result.externalSubscriptionId()).isEqualTo("sub_123");
     }
 
     @Test
-    void returnsFreePlanCodeWithoutSubscription() {
+    void preservesPremiumSpecialFromEffectiveSubscriptionModel() {
         UserEntity user = user();
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(user.getId()))
-                .thenReturn(List.of());
+        when(subscriptionService.current(user.getId())).thenReturn(snapshot(
+                PlanCode.PREMIUM_SPECIAL,
+                SubscriptionStatus.PREMIUM_SPECIAL,
+                true,
+                null
+        ));
+
+        BillingStatusResponse result = billingService.billingStatus(user.getId());
+
+        assertThat(result.plan()).isEqualTo("PREMIUM");
+        assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_SPECIAL);
+        assertThat(result.status()).isEqualTo("PREMIUM_SPECIAL");
+    }
+
+    @Test
+    void returnsFreePlanCodeWithoutPremiumAccess() {
+        UserEntity user = user();
+        when(subscriptionService.current(user.getId())).thenReturn(snapshot(
+                PlanCode.FREE,
+                SubscriptionStatus.INACTIVE,
+                false,
+                null
+        ));
 
         BillingStatusResponse result = billingService.billingStatus(user.getId());
 
         assertThat(result.plan()).isEqualTo("FREE");
         assertThat(result.planCode()).isEqualTo(PlanCode.FREE);
         assertThat(result.status()).isEqualTo("INACTIVE");
+        assertThat(result.externalSubscriptionId()).isNull();
     }
 
     private UserEntity user() {
@@ -160,13 +173,22 @@ class BillingServiceTests {
         return plan;
     }
 
-    private SubscriptionEntity subscription(UserEntity user, CheckoutPlan plan) {
-        SubscriptionEntity subscription = new SubscriptionEntity();
-        subscription.setUser(user);
-        subscription.setPlan(plan.name());
-        subscription.setStatus(SubscriptionStatus.ACTIVE);
-        subscription.setExternalSubscriptionId("sub_123");
-        subscription.setUpdatedAt(Instant.now());
-        return subscription;
+    private SubscriptionSnapshot snapshot(
+            PlanCode planCode,
+            SubscriptionStatus status,
+            boolean premium,
+            String externalSubscriptionId
+    ) {
+        Instant now = Instant.now();
+        return new SubscriptionSnapshot(
+                planCode,
+                status,
+                premium,
+                externalSubscriptionId,
+                premium ? now.plusSeconds(3600) : null,
+                null,
+                premium ? now.plusSeconds(3600) : null,
+                now
+        );
     }
 }

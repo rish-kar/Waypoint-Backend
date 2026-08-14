@@ -24,5 +24,6 @@ scripts:
       pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-auth-login'));
       pm.environment.set('jwt', body.accessToken);
       pm.environment.set('userId', body.user.id);
+      pm.environment.set('userEmail', body.user.email);
     language: text/javascript
 order: 5000

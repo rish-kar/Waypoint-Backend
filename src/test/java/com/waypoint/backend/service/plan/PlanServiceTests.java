@@ -2,48 +2,39 @@ package com.waypoint.backend.service.plan;
 
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.plan.PlanEntity;
-import com.waypoint.backend.model.subscription.CheckoutPlan;
-import com.waypoint.backend.model.subscription.SubscriptionAccessDecision;
-import com.waypoint.backend.model.subscription.SubscriptionEntity;
+import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.model.subscription.SubscriptionStatus;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.plan.PlanRepository;
-import com.waypoint.backend.repository.subscription.SubscriptionRepository;
 import com.waypoint.backend.repository.user.UserRepository;
-import com.waypoint.backend.service.subscription.SubscriptionAccessPolicy;
+import com.waypoint.backend.service.subscription.SubscriptionService;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PlanServiceTests {
     private PlanRepository planRepository;
-    private SubscriptionRepository subscriptionRepository;
-    private SubscriptionAccessPolicy subscriptionAccessPolicy;
+    private SubscriptionService subscriptionService;
     private UserRepository userRepository;
     private PlanService planService;
 
     @BeforeEach
     void setUp() {
         planRepository = mock(PlanRepository.class);
-        subscriptionRepository = mock(SubscriptionRepository.class);
-        subscriptionAccessPolicy = mock(SubscriptionAccessPolicy.class);
+        subscriptionService = mock(SubscriptionService.class);
         userRepository = mock(UserRepository.class);
         planService = new PlanService(
                 planRepository,
-                subscriptionRepository,
-                subscriptionAccessPolicy,
+                subscriptionService,
                 userRepository
         );
     }
@@ -52,7 +43,7 @@ class PlanServiceTests {
     void assignsFreePlanWithoutActiveSubscription() {
         UserEntity user = user();
         PlanEntity free = plan(PlanCode.FREE);
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(user.getId())).thenReturn(List.of());
+        when(subscriptionService.current(user.getId())).thenReturn(snapshot(PlanCode.FREE, false));
         when(planRepository.findById(PlanCode.FREE)).thenReturn(Optional.of(free));
 
         PlanEntity result = planService.synchronizeUserPlan(user);
@@ -65,12 +56,9 @@ class PlanServiceTests {
     @Test
     void assignsMonthlyPremiumPlanForActiveMonthlySubscription() {
         UserEntity user = user();
-        SubscriptionEntity subscription = subscription(user, CheckoutPlan.MONTHLY);
         PlanEntity monthly = plan(PlanCode.PREMIUM_MONTHLY);
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(user.getId()))
-                .thenReturn(List.of(subscription));
-        when(subscriptionAccessPolicy.evaluate(eq(subscription), any(Instant.class)))
-                .thenReturn(new SubscriptionAccessDecision(true, SubscriptionStatus.ACTIVE, Instant.now().plusSeconds(3600)));
+        when(subscriptionService.current(user.getId()))
+                .thenReturn(snapshot(PlanCode.PREMIUM_MONTHLY, true));
         when(planRepository.findById(PlanCode.PREMIUM_MONTHLY)).thenReturn(Optional.of(monthly));
 
         PlanEntity result = planService.synchronizeUserPlan(user);
@@ -84,12 +72,8 @@ class PlanServiceTests {
     void returnsUserToFreePlanAfterPremiumAccessEnds() {
         UserEntity user = user();
         user.setPlan(plan(PlanCode.PREMIUM_ANNUAL));
-        SubscriptionEntity subscription = subscription(user, CheckoutPlan.ANNUAL);
         PlanEntity free = plan(PlanCode.FREE);
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(user.getId()))
-                .thenReturn(List.of(subscription));
-        when(subscriptionAccessPolicy.evaluate(eq(subscription), any(Instant.class)))
-                .thenReturn(new SubscriptionAccessDecision(false, SubscriptionStatus.REFUNDED, null));
+        when(subscriptionService.current(user.getId())).thenReturn(snapshot(PlanCode.FREE, false));
         when(planRepository.findById(PlanCode.FREE)).thenReturn(Optional.of(free));
 
         PlanEntity result = planService.synchronizeUserPlan(user);
@@ -99,19 +83,39 @@ class PlanServiceTests {
         verify(userRepository).save(user);
     }
 
+    @Test
+    void doesNotWriteWhenPlanIsAlreadySynchronized() {
+        UserEntity user = user();
+        PlanEntity monthly = plan(PlanCode.PREMIUM_MONTHLY);
+        user.setPlan(monthly);
+        when(subscriptionService.current(user.getId()))
+                .thenReturn(snapshot(PlanCode.PREMIUM_MONTHLY, true));
+
+        PlanEntity result = planService.synchronizeUserPlan(user);
+
+        assertThat(result).isSameAs(monthly);
+        org.mockito.Mockito.verifyNoInteractions(planRepository);
+        org.mockito.Mockito.verifyNoInteractions(userRepository);
+    }
+
     private UserEntity user() {
         UserEntity user = new UserEntity();
         user.setId(UUID.randomUUID());
         return user;
     }
 
-    private SubscriptionEntity subscription(UserEntity user, CheckoutPlan checkoutPlan) {
-        SubscriptionEntity subscription = new SubscriptionEntity();
-        subscription.setUser(user);
-        subscription.setPlan(checkoutPlan.name());
-        subscription.setStatus(SubscriptionStatus.ACTIVE);
-        subscription.setUpdatedAt(Instant.now());
-        return subscription;
+    private SubscriptionSnapshot snapshot(PlanCode planCode, boolean premium) {
+        Instant now = Instant.now();
+        return new SubscriptionSnapshot(
+                planCode,
+                premium ? SubscriptionStatus.ACTIVE : SubscriptionStatus.INACTIVE,
+                premium,
+                premium ? "sub-1" : null,
+                premium ? now.plusSeconds(3600) : null,
+                null,
+                premium ? now.plusSeconds(3600) : null,
+                now
+        );
     }
 
     private PlanEntity plan(PlanCode code) {

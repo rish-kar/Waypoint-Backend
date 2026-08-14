@@ -1,5 +1,6 @@
 package com.waypoint.backend.config.application;
 
+import com.waypoint.backend.config.admin.AdminProperties;
 import com.waypoint.backend.config.auth.GoogleProperties;
 import com.waypoint.backend.config.billing.LemonSqueezyProperties;
 import com.waypoint.backend.security.jwt.JwtProperties;
@@ -21,6 +22,7 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
     private static final Logger LOGGER = LoggerFactory.getLogger(ConfigurationStartupValidator.class);
 
     private final Environment environment;
+    private final AdminProperties adminProperties;
     private final AppProperties appProperties;
     private final CorsProperties corsProperties;
     private final GoogleProperties googleProperties;
@@ -29,6 +31,7 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
 
     public ConfigurationStartupValidator(
             Environment environment,
+            AdminProperties adminProperties,
             AppProperties appProperties,
             CorsProperties corsProperties,
             GoogleProperties googleProperties,
@@ -36,6 +39,7 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
             LemonSqueezyProperties lemonSqueezyProperties
     ) {
         this.environment = environment;
+        this.adminProperties = adminProperties;
         this.appProperties = appProperties;
         this.corsProperties = corsProperties;
         this.googleProperties = googleProperties;
@@ -64,6 +68,8 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
         requireHttps("GOOGLE_TOKEN_INFO_URL", googleProperties.tokenInfoUrl());
         requireHttps("GOOGLE_USER_INFO_URL", googleProperties.userInfoUrl());
         requireHttps("LEMON_SQUEEZY_API_BASE_URL", lemonSqueezyProperties.apiBaseUrl());
+        rejectPlaceholder("ADMIN_ID", adminProperties.id());
+        rejectPlaceholder("ADMIN_PASSWORD", adminProperties.password());
         rejectPlaceholder("GOOGLE_CLIENT_ID", googleProperties.clientId());
         rejectPlaceholder("LEMON_SQUEEZY_API_KEY", lemonSqueezyProperties.apiKey());
         rejectPlaceholder("LEMON_SQUEEZY_STORE_ID", lemonSqueezyProperties.storeId());
