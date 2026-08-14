@@ -50,6 +50,8 @@ public class SubscriptionEntity {
 
     private Instant endsAt;
 
+    private Instant lastProviderEventAt;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -161,6 +163,14 @@ public class SubscriptionEntity {
 
     public void setEndsAt(Instant endsAt) {
         this.endsAt = endsAt;
+    }
+
+    public Instant getLastProviderEventAt() {
+        return lastProviderEventAt;
+    }
+
+    public void setLastProviderEventAt(Instant lastProviderEventAt) {
+        this.lastProviderEventAt = lastProviderEventAt;
     }
 
     public Instant getCreatedAt() {

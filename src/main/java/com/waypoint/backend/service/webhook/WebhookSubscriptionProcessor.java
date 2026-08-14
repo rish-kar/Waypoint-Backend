@@ -25,6 +25,7 @@ public class WebhookSubscriptionProcessor {
     private final UserRepository userRepository;
     private final SubscriptionAccessPolicy subscriptionAccessPolicy;
     private final PlanService planService;
+    private final ProviderEventOrderPolicy eventOrderPolicy = new ProviderEventOrderPolicy();
 
     public WebhookSubscriptionProcessor(
             SubscriptionRepository subscriptionRepository,
@@ -43,8 +44,15 @@ public class WebhookSubscriptionProcessor {
         JsonNode data = payload.path("data");
         JsonNode attributes = data.path("attributes");
         String externalSubscriptionId = requireSubscriptionId(data, attributes);
+        Instant providerEventAt = providerEventAt(attributes);
 
-        Optional<SubscriptionEntity> existing = subscriptionRepository.findByExternalSubscriptionId(externalSubscriptionId);
+        Optional<SubscriptionEntity> existing =
+                subscriptionRepository.findByExternalSubscriptionIdForUpdate(externalSubscriptionId);
+        if (existing.isPresent()
+                && !eventOrderPolicy.shouldApply(existing.get().getLastProviderEventAt(), providerEventAt)) {
+            return;
+        }
+
         Optional<UUID> customUserId = optionalWaypointUserId(payload);
         UserEntity user = resolveUser(existing, customUserId);
 
@@ -68,6 +76,7 @@ public class WebhookSubscriptionProcessor {
         if (attributes.get("ends_at") != null) {
             subscription.setEndsAt(parseInstant(text(attributes, "ends_at")));
         }
+        subscription.setLastProviderEventAt(providerEventAt);
         subscriptionRepository.save(subscription);
         planService.synchronizeUserPlan(user);
     }
@@ -115,6 +124,12 @@ public class WebhookSubscriptionProcessor {
             throw new InvalidRequestException("Webhook payload is missing a subscription ID");
         }
         return externalSubscriptionId;
+    }
+
+    private Instant providerEventAt(JsonNode attributes) {
+        String value = firstText(attributes, "updated_at", text(attributes, "created_at"));
+        Instant providerEventAt = parseInstant(value);
+        return providerEventAt == null ? Instant.EPOCH : providerEventAt;
     }
 
     private SubscriptionStatus resolveStatus(String eventName, JsonNode attributes) {
