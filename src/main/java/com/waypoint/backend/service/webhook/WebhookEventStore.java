@@ -18,6 +18,7 @@ import java.time.Instant;
 public class WebhookEventStore {
     private final WebhookEventRepository webhookEventRepository;
     private final TransactionTemplate transactionTemplate;
+    private final WebhookRetryPolicy retryPolicy = new WebhookRetryPolicy();
 
     public WebhookEventStore(WebhookEventRepository webhookEventRepository, PlatformTransactionManager transactionManager) {
         this.webhookEventRepository = webhookEventRepository;
@@ -58,20 +59,24 @@ public class WebhookEventStore {
     }
 
     private WebhookReception insertReceived(String eventHash, String payloadJson) {
+        Instant now = Instant.now();
         WebhookEventEntity event = new WebhookEventEntity();
         event.setEventHash(eventHash);
         event.setPayloadJson(payloadJson);
         event.setEventName("UNKNOWN");
         event.setProcessingStatus(ProcessingStatus.RECEIVED);
-        event.setReceivedAt(Instant.now());
+        event.setReceivedAt(now);
+        event.setProcessingStartedAt(now);
         return new WebhookReception(webhookEventRepository.saveAndFlush(event), true, true);
     }
 
     private WebhookReception claimExisting(WebhookEventEntity event) {
-        if (event.getProcessingStatus() != ProcessingStatus.FAILED) {
+        Instant now = Instant.now();
+        if (!retryPolicy.shouldClaim(event.getProcessingStatus(), event.getProcessingStartedAt(), now)) {
             return new WebhookReception(event, false, false);
         }
         event.setProcessingStatus(ProcessingStatus.RECEIVED);
+        event.setProcessingStartedAt(now);
         event.setErrorMessage(null);
         event.setProcessedAt(null);
         return new WebhookReception(webhookEventRepository.save(event), false, true);

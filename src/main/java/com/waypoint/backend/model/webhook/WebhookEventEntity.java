@@ -38,15 +38,22 @@ public class WebhookEventEntity {
     @Column(nullable = false)
     private Instant receivedAt;
 
+    @Column(nullable = false)
+    private Instant processingStartedAt;
+
     private Instant processedAt;
 
     @PrePersist
     void prePersist() {
+        Instant now = Instant.now();
         if (id == null) {
             id = UUID.randomUUID();
         }
         if (receivedAt == null) {
-            receivedAt = Instant.now();
+            receivedAt = now;
+        }
+        if (processingStartedAt == null) {
+            processingStartedAt = now;
         }
     }
 
@@ -112,6 +119,14 @@ public class WebhookEventEntity {
 
     public void setReceivedAt(Instant receivedAt) {
         this.receivedAt = receivedAt;
+    }
+
+    public Instant getProcessingStartedAt() {
+        return processingStartedAt;
+    }
+
+    public void setProcessingStartedAt(Instant processingStartedAt) {
+        this.processingStartedAt = processingStartedAt;
     }
 
     public Instant getProcessedAt() {
