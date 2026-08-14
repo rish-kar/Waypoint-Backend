@@ -1,0 +1,38 @@
+$kind: http-request
+description: Step 6 lifecycle test. Issues a full refund for lemonSqueezyInvoiceId. Run List Subscription Invoices first. Use only in Lemon Squeezy Test Mode.
+url: "https://api.lemonsqueezy.com/v1/subscription-invoices/{{lemonSqueezyInvoiceId}}/refund"
+method: POST
+headers:
+  Authorization: Bearer {{lemonSqueezyApiKey}}
+  Accept: application/vnd.api+json
+  Content-Type: application/vnd.api+json
+body:
+  type: json
+  content: |-
+    {
+      "data": {
+        "type": "subscription-invoices",
+        "id": "{{lemonSqueezyInvoiceId}}",
+        "attributes": {}
+      }
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('lemonSqueezyApiKey')) {
+        throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment.');
+      }
+      if (!pm.environment.get('lemonSqueezyInvoiceId')) {
+        throw new Error('Run LS Test - 07 List Subscription Invoices first.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Refund request succeeded', () => pm.response.to.have.status(200));
+      const attributes = pm.response.json().data.attributes;
+      pm.test('Invoice is fully refunded', () => {
+        pm.expect(attributes.refunded).to.eql(true);
+        pm.expect(attributes.refunded_at).to.be.a('string').and.not.empty;
+      });
+    language: text/javascript
+order: 4700

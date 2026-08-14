@@ -1,0 +1,33 @@
+$kind: http-request
+description: Direct Lemon Squeezy Test Mode helper. Run Billing Status first so lemonSqueezySubscriptionId is populated. This request also stores the hosted payment-method and customer-portal URLs.
+url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
+method: GET
+headers:
+  Authorization: Bearer {{lemonSqueezyApiKey}}
+  Accept: application/vnd.api+json
+  Content-Type: application/vnd.api+json
+scripts:
+  - type: beforeRequest
+    code: |-
+      const apiKey = pm.environment.get('lemonSqueezyApiKey');
+      const subscriptionId = pm.environment.get('lemonSqueezySubscriptionId');
+      if (!apiKey) {
+        throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment. Never commit the real key.');
+      }
+      if (!subscriptionId) {
+        throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      const attributes = body.data.attributes;
+      pm.test('Subscription ID matches selected billing subscription', () => {
+        pm.expect(body.data.id).to.eql(pm.environment.get('lemonSqueezySubscriptionId'));
+      });
+      pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
+      pm.environment.set('lemonSqueezyPaymentMethodUrl', attributes.urls?.update_payment_method || '');
+      pm.environment.set('lemonSqueezyCustomerPortalUrl', attributes.urls?.customer_portal || '');
+    language: text/javascript
+order: 4000

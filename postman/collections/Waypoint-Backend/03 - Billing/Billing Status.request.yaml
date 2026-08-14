@@ -25,5 +25,8 @@ scripts:
           pm.expect(body.trialEndsAt).to.be.a('string').and.not.empty;
         });
       }
+      if (body.externalSubscriptionId) {
+        pm.environment.set('lemonSqueezySubscriptionId', body.externalSubscriptionId);
+      }
     language: text/javascript
 order: 1000

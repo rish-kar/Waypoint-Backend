@@ -1,0 +1,51 @@
+$kind: http-request
+description: Step 2 lifecycle test. Resets Lemon Squeezy billing anchor to today, which removes an active trial, and invoices immediately. Use only in Test Mode.
+url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
+method: PATCH
+headers:
+  Authorization: Bearer {{lemonSqueezyApiKey}}
+  Accept: application/vnd.api+json
+  Content-Type: application/vnd.api+json
+body:
+  type: json
+  content: |-
+    {
+      "data": {
+        "type": "subscriptions",
+        "id": "{{lemonSqueezySubscriptionId}}",
+        "attributes": {
+          "billing_anchor": 0,
+          "invoice_immediately": true
+        }
+      }
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      const apiKey = pm.environment.get('lemonSqueezyApiKey');
+      const subscriptionId = pm.environment.get('lemonSqueezySubscriptionId');
+      if (!apiKey) {
+        throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment. Never commit the real key.');
+      }
+      if (!subscriptionId) {
+        throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Lemon Squeezy accepted trial-end update', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      const attributes = body.data.attributes;
+      pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
+      pm.environment.set('lemonSqueezyPaymentMethodUrl', attributes.urls?.update_payment_method || '');
+      pm.environment.set('lemonSqueezyCustomerPortalUrl', attributes.urls?.customer_portal || '');
+      pm.test('Trial is no longer active when payment succeeds', () => {
+        if (attributes.status === 'active') {
+          pm.expect(attributes.trial_ends_at).to.eql(null);
+        }
+      });
+      pm.test('Provider returned a lifecycle status', () => {
+        pm.expect(attributes.status).to.be.oneOf(['active', 'past_due', 'unpaid', 'cancelled', 'expired']);
+      });
+    language: text/javascript
+order: 4100

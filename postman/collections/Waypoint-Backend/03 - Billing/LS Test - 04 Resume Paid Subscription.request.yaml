@@ -1,0 +1,42 @@
+$kind: http-request
+description: Step 4 lifecycle test. Resumes a cancelled subscription before ends_at by setting cancelled=false.
+url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
+method: PATCH
+headers:
+  Authorization: Bearer {{lemonSqueezyApiKey}}
+  Accept: application/vnd.api+json
+  Content-Type: application/vnd.api+json
+body:
+  type: json
+  content: |-
+    {
+      "data": {
+        "type": "subscriptions",
+        "id": "{{lemonSqueezySubscriptionId}}",
+        "attributes": {
+          "cancelled": false
+        }
+      }
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('lemonSqueezyApiKey')) {
+        throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment.');
+      }
+      if (!pm.environment.get('lemonSqueezySubscriptionId')) {
+        throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const attributes = pm.response.json().data.attributes;
+      pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
+      pm.test('Provider clears cancellation', () => {
+        pm.expect(attributes.cancelled).to.eql(false);
+        pm.expect(attributes.status).to.eql('active');
+        pm.expect(attributes.ends_at).to.eql(null);
+      });
+    language: text/javascript
+order: 4300

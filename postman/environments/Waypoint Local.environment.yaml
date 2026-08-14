@@ -28,3 +28,15 @@ values:
     value: local-monthly-variant-id
   - key: subscriptionId
     value: postman-subscription-001
+  - key: lemonSqueezyApiKey
+    value: ''
+  - key: lemonSqueezySubscriptionId
+    value: ''
+  - key: lemonSqueezyProviderStatus
+    value: ''
+  - key: lemonSqueezyPaymentMethodUrl
+    value: ''
+  - key: lemonSqueezyCustomerPortalUrl
+    value: ''
+  - key: lemonSqueezyInvoiceId
+    value: ''

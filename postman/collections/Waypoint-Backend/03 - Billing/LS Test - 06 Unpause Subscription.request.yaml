@@ -1,0 +1,41 @@
+$kind: http-request
+description: Step 5 lifecycle test. Removes a Lemon Squeezy pause by setting pause=null.
+url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
+method: PATCH
+headers:
+  Authorization: Bearer {{lemonSqueezyApiKey}}
+  Accept: application/vnd.api+json
+  Content-Type: application/vnd.api+json
+body:
+  type: json
+  content: |-
+    {
+      "data": {
+        "type": "subscriptions",
+        "id": "{{lemonSqueezySubscriptionId}}",
+        "attributes": {
+          "pause": null
+        }
+      }
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('lemonSqueezyApiKey')) {
+        throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment.');
+      }
+      if (!pm.environment.get('lemonSqueezySubscriptionId')) {
+        throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const attributes = pm.response.json().data.attributes;
+      pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
+      pm.test('Provider clears pause', () => {
+        pm.expect(attributes.pause).to.eql(null);
+        pm.expect(attributes.status).to.eql('active');
+      });
+    language: text/javascript
+order: 4500
