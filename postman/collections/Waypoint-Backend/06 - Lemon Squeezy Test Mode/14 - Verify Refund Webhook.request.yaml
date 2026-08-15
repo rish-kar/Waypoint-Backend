@@ -1,0 +1,40 @@
+$kind: http-request
+description: Verifies that Waypoint recorded and processed the Lemon Squeezy subscription_payment_refunded webhook for the exact locked lifecycle subscription.
+url: "{{baseUrl}}/api/v1/admin/webhook-events?eventName=subscription_payment_refunded&processingStatus=PROCESSED&externalObjectId={{lemonSqueezyLifecycleSubscriptionId}}&size=10&sort=receivedAt&direction=DESC&includePayload=false"
+method: GET
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      if (!adminId || !adminPassword) {
+          throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      }
+      if (!pm.environment.get('lemonSqueezyLifecycleSubscriptionId')) {
+          throw new Error('No locked lifecycle subscription ID.');
+      }
+      pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      const lifecycleId = pm.environment.get('lemonSqueezyLifecycleSubscriptionId');
+      const refundEvent = (body.items || []).find(item =>
+        item.eventName === 'subscription_payment_refunded'
+        && item.processingStatus === 'PROCESSED'
+        && String(item.externalObjectId) === String(lifecycleId)
+      );
+      pm.test('Refund webhook was processed for the lifecycle subscription', () => {
+        pm.expect(refundEvent, 'No processed refund webhook found for the lifecycle subscription').to.exist;
+      });
+    language: text/javascript
+order: 14000
