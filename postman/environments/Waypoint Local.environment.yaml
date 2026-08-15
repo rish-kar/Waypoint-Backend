@@ -34,6 +34,16 @@ values:
     value: ''
   - key: lemonSqueezyProviderStatus
     value: ''
+  - key: lemonSqueezyStoreId
+    value: ''
+  - key: lemonSqueezyVariantId
+    value: ''
+  - key: lemonSqueezyWaypointPlan
+    value: ''
+  - key: lemonSqueezyCheckoutUrl
+    value: ''
+  - key: lemonSqueezyNoTrialPaidReady
+    value: 'false'
   - key: lemonSqueezyPaymentMethodUrl
     value: ''
   - key: lemonSqueezyCustomerPortalUrl

@@ -1,5 +1,5 @@
 $kind: http-request
-description: LS Test 07. Lists invoices for the selected test subscription and stores the newest paid, non-refunded, positive-value invoice ID for refund testing.
+description: LS Test 07. Lists invoices for the selected paid no-trial test subscription and stores the newest positive-value paid, non-refunded invoice for refund testing.
 url: "https://api.lemonsqueezy.com/v1/subscription-invoices?filter[subscription_id]={{lemonSqueezySubscriptionId}}"
 method: GET
 headers:
@@ -15,6 +15,10 @@ scripts:
       if (!pm.environment.get('lemonSqueezySubscriptionId')) {
         throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
       }
+      if (pm.environment.get('lemonSqueezyNoTrialPaidReady') !== 'true') {
+        throw new Error('LS Test 07 requires the clean paid no-trial subscription created through LS Test 02.');
+      }
+      pm.environment.unset('lemonSqueezyInvoiceId');
     language: text/javascript
   - type: afterResponse
     code: |-
@@ -30,13 +34,11 @@ scripts:
           && attributes.refunded !== true
           && Number(attributes.total) > 0;
       });
-      if (refundableInvoice) {
-        pm.environment.set('lemonSqueezyInvoiceId', refundableInvoice.id);
-      } else {
-        pm.environment.unset('lemonSqueezyInvoiceId');
-      }
       pm.test('A positive-value paid non-refunded test invoice is available', () => {
         pm.expect(refundableInvoice, 'No positive-value paid non-refunded test invoice found').to.exist;
       });
+      if (refundableInvoice) {
+        pm.environment.set('lemonSqueezyInvoiceId', refundableInvoice.id);
+      }
     language: text/javascript
 order: 4600

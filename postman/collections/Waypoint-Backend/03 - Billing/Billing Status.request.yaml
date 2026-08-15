@@ -28,5 +28,10 @@ scripts:
       if (body.externalSubscriptionId) {
         pm.environment.set('lemonSqueezySubscriptionId', body.externalSubscriptionId);
       }
+      if (body.planCode === 'PREMIUM_MONTHLY') {
+        pm.environment.set('lemonSqueezyWaypointPlan', 'MONTHLY');
+      } else if (body.planCode === 'PREMIUM_ANNUAL') {
+        pm.environment.set('lemonSqueezyWaypointPlan', 'ANNUAL');
+      }
     language: text/javascript
 order: 1000

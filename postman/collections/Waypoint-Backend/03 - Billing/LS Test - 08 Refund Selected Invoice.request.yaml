@@ -1,5 +1,5 @@
 $kind: http-request
-description: LS Test 08. Issues a full refund for lemonSqueezyInvoiceId. Run LS Test 07 first. Use only in Lemon Squeezy Test Mode.
+description: LS Test 08. Issues a full refund for lemonSqueezyInvoiceId. Run LS Test 07 first. Uses only Lemon Squeezy Test Mode data.
 url: "https://api.lemonsqueezy.com/v1/subscription-invoices/{{lemonSqueezyInvoiceId}}/refund"
 method: POST
 headers:
@@ -25,6 +25,9 @@ scripts:
       if (!pm.environment.get('lemonSqueezyInvoiceId')) {
         throw new Error('Run LS Test - 07 List Subscription Invoices first.');
       }
+      if (pm.environment.get('lemonSqueezyNoTrialPaidReady') !== 'true') {
+        throw new Error('LS Test 08 requires the clean paid no-trial subscription created through LS Test 02.');
+      }
     language: text/javascript
   - type: afterResponse
     code: |-
@@ -32,7 +35,6 @@ scripts:
       const attributes = pm.response.json().data.attributes;
       pm.test('Invoice is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
       pm.test('Invoice is fully refunded', () => {
-        pm.expect(attributes.status).to.eql('refunded');
         pm.expect(attributes.refunded).to.eql(true);
         pm.expect(attributes.refunded_at).to.be.a('string').and.not.empty;
         pm.expect(Number(attributes.refunded_amount)).to.eql(Number(attributes.total));

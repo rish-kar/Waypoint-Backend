@@ -1,5 +1,5 @@
 $kind: http-request
-description: LS Test 04. Resumes a CANCELLED test subscription during its grace period by setting cancelled=false.
+description: LS Test 04. Resumes the CANCELLED paid no-trial test subscription during its grace period by setting cancelled=false.
 url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
 method: PATCH
 headers:
@@ -27,9 +27,11 @@ scripts:
       if (!pm.environment.get('lemonSqueezySubscriptionId')) {
         throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
       }
-      const providerStatus = pm.environment.get('lemonSqueezyProviderStatus');
-      if (providerStatus !== 'cancelled') {
-        throw new Error(`LS Test 04 requires provider status cancelled, but current stored status is ${providerStatus || 'empty'}. Run LS Test 03 first.`);
+      if (pm.environment.get('lemonSqueezyProviderStatus') !== 'cancelled') {
+        throw new Error('LS Test 04 requires provider status cancelled. Run LS Test 03 first.');
+      }
+      if (pm.environment.get('lemonSqueezyNoTrialPaidReady') !== 'true') {
+        throw new Error('LS Test 04 requires the clean paid no-trial subscription created through LS Test 02.');
       }
     language: text/javascript
   - type: afterResponse
@@ -37,10 +39,11 @@ scripts:
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const attributes = pm.response.json().data.attributes;
       pm.test('Subscription is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
-      pm.test('Provider resumes subscription', () => {
+      pm.test('Provider resumes paid no-trial subscription', () => {
         pm.expect(attributes.cancelled).to.eql(false);
         pm.expect(attributes.status).to.eql('active');
         pm.expect(attributes.ends_at).to.eql(null);
+        pm.expect(attributes.trial_ends_at).to.eql(null);
       });
       pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
     language: text/javascript

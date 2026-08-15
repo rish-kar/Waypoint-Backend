@@ -1,0 +1,74 @@
+$kind: http-request
+description: LS Test 02. Creates a NEW paid Test Mode checkout for the same Store/Variant with skip_trial=true. Open the returned checkout URL, pay with a Lemon Squeezy test card, wait for webhooks, then run Billing Status and LS Test 01 again before Test 03.
+url: "https://api.lemonsqueezy.com/v1/checkouts"
+method: POST
+headers:
+  Authorization: Bearer {{lemonSqueezyApiKey}}
+  Accept: application/vnd.api+json
+  Content-Type: application/vnd.api+json
+body:
+  type: json
+  content: |-
+    {
+      "data": {
+        "type": "checkouts",
+        "attributes": {
+          "checkout_options": {
+            "skip_trial": true
+          },
+          "checkout_data": {
+            "custom": {
+              "waypoint_user_id": "{{userId}}",
+              "waypoint_plan": "{{lemonSqueezyWaypointPlan}}"
+            }
+          },
+          "product_options": {
+            "enabled_variants": [{{lemonSqueezyVariantId}}]
+          },
+          "test_mode": true
+        },
+        "relationships": {
+          "store": {
+            "data": {
+              "type": "stores",
+              "id": "{{lemonSqueezyStoreId}}"
+            }
+          },
+          "variant": {
+            "data": {
+              "type": "variants",
+              "id": "{{lemonSqueezyVariantId}}"
+            }
+          }
+        }
+      }
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      const required = ['lemonSqueezyApiKey', 'userId', 'lemonSqueezyStoreId', 'lemonSqueezyVariantId', 'lemonSqueezyWaypointPlan'];
+      required.forEach(key => {
+        if (!pm.environment.get(key)) {
+          throw new Error(`Missing ${key}. Run Billing Status and LS Test 01 first.`);
+        }
+      });
+      if (!['MONTHLY', 'ANNUAL'].includes(pm.environment.get('lemonSqueezyWaypointPlan'))) {
+        throw new Error('lemonSqueezyWaypointPlan must be MONTHLY or ANNUAL. Run Billing Status first.');
+      }
+      pm.environment.set('lemonSqueezyNoTrialPaidReady', 'false');
+      pm.environment.unset('lemonSqueezyCheckoutUrl');
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Checkout creation succeeded', () => pm.expect(pm.response.code).to.be.oneOf([200, 201]));
+      const body = pm.response.json();
+      const attributes = body.data.attributes;
+      pm.test('Checkout is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
+      pm.test('Checkout skips the product trial', () => pm.expect(attributes.checkout_options.skip_trial).to.eql(true));
+      pm.test('Checkout uses the selected variant', () => {
+        pm.expect(String(attributes.variant_id)).to.eql(String(pm.environment.get('lemonSqueezyVariantId')));
+      });
+      pm.test('Checkout URL returned', () => pm.expect(attributes.url).to.match(/^https:\/\//));
+      pm.environment.set('lemonSqueezyCheckoutUrl', attributes.url);
+    language: text/javascript
+order: 4100

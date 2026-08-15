@@ -1,5 +1,5 @@
 $kind: http-request
-description: LS Test 03. Cancels the selected ACTIVE paid test subscription using Lemon Squeezy's dedicated DELETE endpoint. Run LS Test 01 first if provider status is not already stored.
+description: LS Test 03. Cancels the NEW ACTIVE paid no-trial test subscription using Lemon Squeezy's dedicated DELETE endpoint. Run Billing Status and LS Test 01 after completing LS Test 02 checkout before running this.
 url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
 method: DELETE
 headers:
@@ -15,9 +15,11 @@ scripts:
       if (!pm.environment.get('lemonSqueezySubscriptionId')) {
         throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
       }
-      const providerStatus = pm.environment.get('lemonSqueezyProviderStatus');
-      if (providerStatus !== 'active') {
-        throw new Error(`LS Test 03 requires provider status active, but current stored status is ${providerStatus || 'empty'}. Run LS Test 01 first.`);
+      if (pm.environment.get('lemonSqueezyProviderStatus') !== 'active') {
+        throw new Error('LS Test 03 requires provider status active. Run Billing Status and LS Test 01 first.');
+      }
+      if (pm.environment.get('lemonSqueezyNoTrialPaidReady') !== 'true') {
+        throw new Error('LS Test 03 requires a clean paid no-trial ACTIVE subscription created through LS Test 02.');
       }
     language: text/javascript
   - type: afterResponse
@@ -25,6 +27,7 @@ scripts:
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const attributes = pm.response.json().data.attributes;
       pm.test('Subscription is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
+      pm.test('Paid no-trial state remains clean', () => pm.expect(attributes.trial_ends_at).to.eql(null));
       pm.test('Provider marks subscription cancelled with a future grace-period end', () => {
         pm.expect(attributes.cancelled).to.eql(true);
         pm.expect(attributes.status).to.eql('cancelled');
