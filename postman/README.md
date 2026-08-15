@@ -10,7 +10,7 @@
 ## Collection layout
 
 - `03 - Billing` contains only Waypoint backend billing endpoints.
-- `04 - Webhooks` contains Waypoint webhook endpoint tests.
+- `04 - Webhooks` contains Waypoint webhook endpoint and hardening tests.
 - `05 - Admin` contains only Waypoint admin API operations.
 - `06 - Lemon Squeezy Test Mode` contains the direct Lemon Squeezy provider lifecycle tests and the small E2E helpers needed to compare provider state with Waypoint.
 
@@ -32,9 +32,35 @@ In Postman, set:
 ```text
 adminId = same value as ADMIN_ID
 adminPassword = same value as ADMIN_PASSWORD
+webhookSecret = same value as LEMON_SQUEEZY_WEBHOOK_SECRET
 ```
 
+`webhookSecret` is the long-lived signing secret, not a webhook signature. The webhook requests generate `webhookBody` and the matching HMAC-SHA256 `webhookSignature` automatically for each payload.
+
 Run `Google Login` once to populate `jwt`, `userId`, and `userEmail`.
+
+## Webhook hardening smoke tests
+
+`04 - Webhooks` now includes focused receiver checks in addition to normal subscription-state smoke tests:
+
+- `Invalid Signature` -> malformed signature returns `401`.
+- `Verify Invalid Signature Not Stored` -> rejected payload never reaches `webhook_events`.
+- `Unsupported Signed Event` -> valid HMAC but unsupported event is acknowledged.
+- `Verify Unsupported Event Ignored` -> event is stored as `IGNORED`.
+- `Duplicate Idempotency` -> sends the same signed payload twice.
+- `Verify Duplicate Idempotency` -> only one persisted event row exists for the identical body hash.
+- `Unexpected Store Failure` -> valid HMAC from a deliberately wrong store is rejected.
+- `Verify Unexpected Store Failed` -> event remains visible as `FAILED` with a safe error.
+
+Stale `RECEIVED` recovery and `FAILED` retry reclamation require internal timing/state control, so those cases are covered by Maven integration tests rather than manual Postman mutation.
+
+## Lemon Squeezy lifecycle tests
+
+Run direct provider lifecycle work only under `06 - Lemon Squeezy Test Mode`.
+
+The lifecycle collection covers paid/no-trial creation, active-state verification, cancellation, resume, pause, unpause, invoice discovery, full refund, exact Waypoint subscription synchronization and strict refund-webhook verification.
+
+`14 - Verify Refund Webhook` filters the admin webhook store for the selected invoice and requires a matching `subscription_payment_refunded` event with `processingStatus = PROCESSED`.
 
 ## Admin management
 
