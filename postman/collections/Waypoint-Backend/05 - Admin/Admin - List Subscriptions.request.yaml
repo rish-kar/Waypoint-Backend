@@ -1,5 +1,5 @@
 $kind: http-request
-description: Supports filters userId, email, provider, plan, status, externalCustomerId, externalSubscriptionId and date ranges.
+description: Supports filters userId, email, provider, plan, status, externalCustomerId, externalSubscriptionId and date ranges. During Lemon Squeezy lifecycle testing it also restores the selected lifecycle subscription ID from the newest row matching the provider state.
 url: "{{baseUrl}}/api/v1/admin/subscriptions?userId={{userId}}&size=50&sort=updatedAt&direction=DESC"
 method: GET
 headers:
@@ -27,6 +27,19 @@ scripts:
       pm.test('Paged subscriptions returned', () => pm.expect(body.items).to.be.an('array'));
       if (body.items.length > 0) {
           pm.environment.set('adminSubscriptionId', body.items[0].id);
+      }
+      const lifecycleLocked = pm.environment.get('lemonSqueezyNoTrialPaidReady') === 'true';
+      const providerStatus = (pm.environment.get('lemonSqueezyProviderStatus') || '').toUpperCase();
+      if (lifecycleLocked && providerStatus) {
+          const lifecycleSubscription = body.items.find(item =>
+              item.status === providerStatus && item.externalSubscriptionId
+          );
+          pm.test('Lifecycle subscription exists in Waypoint database', () => {
+              pm.expect(lifecycleSubscription, `No ${providerStatus} lifecycle subscription found`).to.exist;
+          });
+          if (lifecycleSubscription) {
+              pm.environment.set('lemonSqueezySubscriptionId', lifecycleSubscription.externalSubscriptionId);
+          }
       }
     language: text/javascript
 order: 3000
