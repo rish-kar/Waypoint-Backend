@@ -29,6 +29,7 @@ public class WebhookSubscriptionProcessor {
     private final SubscriptionAccessPolicy subscriptionAccessPolicy;
     private final PlanService planService;
     private final LemonSqueezyProperties properties;
+    private final ProviderEventOrderPolicy eventOrderPolicy = new ProviderEventOrderPolicy();
 
     public WebhookSubscriptionProcessor(
             SubscriptionRepository subscriptionRepository,
@@ -51,7 +52,14 @@ public class WebhookSubscriptionProcessor {
         validatePayloadSource(data, attributes, eventName);
 
         String externalSubscriptionId = requireSubscriptionId(data, attributes);
-        Optional<SubscriptionEntity> existing = subscriptionRepository.findByExternalSubscriptionId(externalSubscriptionId);
+        Instant providerEventAt = parseInstant(text(attributes, "updated_at"));
+        Optional<SubscriptionEntity> existing =
+                subscriptionRepository.findByExternalSubscriptionIdForUpdate(externalSubscriptionId);
+        if (existing.isPresent()
+                && !eventOrderPolicy.shouldApply(existing.get().getLastProviderEventAt(), providerEventAt)) {
+            return;
+        }
+
         Optional<UUID> customUserId = optionalWaypointUserId(payload);
         UserEntity user = resolveUser(existing, customUserId);
 
@@ -82,6 +90,7 @@ public class WebhookSubscriptionProcessor {
             subscription.setEndsAt(parseInstant(text(attributes, "ends_at")));
         }
 
+        subscription.setLastProviderEventAt(providerEventAt);
         subscriptionRepository.save(subscription);
         planService.synchronizeUserPlan(user);
     }
