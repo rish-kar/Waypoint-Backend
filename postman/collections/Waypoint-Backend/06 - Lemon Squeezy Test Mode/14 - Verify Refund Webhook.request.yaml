@@ -1,6 +1,6 @@
 $kind: http-request
-description: Diagnostic verification for the refunded lifecycle. Fetches all recent webhook rows with no server-side event filters, then identifies the refund-related row in Postman so we can see exactly how it was stored.
-url: "{{baseUrl}}/api/v1/admin/webhook-events?size=100&sort=receivedAt&direction=DESC&includePayload=false"
+description: Strictly verifies that Lemon Squeezy delivered and Waypoint processed the refund webhook for the invoice selected in step 11 and refunded in step 12.
+url: "{{baseUrl}}/api/v1/admin/webhook-events?eventName=subscription_payment_refunded&processingStatus=PROCESSED&externalObjectId={{lemonSqueezyInvoiceId}}&size=10&sort=receivedAt&direction=DESC&includePayload=false"
 method: GET
 headers:
   Authorization: Basic {{adminBasicAuth}}
@@ -15,8 +15,12 @@ scripts:
       }
       const adminId = pm.environment.get('adminId');
       const adminPassword = pm.environment.get('adminPassword');
+      const invoiceId = pm.environment.get('lemonSqueezyInvoiceId');
       if (!adminId || !adminPassword) {
           throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      }
+      if (!invoiceId) {
+          throw new Error('Run 11 - List Subscription Invoices and 12 - Refund Selected Invoice first.');
       }
       pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
     language: text/javascript
@@ -24,24 +28,20 @@ scripts:
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const body = pm.response.json();
-      const invoiceId = String(pm.environment.get('lemonSqueezyInvoiceId') || '');
-      const lifecycleId = String(pm.environment.get('lemonSqueezyLifecycleSubscriptionId') || '');
+      const invoiceId = String(pm.environment.get('lemonSqueezyInvoiceId'));
       const events = body.items || [];
-      pm.test('Webhook events are available', () => {
-        pm.expect(events, 'No webhook rows exist at all').to.be.an('array').and.not.empty;
+      pm.test('Exactly matching refund webhook exists', () => {
+        pm.expect(events, 'No processed subscription_payment_refunded webhook exists for the selected invoice').to.be.an('array').and.not.empty;
       });
-      const refundEvent = events.find(item =>
+      const exactEvent = events.find(item =>
         item.eventName === 'subscription_payment_refunded'
-        || (invoiceId && String(item.externalObjectId) === invoiceId)
-        || (lifecycleId && String(item.externalObjectId) === lifecycleId)
+        && item.processingStatus === 'PROCESSED'
+        && String(item.externalObjectId) === invoiceId
       );
-      pm.test('Refund-related webhook row can be identified', () => {
-        pm.expect(refundEvent, 'No refund-related webhook row found among recent webhook events').to.exist;
+      pm.test('Selected invoice refund webhook was processed', () => {
+        pm.expect(exactEvent, 'Matching refund webhook row was not found').to.exist;
+        pm.expect(exactEvent.processedAt).to.be.a('string').and.not.empty;
+        pm.expect(exactEvent.errorMessage).to.eql(null);
       });
-      if (refundEvent) {
-        pm.environment.set('refundWebhookEventName', refundEvent.eventName || '');
-        pm.environment.set('refundWebhookProcessingStatus', refundEvent.processingStatus || '');
-        pm.environment.set('refundWebhookExternalObjectId', refundEvent.externalObjectId || '');
-      }
     language: text/javascript
 order: 14000
