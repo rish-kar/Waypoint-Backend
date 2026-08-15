@@ -1,6 +1,6 @@
 $kind: http-request
-description: Verifies that Waypoint recorded and processed the Lemon Squeezy subscription_payment_refunded webhook for the exact locked lifecycle subscription.
-url: "{{baseUrl}}/api/v1/admin/webhook-events?eventName=subscription_payment_refunded&processingStatus=PROCESSED&externalObjectId={{lemonSqueezyLifecycleSubscriptionId}}&size=10&sort=receivedAt&direction=DESC&includePayload=false"
+description: Verifies that Waypoint recorded and processed the Lemon Squeezy subscription_payment_refunded webhook for the exact refunded invoice. Refund webhook data.id is the subscription-invoice ID, while the webhook processor maps that invoice back to the locked lifecycle subscription.
+url: "{{baseUrl}}/api/v1/admin/webhook-events?eventName=subscription_payment_refunded&processingStatus=PROCESSED&externalObjectId={{lemonSqueezyInvoiceId}}&size=10&sort=receivedAt&direction=DESC&includePayload=false"
 method: GET
 headers:
   Authorization: Basic {{adminBasicAuth}}
@@ -18,8 +18,8 @@ scripts:
       if (!adminId || !adminPassword) {
           throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
       }
-      if (!pm.environment.get('lemonSqueezyLifecycleSubscriptionId')) {
-          throw new Error('No locked lifecycle subscription ID.');
+      if (!pm.environment.get('lemonSqueezyInvoiceId')) {
+          throw new Error('Run 11 - List Subscription Invoices and 12 - Refund Selected Invoice first.');
       }
       pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
     language: text/javascript
@@ -27,14 +27,14 @@ scripts:
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const body = pm.response.json();
-      const lifecycleId = pm.environment.get('lemonSqueezyLifecycleSubscriptionId');
+      const invoiceId = pm.environment.get('lemonSqueezyInvoiceId');
       const refundEvent = (body.items || []).find(item =>
         item.eventName === 'subscription_payment_refunded'
         && item.processingStatus === 'PROCESSED'
-        && String(item.externalObjectId) === String(lifecycleId)
+        && String(item.externalObjectId) === String(invoiceId)
       );
-      pm.test('Refund webhook was processed for the lifecycle subscription', () => {
-        pm.expect(refundEvent, 'No processed refund webhook found for the lifecycle subscription').to.exist;
+      pm.test('Refund webhook was processed for the refunded invoice', () => {
+        pm.expect(refundEvent, 'No processed refund webhook found for the refunded invoice').to.exist;
       });
     language: text/javascript
 order: 14000
