@@ -23,6 +23,7 @@ public class SubscriptionService {
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionAccessPolicy subscriptionAccessPolicy;
     private final SpecialPremiumGrantRepository specialPremiumGrantRepository;
+    private final CheckoutBlockingPolicy checkoutBlockingPolicy = new CheckoutBlockingPolicy();
 
     public SubscriptionService(
             SubscriptionRepository subscriptionRepository,
@@ -89,6 +90,17 @@ public class SubscriptionService {
                             : latest.getStatus();
                     return freeSnapshot(status, latest, now);
                 });
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasCheckoutBlockingSubscription(UUID userId) {
+        return hasCheckoutBlockingSubscription(userId, Instant.now());
+    }
+
+    boolean hasCheckoutBlockingSubscription(UUID userId, Instant now) {
+        return subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId)
+                .stream()
+                .anyMatch(subscription -> checkoutBlockingPolicy.blocks(subscription, now));
     }
 
     private boolean isActiveSpecialGrant(SpecialPremiumGrantEntity grant, Instant now) {

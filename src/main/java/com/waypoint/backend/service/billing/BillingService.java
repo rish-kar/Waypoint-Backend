@@ -49,6 +49,9 @@ public class BillingService {
         if (plan == null) {
             throw new InvalidRequestException("plan is required");
         }
+        if (subscriptionService.hasCheckoutBlockingSubscription(user.getId())) {
+            throw new InvalidRequestException("A paid subscription is already active for this account");
+        }
         String variantId = switch (plan) {
             case MONTHLY -> properties.monthlyVariantId();
             case ANNUAL -> properties.annualVariantId();
