@@ -19,6 +19,7 @@ scripts:
         pm.expect(body.externalSubscriptionId).to.be.a('string').and.not.empty;
         pm.expect(body.planCode).to.be.oneOf(['PREMIUM_MONTHLY', 'PREMIUM_ANNUAL']);
       });
+      pm.environment.unset('lemonSqueezyLifecycleSubscriptionId');
       if (body.externalSubscriptionId) {
         pm.environment.set('lemonSqueezySubscriptionId', body.externalSubscriptionId);
         pm.environment.set('lemonSqueezyBootstrapSubscriptionId', body.externalSubscriptionId);

@@ -1,6 +1,6 @@
 $kind: http-request
-description: Unpauses the PAUSED paid no-trial Test Mode subscription by setting pause=null.
-url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
+description: Unpauses the locked PAUSED paid no-trial Test Mode lifecycle subscription by setting pause=null.
+url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezyLifecycleSubscriptionId}}"
 method: PATCH
 headers:
   Authorization: Bearer {{lemonSqueezyApiKey}}
@@ -12,7 +12,7 @@ body:
     {
       "data": {
         "type": "subscriptions",
-        "id": "{{lemonSqueezySubscriptionId}}",
+        "id": "{{lemonSqueezyLifecycleSubscriptionId}}",
         "attributes": {
           "pause": null
         }
@@ -24,8 +24,8 @@ scripts:
       if (!pm.environment.get('lemonSqueezyApiKey')) {
         throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment.');
       }
-      if (!pm.environment.get('lemonSqueezySubscriptionId')) {
-        throw new Error('Run 04 - Capture New Paid Subscription first.');
+      if (!pm.environment.get('lemonSqueezyLifecycleSubscriptionId')) {
+        throw new Error('Run 04 for a fresh run or 08A to recover an interrupted run.');
       }
       if (pm.environment.get('lemonSqueezyProviderStatus') !== 'paused') {
         throw new Error('10 - Unpause Subscription requires provider status paused. Run 08 - Pause Subscription first.');
@@ -37,7 +37,9 @@ scripts:
   - type: afterResponse
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
-      const attributes = pm.response.json().data.attributes;
+      const body = pm.response.json();
+      const attributes = body.data.attributes;
+      pm.test('Locked lifecycle subscription ID matches', () => pm.expect(body.data.id).to.eql(pm.environment.get('lemonSqueezyLifecycleSubscriptionId')));
       pm.test('Subscription is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
       pm.test('Provider clears pause and restores ACTIVE', () => {
         pm.expect(attributes.pause).to.eql(null);

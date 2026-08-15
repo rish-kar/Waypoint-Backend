@@ -1,5 +1,5 @@
 $kind: http-request
-description: After completing the Test Mode checkout, captures the NEW Waypoint billing subscription ID without allowing normal Billing Status requests to overwrite Lemon Squeezy lifecycle state.
+description: After completing the Test Mode checkout, captures and permanently locks the NEW Lemon Squeezy lifecycle subscription ID so later Waypoint requests cannot switch the lifecycle tests back to an older subscription.
 url: "{{baseUrl}}/api/v1/billing/status"
 method: GET
 headers:
@@ -28,6 +28,7 @@ scripts:
         pm.expect(body.externalSubscriptionId).to.not.eql(bootstrapId);
       });
       if (body.externalSubscriptionId) {
+        pm.environment.set('lemonSqueezyLifecycleSubscriptionId', body.externalSubscriptionId);
         pm.environment.set('lemonSqueezySubscriptionId', body.externalSubscriptionId);
       }
       if (body.planCode === 'PREMIUM_MONTHLY') {
