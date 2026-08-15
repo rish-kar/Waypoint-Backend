@@ -1,5 +1,5 @@
 $kind: http-request
-description: Recovery helper for an interrupted lifecycle run. Lists this test user's Lemon Squeezy subscriptions and restores the newest paid no-trial subscription that is not the bootstrap subscription. Normal fresh runs do not need this request.
+description: Recovery helper for an interrupted lifecycle run. Finds the newest paid no-trial Lemon Squeezy Test Mode subscription for this test user and locks it as the lifecycle subscription. It does not depend on earlier bootstrap variables.
 url: "https://api.lemonsqueezy.com/v1/subscriptions?filter[store_id]={{lemonSqueezyStoreId}}&filter[user_email]={{userEmail}}&page[size]=100"
 method: GET
 headers:
@@ -9,10 +9,10 @@ headers:
 scripts:
   - type: beforeRequest
     code: |-
-      const required = ['lemonSqueezyApiKey', 'lemonSqueezyStoreId', 'userEmail', 'lemonSqueezyBootstrapSubscriptionId'];
+      const required = ['lemonSqueezyApiKey', 'lemonSqueezyStoreId', 'userEmail'];
       required.forEach(key => {
         if (!pm.environment.get(key)) {
-          throw new Error(`Missing ${key}. Run the earlier Lemon Squeezy setup requests first.`);
+          throw new Error(`Missing ${key}.`);
         }
       });
     language: text/javascript
@@ -20,16 +20,16 @@ scripts:
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const body = pm.response.json();
-      const bootstrapId = pm.environment.get('lemonSqueezyBootstrapSubscriptionId');
       const expectedProviderStatus = pm.environment.get('lemonSqueezyProviderStatus');
       const variantId = pm.environment.get('lemonSqueezyVariantId');
-      const candidates = (body.data || []).filter(item => {
-        const attributes = item.attributes || {};
-        return item.id !== bootstrapId
-          && attributes.test_mode === true
-          && attributes.trial_ends_at === null
-          && (!variantId || String(attributes.variant_id) === String(variantId));
-      });
+      const candidates = (body.data || [])
+        .filter(item => {
+          const attributes = item.attributes || {};
+          return attributes.test_mode === true
+            && attributes.trial_ends_at === null
+            && (!variantId || String(attributes.variant_id) === String(variantId));
+        })
+        .sort((a, b) => Date.parse(b.attributes?.updated_at || b.attributes?.created_at || 0) - Date.parse(a.attributes?.updated_at || a.attributes?.created_at || 0));
       const recovered = candidates.find(item => item.attributes?.status === expectedProviderStatus) || candidates[0];
       pm.test('Paid no-trial lifecycle subscription can be recovered', () => {
         pm.expect(recovered, 'No paid no-trial lifecycle subscription found').to.exist;
