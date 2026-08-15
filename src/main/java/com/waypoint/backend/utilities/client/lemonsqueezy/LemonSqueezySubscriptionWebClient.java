@@ -102,6 +102,7 @@ public class LemonSqueezySubscriptionWebClient implements LemonSqueezySubscripti
                 text(attributes, "product_id"),
                 text(attributes, "variant_id"),
                 text(attributes, "status"),
+                parseInstant(text(attributes, "trial_ends_at")),
                 parseInstant(text(attributes, "renews_at")),
                 parseInstant(text(attributes, "ends_at")),
                 providerUpdatedAt

@@ -40,7 +40,7 @@ public class SubscriptionReconciliationService {
                 .findByExternalSubscriptionIdForUpdate(snapshot.externalSubscriptionId());
         if (existing.isPresent()
                 && existing.get().getLastProviderEventAt() != null
-                && snapshot.providerUpdatedAt().isBefore(existing.get().getLastProviderEventAt())) {
+                && !snapshot.providerUpdatedAt().isAfter(existing.get().getLastProviderEventAt())) {
             return Result.STALE;
         }
 
@@ -63,6 +63,7 @@ public class SubscriptionReconciliationService {
             subscription.setPlan("UNKNOWN");
         }
         subscription.setStatus(SubscriptionStatus.fromExternal(snapshot.status()));
+        subscription.setTrialEndsAt(snapshot.trialEndsAt());
         subscription.setRenewsAt(snapshot.renewsAt());
         subscription.setEndsAt(snapshot.endsAt());
         subscription.setLastProviderEventAt(snapshot.providerUpdatedAt());

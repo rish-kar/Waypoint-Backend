@@ -15,7 +15,7 @@ final class CheckoutBlockingPolicy {
                 ? SubscriptionStatus.UNKNOWN
                 : subscription.getStatus();
         return switch (status) {
-            case ACTIVE, ON_TRIAL, UNKNOWN -> true;
+            case ACTIVE, ON_TRIAL, PAUSED, PAST_DUE, UNPAID, UNKNOWN -> true;
             case CANCELLED -> subscription.getEndsAt() != null && subscription.getEndsAt().isAfter(now);
             default -> false;
         };

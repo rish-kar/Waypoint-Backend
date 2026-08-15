@@ -25,7 +25,10 @@ public class SubscriptionAccessPolicy {
             return new SubscriptionAccessDecision(false, status, null);
         }
         return switch (status) {
-            case ACTIVE, ON_TRIAL -> new SubscriptionAccessDecision(true, status, subscription.getRenewsAt());
+            case ACTIVE, PAUSED, PAST_DUE -> new SubscriptionAccessDecision(true, status, subscription.getRenewsAt());
+            case ON_TRIAL -> subscription.getTrialEndsAt() != null && subscription.getTrialEndsAt().isAfter(now)
+                    ? new SubscriptionAccessDecision(true, status, subscription.getTrialEndsAt())
+                    : new SubscriptionAccessDecision(false, status, null);
             case CANCELLED -> subscription.getEndsAt() != null && subscription.getEndsAt().isAfter(now)
                     ? new SubscriptionAccessDecision(true, status, subscription.getEndsAt())
                     : new SubscriptionAccessDecision(false, status, null);

@@ -9,6 +9,7 @@ public record BillingStatusResponse(
         PlanCode planCode,
         String status,
         String externalSubscriptionId,
+        Instant trialEndsAt,
         Instant renewsAt,
         Instant endsAt
 ) {

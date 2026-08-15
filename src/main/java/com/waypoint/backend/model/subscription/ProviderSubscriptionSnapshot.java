@@ -9,6 +9,7 @@ public record ProviderSubscriptionSnapshot(
         String externalProductId,
         String externalVariantId,
         String status,
+        Instant trialEndsAt,
         Instant renewsAt,
         Instant endsAt,
         Instant providerUpdatedAt

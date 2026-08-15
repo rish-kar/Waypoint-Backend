@@ -39,10 +39,11 @@ class SubscriptionReconciliationServiceTests {
         UserEntity user = new UserEntity();
         user.setId(UUID.randomUUID());
         user.setEmail("user@example.com");
+        Instant trialEndsAt = Instant.parse("2026-08-20T18:00:00Z");
         Instant updatedAt = Instant.parse("2026-08-14T18:00:00Z");
         ProviderSubscriptionSnapshot snapshot = new ProviderSubscriptionSnapshot(
-                "sub_1", "User@Example.com", "cus_1", "prod_1", "111", "active",
-                Instant.parse("2030-01-01T00:00:00Z"), null, updatedAt
+                "sub_1", "User@Example.com", "cus_1", "prod_1", "111", "on_trial",
+                trialEndsAt, Instant.parse("2030-01-01T00:00:00Z"), null, updatedAt
         );
         when(subscriptionRepository.findByExternalSubscriptionIdForUpdate("sub_1")).thenReturn(Optional.empty());
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
@@ -57,25 +58,32 @@ class SubscriptionReconciliationServiceTests {
         assertEquals(user, saved.getUser());
         assertEquals("sub_1", saved.getExternalSubscriptionId());
         assertEquals("MONTHLY", saved.getPlan());
-        assertEquals(SubscriptionStatus.ACTIVE, saved.getStatus());
+        assertEquals(SubscriptionStatus.ON_TRIAL, saved.getStatus());
+        assertEquals(trialEndsAt, saved.getTrialEndsAt());
         assertEquals(updatedAt, saved.getLastProviderEventAt());
         verify(planService).synchronizeUserPlan(user);
     }
 
     @Test
-    void doesNotApplyOlderProviderSnapshot() {
+    void doesNotApplyOlderOrEqualProviderSnapshot() {
         Instant current = Instant.parse("2026-08-14T18:00:00Z");
         SubscriptionEntity existing = new SubscriptionEntity();
         existing.setLastProviderEventAt(current);
         when(subscriptionRepository.findByExternalSubscriptionIdForUpdate("sub_1"))
                 .thenReturn(Optional.of(existing));
 
-        ProviderSubscriptionSnapshot snapshot = new ProviderSubscriptionSnapshot(
+        ProviderSubscriptionSnapshot older = new ProviderSubscriptionSnapshot(
                 "sub_1", "user@example.com", "cus_1", "prod_1", "111", "expired",
-                null, null, current.minusSeconds(1)
+                null, null, null, current.minusSeconds(1)
         );
+        assertEquals(SubscriptionReconciliationService.Result.STALE, service().reconcile(older));
 
-        assertEquals(SubscriptionReconciliationService.Result.STALE, service().reconcile(snapshot));
+        ProviderSubscriptionSnapshot equal = new ProviderSubscriptionSnapshot(
+                "sub_1", "user@example.com", "cus_1", "prod_1", "111", "expired",
+                null, null, null, current
+        );
+        assertEquals(SubscriptionReconciliationService.Result.STALE, service().reconcile(equal));
+
         verify(subscriptionRepository, never()).save(existing);
         verify(planService, never()).synchronizeUserPlan(org.mockito.ArgumentMatchers.any());
     }
@@ -88,7 +96,7 @@ class SubscriptionReconciliationServiceTests {
 
         ProviderSubscriptionSnapshot snapshot = new ProviderSubscriptionSnapshot(
                 "sub_2", "unknown@example.com", "cus_2", "prod_2", "111", "active",
-                null, null, updatedAt
+                null, null, null, updatedAt
         );
 
         assertEquals(SubscriptionReconciliationService.Result.UNMATCHED_USER, service().reconcile(snapshot));

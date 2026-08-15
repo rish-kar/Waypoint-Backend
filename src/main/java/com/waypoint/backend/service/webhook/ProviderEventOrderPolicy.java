@@ -4,7 +4,9 @@ import java.time.Instant;
 
 final class ProviderEventOrderPolicy {
     boolean shouldApply(Instant lastProviderEventAt, Instant incomingProviderEventAt) {
-        return incomingProviderEventAt != null
-                && (lastProviderEventAt == null || !incomingProviderEventAt.isBefore(lastProviderEventAt));
+        if (incomingProviderEventAt == null) {
+            return lastProviderEventAt == null;
+        }
+        return lastProviderEventAt == null || incomingProviderEventAt.isAfter(lastProviderEventAt);
     }
 }

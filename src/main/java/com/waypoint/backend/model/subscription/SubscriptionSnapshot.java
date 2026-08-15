@@ -9,9 +9,32 @@ public record SubscriptionSnapshot(
         SubscriptionStatus status,
         boolean premium,
         String externalSubscriptionId,
+        Instant trialEndsAt,
         Instant renewsAt,
         Instant endsAt,
         Instant validUntil,
         Instant checkedAt
 ) {
+    public SubscriptionSnapshot(
+            PlanCode planCode,
+            SubscriptionStatus status,
+            boolean premium,
+            String externalSubscriptionId,
+            Instant renewsAt,
+            Instant endsAt,
+            Instant validUntil,
+            Instant checkedAt
+    ) {
+        this(
+                planCode,
+                status,
+                premium,
+                externalSubscriptionId,
+                null,
+                renewsAt,
+                endsAt,
+                validUntil,
+                checkedAt
+        );
+    }
 }

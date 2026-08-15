@@ -12,13 +12,15 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
+import java.time.Duration;
 import java.time.Instant;
 
 @Service
 public class WebhookEventStore {
+    private static final Duration STALE_RECEIVED_AFTER = Duration.ofMinutes(5);
+
     private final WebhookEventRepository webhookEventRepository;
     private final TransactionTemplate transactionTemplate;
-    private final WebhookRetryPolicy retryPolicy = new WebhookRetryPolicy();
 
     public WebhookEventStore(WebhookEventRepository webhookEventRepository, PlatformTransactionManager transactionManager) {
         this.webhookEventRepository = webhookEventRepository;
@@ -48,6 +50,17 @@ public class WebhookEventStore {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markIgnored(String eventHash, String eventName, String externalObjectId) {
+        WebhookEventEntity event = webhookEventRepository.findByEventHash(eventHash).orElseThrow();
+        event.setEventName(normalizeEventName(eventName));
+        event.setExternalObjectId(externalObjectId);
+        event.setProcessingStatus(ProcessingStatus.IGNORED);
+        event.setErrorMessage(null);
+        event.setProcessedAt(Instant.now());
+        webhookEventRepository.save(event);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markFailed(String eventHash, String eventName, String externalObjectId, String errorMessage) {
         WebhookEventEntity event = webhookEventRepository.findByEventHash(eventHash).orElseThrow();
         event.setEventName(normalizeEventName(eventName));
@@ -66,20 +79,30 @@ public class WebhookEventStore {
         event.setEventName("UNKNOWN");
         event.setProcessingStatus(ProcessingStatus.RECEIVED);
         event.setReceivedAt(now);
-        event.setProcessingStartedAt(now);
+        event.setAttemptCount(1);
+        event.setLastAttemptAt(now);
         return new WebhookReception(webhookEventRepository.saveAndFlush(event), true, true);
     }
 
     private WebhookReception claimExisting(WebhookEventEntity event) {
-        Instant now = Instant.now();
-        if (!retryPolicy.shouldClaim(event.getProcessingStatus(), event.getProcessingStartedAt(), now)) {
-            return new WebhookReception(event, false, false);
+        if (event.getProcessingStatus() == ProcessingStatus.FAILED || isStaleReceived(event)) {
+            Instant now = Instant.now();
+            event.setProcessingStatus(ProcessingStatus.RECEIVED);
+            event.setErrorMessage(null);
+            event.setProcessedAt(null);
+            event.setAttemptCount(Math.max(event.getAttemptCount(), 1) + 1);
+            event.setLastAttemptAt(now);
+            return new WebhookReception(webhookEventRepository.save(event), false, true);
         }
-        event.setProcessingStatus(ProcessingStatus.RECEIVED);
-        event.setProcessingStartedAt(now);
-        event.setErrorMessage(null);
-        event.setProcessedAt(null);
-        return new WebhookReception(webhookEventRepository.save(event), false, true);
+        return new WebhookReception(event, false, false);
+    }
+
+    private boolean isStaleReceived(WebhookEventEntity event) {
+        if (event.getProcessingStatus() != ProcessingStatus.RECEIVED) {
+            return false;
+        }
+        Instant lastAttemptAt = event.getLastAttemptAt();
+        return lastAttemptAt == null || !lastAttemptAt.isAfter(Instant.now().minus(STALE_RECEIVED_AFTER));
     }
 
     private WebhookReception findExistingAfterRace(String eventHash) {

@@ -35,14 +35,21 @@ class SubscriptionCheckoutGuardTests {
     }
 
     @Test
-    void blocksCheckoutForActiveOrTrialSubscription() {
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId))
-                .thenReturn(List.of(subscription(SubscriptionStatus.ACTIVE, null)));
-        assertThat(subscriptionService.hasCheckoutBlockingSubscription(userId, now)).isTrue();
-
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId))
-                .thenReturn(List.of(subscription(SubscriptionStatus.ON_TRIAL, null)));
-        assertThat(subscriptionService.hasCheckoutBlockingSubscription(userId, now)).isTrue();
+    void blocksCheckoutForLiveOrRecoveringSubscriptions() {
+        for (SubscriptionStatus status : List.of(
+                SubscriptionStatus.ACTIVE,
+                SubscriptionStatus.ON_TRIAL,
+                SubscriptionStatus.PAUSED,
+                SubscriptionStatus.PAST_DUE,
+                SubscriptionStatus.UNPAID,
+                SubscriptionStatus.UNKNOWN
+        )) {
+            when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId))
+                    .thenReturn(List.of(subscription(status, null)));
+            assertThat(subscriptionService.hasCheckoutBlockingSubscription(userId, now))
+                    .as("status %s", status)
+                    .isTrue();
+        }
     }
 
     @Test
@@ -58,18 +65,11 @@ class SubscriptionCheckoutGuardTests {
         when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId))
                 .thenReturn(List.of(
                         subscription(SubscriptionStatus.CANCELLED, now.minusSeconds(1)),
-                        subscription(SubscriptionStatus.EXPIRED, null)
+                        subscription(SubscriptionStatus.EXPIRED, null),
+                        subscription(SubscriptionStatus.REFUNDED, null)
                 ));
 
         assertThat(subscriptionService.hasCheckoutBlockingSubscription(userId, now)).isFalse();
-    }
-
-    @Test
-    void blocksUnknownProviderStateToAvoidAccidentalDoubleBilling() {
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId))
-                .thenReturn(List.of(subscription(SubscriptionStatus.UNKNOWN, null)));
-
-        assertThat(subscriptionService.hasCheckoutBlockingSubscription(userId, now)).isTrue();
     }
 
     private SubscriptionEntity subscription(SubscriptionStatus status, Instant endsAt) {

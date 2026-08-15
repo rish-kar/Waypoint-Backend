@@ -1,0 +1,44 @@
+$kind: http-request
+description: Issues a full Test Mode refund for lemonSqueezyInvoiceId. Run 11 - List Subscription Invoices first.
+url: "https://api.lemonsqueezy.com/v1/subscription-invoices/{{lemonSqueezyInvoiceId}}/refund"
+method: POST
+headers:
+  Authorization: Bearer {{lemonSqueezyApiKey}}
+  Accept: application/vnd.api+json
+  Content-Type: application/vnd.api+json
+body:
+  type: json
+  content: |-
+    {
+      "data": {
+        "type": "subscription-invoices",
+        "id": "{{lemonSqueezyInvoiceId}}",
+        "attributes": {}
+      }
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('lemonSqueezyApiKey')) {
+        throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment.');
+      }
+      if (!pm.environment.get('lemonSqueezyInvoiceId')) {
+        throw new Error('Run 11 - List Subscription Invoices first.');
+      }
+      if (pm.environment.get('lemonSqueezyNoTrialPaidReady') !== 'true') {
+        throw new Error('This test requires the clean paid no-trial subscription created in this folder.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Refund request succeeded', () => pm.response.to.have.status(200));
+      const attributes = pm.response.json().data.attributes;
+      pm.test('Invoice is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
+      pm.test('Invoice is fully refunded', () => {
+        pm.expect(attributes.refunded).to.eql(true);
+        pm.expect(attributes.refunded_at).to.be.a('string').and.not.empty;
+        pm.expect(Number(attributes.refunded_amount)).to.eql(Number(attributes.total));
+        pm.expect(Number(attributes.refunded_amount)).to.be.above(0);
+      });
+    language: text/javascript
+order: 12000

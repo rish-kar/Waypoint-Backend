@@ -104,7 +104,7 @@ class BillingServiceTests {
     @Test
     void exposesExactMonthlyPlanCodeForActiveSubscription() {
         UserEntity user = user();
-        when(subscriptionService.current(user.getId())).thenReturn(snapshot(
+        when(subscriptionService.currentBilling(user.getId())).thenReturn(snapshot(
                 PlanCode.PREMIUM_MONTHLY,
                 SubscriptionStatus.ACTIVE,
                 true,
@@ -117,29 +117,33 @@ class BillingServiceTests {
         assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_MONTHLY);
         assertThat(result.status()).isEqualTo("ACTIVE");
         assertThat(result.externalSubscriptionId()).isEqualTo("sub_123");
+        assertThat(result.trialEndsAt()).isNull();
     }
 
     @Test
-    void preservesPremiumSpecialFromEffectiveSubscriptionModel() {
+    void exposesOnTrialBillingSubscriptionAndLemonSqueezyTrialEndDate() {
         UserEntity user = user();
-        when(subscriptionService.current(user.getId())).thenReturn(snapshot(
-                PlanCode.PREMIUM_SPECIAL,
-                SubscriptionStatus.PREMIUM_SPECIAL,
+        SubscriptionSnapshot snapshot = snapshot(
+                PlanCode.PREMIUM_MONTHLY,
+                SubscriptionStatus.ON_TRIAL,
                 true,
-                null
-        ));
+                "sub_trial"
+        );
+        when(subscriptionService.currentBilling(user.getId())).thenReturn(snapshot);
 
         BillingStatusResponse result = billingService.billingStatus(user.getId());
 
         assertThat(result.plan()).isEqualTo("PREMIUM");
-        assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_SPECIAL);
-        assertThat(result.status()).isEqualTo("PREMIUM_SPECIAL");
+        assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_MONTHLY);
+        assertThat(result.status()).isEqualTo("ON_TRIAL");
+        assertThat(result.externalSubscriptionId()).isEqualTo("sub_trial");
+        assertThat(result.trialEndsAt()).isEqualTo(snapshot.trialEndsAt());
     }
 
     @Test
-    void returnsFreePlanCodeWithoutPremiumAccess() {
+    void returnsFreePlanCodeWithoutPaidPremiumAccess() {
         UserEntity user = user();
-        when(subscriptionService.current(user.getId())).thenReturn(snapshot(
+        when(subscriptionService.currentBilling(user.getId())).thenReturn(snapshot(
                 PlanCode.FREE,
                 SubscriptionStatus.INACTIVE,
                 false,
@@ -180,14 +184,18 @@ class BillingServiceTests {
             String externalSubscriptionId
     ) {
         Instant now = Instant.now();
+        Instant trialEndsAt = status == SubscriptionStatus.ON_TRIAL ? now.plusSeconds(604800) : null;
+        Instant renewsAt = premium ? now.plusSeconds(3600) : null;
+        Instant validUntil = trialEndsAt != null ? trialEndsAt : renewsAt;
         return new SubscriptionSnapshot(
                 planCode,
                 status,
                 premium,
                 externalSubscriptionId,
-                premium ? now.plusSeconds(3600) : null,
+                trialEndsAt,
+                renewsAt,
                 null,
-                premium ? now.plusSeconds(3600) : null,
+                validUntil,
                 now
         );
     }

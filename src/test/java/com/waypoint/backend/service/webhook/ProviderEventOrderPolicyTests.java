@@ -4,31 +4,35 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class ProviderEventOrderPolicyTests {
     private final ProviderEventOrderPolicy policy = new ProviderEventOrderPolicy();
-    private final Instant current = Instant.parse("2026-08-14T18:00:00Z");
+    private final Instant now = Instant.parse("2026-08-15T10:00:00Z");
 
     @Test
-    void acceptsFirstEvent() {
-        assertTrue(policy.shouldApply(null, current));
+    void acceptsFirstTimestampedEvent() {
+        assertThat(policy.shouldApply(null, now)).isTrue();
     }
 
     @Test
-    void acceptsEqualOrNewerEvents() {
-        assertTrue(policy.shouldApply(current, current));
-        assertTrue(policy.shouldApply(current, current.plusSeconds(1)));
+    void acceptsLegacyEventBeforeAnyTimestampedStateExists() {
+        assertThat(policy.shouldApply(null, null)).isTrue();
     }
 
     @Test
-    void rejectsOlderEvents() {
-        assertFalse(policy.shouldApply(current, current.minusSeconds(1)));
+    void acceptsNewerEvent() {
+        assertThat(policy.shouldApply(now, now.plusSeconds(1))).isTrue();
     }
 
     @Test
-    void rejectsMissingEventTimestamp() {
-        assertFalse(policy.shouldApply(current, null));
+    void rejectsOlderOrEqualEvent() {
+        assertThat(policy.shouldApply(now, now.minusSeconds(1))).isFalse();
+        assertThat(policy.shouldApply(now, now)).isFalse();
+    }
+
+    @Test
+    void rejectsMissingTimestampAfterTimestampedStateExists() {
+        assertThat(policy.shouldApply(now, null)).isFalse();
     }
 }
