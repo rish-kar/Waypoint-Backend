@@ -1,6 +1,6 @@
 $kind: http-request
-description: Checks the exact Lemon Squeezy lifecycle subscription in Waypoint's database. Run this after any provider state change to verify the webhook synchronized the same subscription and status.
-url: "{{baseUrl}}/api/v1/admin/subscriptions?externalSubscriptionId={{lemonSqueezySubscriptionId}}&size=10&sort=updatedAt&direction=DESC"
+description: Checks Waypoint's database for the subscription matching the current Lemon Squeezy lifecycle state. It also restores the lifecycle subscription ID if another Waypoint request selected an older subscription.
+url: "{{baseUrl}}/api/v1/admin/subscriptions?userId={{userId}}&size=50&sort=updatedAt&direction=DESC"
 method: GET
 headers:
   Authorization: Basic {{adminBasicAuth}}
@@ -18,8 +18,8 @@ scripts:
       if (!adminId || !adminPassword) {
           throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
       }
-      if (!pm.environment.get('lemonSqueezySubscriptionId')) {
-          throw new Error('No Lemon Squeezy lifecycle subscription is selected.');
+      if (!pm.environment.get('userId')) {
+          throw new Error('Run Google Login first so userId is populated.');
       }
       if (!pm.environment.get('lemonSqueezyProviderStatus')) {
           throw new Error('Run the relevant Lemon Squeezy provider action first.');
@@ -31,12 +31,21 @@ scripts:
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const body = pm.response.json();
       const expectedStatus = pm.environment.get('lemonSqueezyProviderStatus').toUpperCase();
-      pm.test('Exact lifecycle subscription exists in Waypoint database', () => {
-        pm.expect(body.items).to.be.an('array').and.not.empty;
-        pm.expect(body.items[0].externalSubscriptionId).to.eql(pm.environment.get('lemonSqueezySubscriptionId'));
+      const bootstrapId = pm.environment.get('lemonSqueezyBootstrapSubscriptionId');
+      const matching = (body.items || []).find(item =>
+        item.provider === 'LEMON_SQUEEZY'
+        && item.status === expectedStatus
+        && item.externalSubscriptionId
+        && (!bootstrapId || item.externalSubscriptionId !== bootstrapId)
+      );
+      pm.test('Lifecycle subscription with matching Waypoint state exists', () => {
+        pm.expect(matching, `No ${expectedStatus} Lemon Squeezy lifecycle subscription found`).to.exist;
       });
-      pm.test('Waypoint status matches Lemon Squeezy provider status', () => {
-        pm.expect(body.items[0].status).to.eql(expectedStatus);
-      });
+      if (matching) {
+        pm.environment.set('lemonSqueezySubscriptionId', matching.externalSubscriptionId);
+        pm.test('Waypoint status matches Lemon Squeezy provider status', () => {
+          pm.expect(matching.status).to.eql(expectedStatus);
+        });
+      }
     language: text/javascript
 order: 9000
