@@ -1,0 +1,60 @@
+$kind: http-request
+description: Sends a correctly signed subscription webhook with a deliberately wrong store ID. Waypoint must reject processing and persist the event as FAILED for retry/audit visibility.
+url: "{{baseUrl}}/api/v1/webhooks/lemonsqueezy"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Signature: "{{webhookSignature}}"
+body:
+  type: json
+  content: "{{webhookBody}}"
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const secret = pm.environment.get('webhookSecret');
+      const userId = pm.environment.get('userId');
+      const variantId = pm.environment.get('monthlyVariantId');
+      const configuredStoreId = String(pm.environment.get('lemonSqueezyStoreId') || 'waypoint-store');
+      if (!secret) {
+          throw new Error('Set webhookSecret to the LEMON_SQUEEZY_WEBHOOK_SECRET used by the backend.');
+      }
+      if (!userId || !variantId) {
+          throw new Error('Run Google Login and set monthlyVariantId before this test.');
+      }
+      const payload = JSON.stringify({
+        meta: {
+          event_name: 'subscription_updated',
+          custom_data: { waypoint_user_id: userId, waypoint_plan: 'MONTHLY' }
+        },
+        data: {
+          type: 'subscriptions',
+          id: 'postman-wrong-store-subscription-001',
+          attributes: {
+            store_id: `${configuredStoreId}-wrong`,
+            customer_id: 'postman-wrong-store-customer',
+            product_id: 'postman-product',
+            variant_id: variantId,
+            status: 'active',
+            renews_at: '2030-01-01T00:00:00Z',
+            ends_at: null
+          }
+        }
+      });
+      pm.variables.set('webhookBody', payload);
+      pm.variables.set('webhookSignature', CryptoJS.HmacSHA256(payload, secret).toString(CryptoJS.enc.Hex));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 400', () => pm.response.to.have.status(400));
+      const body = pm.response.json();
+      pm.test('Unexpected store is rejected', () => {
+        pm.expect(body.code).to.eql('INVALID_REQUEST');
+      });
+    language: text/javascript
+order: 5400
