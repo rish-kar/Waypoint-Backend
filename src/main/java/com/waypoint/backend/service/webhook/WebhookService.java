@@ -12,6 +12,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -53,12 +54,15 @@ public class WebhookService {
             externalObjectId = text(payload.path("data"), "id");
             webhookSubscriptionProcessor.process(payload, eventName);
             webhookEventStore.markProcessed(eventHash, eventName, externalObjectId);
+        } catch (InvalidRequestException exception) {
+            webhookEventStore.markFailed(eventHash, eventName, externalObjectId, safeMessage(exception));
+            throw exception;
+        } catch (JacksonException exception) {
+            webhookEventStore.markFailed(eventHash, eventName, externalObjectId, safeMessage(exception));
+            throw new InvalidRequestException("Unable to parse webhook payload");
         } catch (Exception exception) {
             webhookEventStore.markFailed(eventHash, eventName, externalObjectId, safeMessage(exception));
-            if (exception instanceof InvalidRequestException invalidRequestException) {
-                throw invalidRequestException;
-            }
-            throw new InvalidRequestException("Unable to process webhook payload");
+            throw new IllegalStateException("Unable to process webhook payload", exception);
         }
     }
 
