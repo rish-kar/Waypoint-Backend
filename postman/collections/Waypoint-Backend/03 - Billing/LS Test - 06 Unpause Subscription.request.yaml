@@ -1,5 +1,5 @@
 $kind: http-request
-description: Step 5 lifecycle test. Removes a Lemon Squeezy pause by setting pause=null.
+description: LS Test 06. Unpauses the selected PAUSED test subscription by setting pause=null.
 url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
 method: PATCH
 headers:
@@ -27,15 +27,20 @@ scripts:
       if (!pm.environment.get('lemonSqueezySubscriptionId')) {
         throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
       }
+      const providerStatus = pm.environment.get('lemonSqueezyProviderStatus');
+      if (providerStatus !== 'paused') {
+        throw new Error(`LS Test 06 requires provider status paused, but current stored status is ${providerStatus || 'empty'}. Run LS Test 05 first.`);
+      }
     language: text/javascript
   - type: afterResponse
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const attributes = pm.response.json().data.attributes;
-      pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
-      pm.test('Provider clears pause', () => {
+      pm.test('Subscription is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
+      pm.test('Provider clears pause and restores ACTIVE', () => {
         pm.expect(attributes.pause).to.eql(null);
         pm.expect(attributes.status).to.eql('active');
       });
+      pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
     language: text/javascript
 order: 4500

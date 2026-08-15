@@ -1,5 +1,5 @@
 $kind: http-request
-description: Direct Lemon Squeezy Test Mode helper. Run Billing Status first so lemonSqueezySubscriptionId is populated. This request also stores the hosted payment-method and customer-portal URLs.
+description: Lemon Squeezy Test Mode helper. Run Billing Status first so lemonSqueezySubscriptionId is populated. Stores the provider lifecycle status and customer URLs used by later tests.
 url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
 method: GET
 headers:
@@ -25,6 +25,10 @@ scripts:
       const attributes = body.data.attributes;
       pm.test('Subscription ID matches selected billing subscription', () => {
         pm.expect(body.data.id).to.eql(pm.environment.get('lemonSqueezySubscriptionId'));
+      });
+      pm.test('Subscription is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
+      pm.test('Provider returned a known subscription status', () => {
+        pm.expect(attributes.status).to.be.oneOf(['on_trial', 'active', 'paused', 'past_due', 'unpaid', 'cancelled', 'expired']);
       });
       pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
       pm.environment.set('lemonSqueezyPaymentMethodUrl', attributes.urls?.update_payment_method || '');

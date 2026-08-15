@@ -1,5 +1,5 @@
 $kind: http-request
-description: Step 2 lifecycle test. Resets Lemon Squeezy billing anchor to today, which removes an active trial, and invoices immediately. Use only in Test Mode.
+description: LS Test 02. Ends an ON_TRIAL test subscription by resetting the billing anchor to today and invoices immediately. Run LS Test 01 first. Do not rerun once the subscription is ACTIVE.
 url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
 method: PATCH
 headers:
@@ -24,11 +24,15 @@ scripts:
     code: |-
       const apiKey = pm.environment.get('lemonSqueezyApiKey');
       const subscriptionId = pm.environment.get('lemonSqueezySubscriptionId');
+      const providerStatus = pm.environment.get('lemonSqueezyProviderStatus');
       if (!apiKey) {
         throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment. Never commit the real key.');
       }
       if (!subscriptionId) {
         throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
+      }
+      if (providerStatus !== 'on_trial') {
+        throw new Error(`LS Test 02 requires provider status on_trial, but current stored status is ${providerStatus || 'empty'}. Run LS Test 01 first and do not rerun this test after activation.`);
       }
     language: text/javascript
   - type: afterResponse
@@ -36,16 +40,15 @@ scripts:
       pm.test('Lemon Squeezy accepted trial-end update', () => pm.response.to.have.status(200));
       const body = pm.response.json();
       const attributes = body.data.attributes;
+      pm.test('Subscription is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
+      pm.test('Trial converted to ACTIVE', () => pm.expect(attributes.status).to.eql('active'));
+      pm.test('Trial end date is cleared', () => pm.expect(attributes.trial_ends_at).to.eql(null));
+      pm.test('Subscription is not cancelled or paused', () => {
+        pm.expect(attributes.cancelled).to.eql(false);
+        pm.expect(attributes.pause).to.eql(null);
+      });
       pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
       pm.environment.set('lemonSqueezyPaymentMethodUrl', attributes.urls?.update_payment_method || '');
       pm.environment.set('lemonSqueezyCustomerPortalUrl', attributes.urls?.customer_portal || '');
-      pm.test('Trial is no longer active when payment succeeds', () => {
-        if (attributes.status === 'active') {
-          pm.expect(attributes.trial_ends_at).to.eql(null);
-        }
-      });
-      pm.test('Provider returned a lifecycle status', () => {
-        pm.expect(attributes.status).to.be.oneOf(['active', 'past_due', 'unpaid', 'cancelled', 'expired']);
-      });
     language: text/javascript
 order: 4100

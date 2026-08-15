@@ -1,5 +1,5 @@
 $kind: http-request
-description: Step 5 lifecycle test. Pauses payment collection in void mode for the selected active subscription.
+description: LS Test 05. Pauses payment collection in void mode for the selected ACTIVE test subscription.
 url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
 method: PATCH
 headers:
@@ -29,16 +29,21 @@ scripts:
       if (!pm.environment.get('lemonSqueezySubscriptionId')) {
         throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
       }
+      const providerStatus = pm.environment.get('lemonSqueezyProviderStatus');
+      if (providerStatus !== 'active') {
+        throw new Error(`LS Test 05 requires provider status active, but current stored status is ${providerStatus || 'empty'}. Run LS Test 04 first.`);
+      }
     language: text/javascript
   - type: afterResponse
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const attributes = pm.response.json().data.attributes;
-      pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
-      pm.test('Provider marks subscription paused', () => {
+      pm.test('Subscription is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
+      pm.test('Provider marks subscription paused in void mode', () => {
         pm.expect(attributes.status).to.eql('paused');
         pm.expect(attributes.pause).to.be.an('object');
         pm.expect(attributes.pause.mode).to.eql('void');
       });
+      pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
     language: text/javascript
 order: 4400

@@ -1,5 +1,5 @@
 $kind: http-request
-description: Step 6 helper. Lists invoices for the selected Lemon Squeezy subscription and stores the newest paid, non-refunded invoice ID in lemonSqueezyInvoiceId.
+description: LS Test 07. Lists invoices for the selected test subscription and stores the newest paid, non-refunded, positive-value invoice ID for refund testing.
 url: "https://api.lemonsqueezy.com/v1/subscription-invoices?filter[subscription_id]={{lemonSqueezySubscriptionId}}"
 method: GET
 headers:
@@ -21,14 +21,22 @@ scripts:
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const body = pm.response.json();
       pm.test('Invoice list returned', () => pm.expect(body.data).to.be.an('array'));
-      const paidInvoice = body.data.find(invoice => invoice.attributes?.status === 'paid' && invoice.attributes?.refunded !== true);
-      if (paidInvoice) {
-        pm.environment.set('lemonSqueezyInvoiceId', paidInvoice.id);
+      const subscriptionId = pm.environment.get('lemonSqueezySubscriptionId');
+      const refundableInvoice = body.data.find(invoice => {
+        const attributes = invoice.attributes || {};
+        return String(attributes.subscription_id) === String(subscriptionId)
+          && attributes.test_mode === true
+          && attributes.status === 'paid'
+          && attributes.refunded !== true
+          && Number(attributes.total) > 0;
+      });
+      if (refundableInvoice) {
+        pm.environment.set('lemonSqueezyInvoiceId', refundableInvoice.id);
       } else {
         pm.environment.unset('lemonSqueezyInvoiceId');
       }
-      pm.test('A paid non-refunded invoice is available for refund testing', () => {
-        pm.expect(paidInvoice, 'No paid non-refunded invoice found yet').to.exist;
+      pm.test('A positive-value paid non-refunded test invoice is available', () => {
+        pm.expect(refundableInvoice, 'No positive-value paid non-refunded test invoice found').to.exist;
       });
     language: text/javascript
 order: 4600
