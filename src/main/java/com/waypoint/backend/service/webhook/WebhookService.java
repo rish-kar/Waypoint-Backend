@@ -16,6 +16,7 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Set;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -101,20 +102,28 @@ public class WebhookService {
                     .addKeyValue("event_name", eventName)
                     .addKeyValue("external_object_id", externalObjectId)
                     .log("Webhook processed");
+        } catch (InvalidRequestException exception) {
+            markFailed(eventHash, eventName, externalObjectId, exception);
+            throw exception;
+        } catch (JacksonException exception) {
+            markFailed(eventHash, eventName, externalObjectId, exception);
+            throw new InvalidRequestException("Unable to parse webhook payload");
         } catch (Exception exception) {
-            webhookEventStore.markFailed(eventHash, eventName, externalObjectId, safeMessage(exception));
-            LOGGER.atWarn()
-                    .addKeyValue("event", "webhook_processing_failed")
-                    .addKeyValue("provider", "lemon_squeezy")
-                    .addKeyValue("event_name", eventName)
-                    .addKeyValue("external_object_id", externalObjectId)
-                    .addKeyValue("reason", exception.getClass().getSimpleName())
-                    .log("Webhook processing failed");
-            if (exception instanceof InvalidRequestException invalidRequestException) {
-                throw invalidRequestException;
-            }
-            throw new InvalidRequestException("Unable to process webhook payload");
+            markFailed(eventHash, eventName, externalObjectId, exception);
+            throw new IllegalStateException("Unable to process webhook payload", exception);
         }
+    }
+
+    private void markFailed(String eventHash, String eventName, String externalObjectId, Exception exception) {
+        webhookEventStore.markFailed(eventHash, eventName, externalObjectId, safeMessage(exception));
+        LOGGER.atWarn()
+                .setCause(exception)
+                .addKeyValue("event", "webhook_processing_failed")
+                .addKeyValue("provider", "lemon_squeezy")
+                .addKeyValue("event_name", eventName)
+                .addKeyValue("external_object_id", externalObjectId)
+                .addKeyValue("reason", exception.getClass().getSimpleName())
+                .log("Webhook processing failed");
     }
 
     private void verifySignature(byte[] rawBody, String signature) {
