@@ -25,7 +25,8 @@ scripts:
           pm.expect(body.trialEndsAt).to.be.a('string').and.not.empty;
         });
       }
-      if (body.externalSubscriptionId) {
+      const lifecycleLocked = pm.environment.get('lemonSqueezyNoTrialPaidReady') === 'true';
+      if (body.externalSubscriptionId && !lifecycleLocked) {
         pm.environment.set('lemonSqueezySubscriptionId', body.externalSubscriptionId);
       }
       if (body.planCode === 'PREMIUM_MONTHLY') {
