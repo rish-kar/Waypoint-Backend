@@ -1,0 +1,42 @@
+$kind: http-request
+description: Reads the selected Lemon Squeezy Test Mode subscription and stores provider state plus Store/Variant IDs used by the paid no-trial lifecycle setup.
+url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
+method: GET
+headers:
+  Authorization: Bearer {{lemonSqueezyApiKey}}
+  Accept: application/vnd.api+json
+  Content-Type: application/vnd.api+json
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('lemonSqueezyApiKey')) {
+        throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment.');
+      }
+      if (!pm.environment.get('lemonSqueezySubscriptionId')) {
+        throw new Error('Run 01 - Bootstrap Test Context first.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      const attributes = body.data.attributes;
+      pm.test('Subscription ID matches selected Lemon Squeezy test subscription', () => {
+        pm.expect(body.data.id).to.eql(pm.environment.get('lemonSqueezySubscriptionId'));
+      });
+      pm.test('Subscription is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
+      pm.test('Provider returned a known subscription status', () => {
+        pm.expect(attributes.status).to.be.oneOf(['on_trial', 'active', 'paused', 'past_due', 'unpaid', 'cancelled', 'expired']);
+      });
+      pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
+      pm.environment.set('lemonSqueezyStoreId', String(attributes.store_id || ''));
+      pm.environment.set('lemonSqueezyVariantId', String(attributes.variant_id || ''));
+      pm.environment.set('lemonSqueezyPaymentMethodUrl', attributes.urls?.update_payment_method || '');
+      pm.environment.set('lemonSqueezyCustomerPortalUrl', attributes.urls?.customer_portal || '');
+      const noTrialReady = attributes.status === 'active'
+        && attributes.trial_ends_at === null
+        && attributes.cancelled === false
+        && attributes.pause === null;
+      pm.environment.set('lemonSqueezyNoTrialPaidReady', String(noTrialReady));
+    language: text/javascript
+order: 2000

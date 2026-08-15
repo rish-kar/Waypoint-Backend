@@ -1,0 +1,41 @@
+$kind: http-request
+description: Cancels the locked ACTIVE paid no-trial Test Mode lifecycle subscription using Lemon Squeezy's dedicated DELETE endpoint.
+url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezyLifecycleSubscriptionId}}"
+method: DELETE
+headers:
+  Authorization: Bearer {{lemonSqueezyApiKey}}
+  Accept: application/vnd.api+json
+  Content-Type: application/vnd.api+json
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('lemonSqueezyApiKey')) {
+        throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment.');
+      }
+      if (!pm.environment.get('lemonSqueezyLifecycleSubscriptionId')) {
+        throw new Error('Run 04 - Capture New Paid Subscription first.');
+      }
+      if (pm.environment.get('lemonSqueezyProviderStatus') !== 'active') {
+        throw new Error('06 - Cancel Paid Subscription requires provider status active. Run 05 - Verify New Active Subscription first.');
+      }
+      if (pm.environment.get('lemonSqueezyNoTrialPaidReady') !== 'true') {
+        throw new Error('This test requires the clean paid no-trial subscription created in this folder.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      const attributes = body.data.attributes;
+      pm.test('Locked lifecycle subscription ID matches', () => pm.expect(body.data.id).to.eql(pm.environment.get('lemonSqueezyLifecycleSubscriptionId')));
+      pm.test('Subscription is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
+      pm.test('Paid no-trial state remains clean', () => pm.expect(attributes.trial_ends_at).to.eql(null));
+      pm.test('Provider marks subscription cancelled with a future grace-period end', () => {
+        pm.expect(attributes.cancelled).to.eql(true);
+        pm.expect(attributes.status).to.eql('cancelled');
+        pm.expect(attributes.ends_at).to.be.a('string').and.not.empty;
+        pm.expect(Date.parse(attributes.ends_at)).to.be.above(Date.now());
+      });
+      pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
+    language: text/javascript
+order: 6000

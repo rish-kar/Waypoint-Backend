@@ -52,11 +52,21 @@ public class SubscriptionService {
                     null,
                     null,
                     null,
+                    null,
                     specialGrant.getValidUntil(),
                     now
             );
         }
 
+        return currentBilling(userId, now);
+    }
+
+    @Transactional(readOnly = true)
+    public SubscriptionSnapshot currentBilling(UUID userId) {
+        return currentBilling(userId, Instant.now());
+    }
+
+    SubscriptionSnapshot currentBilling(UUID userId, Instant now) {
         List<SubscriptionEntity> subscriptions = subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId);
         if (subscriptions.isEmpty()) {
             return freeSnapshot(SubscriptionStatus.INACTIVE, null, now);
@@ -93,6 +103,7 @@ public class SubscriptionService {
                 decision.status(),
                 true,
                 subscription.getExternalSubscriptionId(),
+                subscription.getTrialEndsAt(),
                 subscription.getRenewsAt(),
                 subscription.getEndsAt(),
                 decision.validUntil(),
@@ -110,6 +121,7 @@ public class SubscriptionService {
                 status,
                 false,
                 subscription == null ? null : subscription.getExternalSubscriptionId(),
+                subscription == null ? null : subscription.getTrialEndsAt(),
                 subscription == null ? null : subscription.getRenewsAt(),
                 subscription == null ? null : subscription.getEndsAt(),
                 null,

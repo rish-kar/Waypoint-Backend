@@ -1,5 +1,6 @@
 package com.waypoint.backend.service.webhook;
 
+import com.waypoint.backend.config.billing.LemonSqueezyProperties;
 import com.waypoint.backend.model.subscription.SubscriptionEntity;
 import com.waypoint.backend.model.subscription.SubscriptionStatus;
 import com.waypoint.backend.model.user.UserEntity;
@@ -21,29 +22,35 @@ import java.util.UUID;
 
 @Service
 public class WebhookSubscriptionProcessor {
+    private static final String SUBSCRIPTION_INVOICE_REFUND_EVENT = "subscription_payment_refunded";
+
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
     private final SubscriptionAccessPolicy subscriptionAccessPolicy;
     private final PlanService planService;
+    private final LemonSqueezyProperties properties;
 
     public WebhookSubscriptionProcessor(
             SubscriptionRepository subscriptionRepository,
             UserRepository userRepository,
             SubscriptionAccessPolicy subscriptionAccessPolicy,
-            PlanService planService
+            PlanService planService,
+            LemonSqueezyProperties properties
     ) {
         this.subscriptionRepository = subscriptionRepository;
         this.userRepository = userRepository;
         this.subscriptionAccessPolicy = subscriptionAccessPolicy;
         this.planService = planService;
+        this.properties = properties;
     }
 
     @Transactional
     public void process(JsonNode payload, String eventName) {
         JsonNode data = payload.path("data");
         JsonNode attributes = data.path("attributes");
-        String externalSubscriptionId = requireSubscriptionId(data, attributes);
+        validatePayloadSource(data, attributes, eventName);
 
+        String externalSubscriptionId = requireSubscriptionId(data, attributes);
         Optional<SubscriptionEntity> existing = subscriptionRepository.findByExternalSubscriptionId(externalSubscriptionId);
         Optional<UUID> customUserId = optionalWaypointUserId(payload);
         UserEntity user = resolveUser(existing, customUserId);
@@ -54,6 +61,7 @@ public class WebhookSubscriptionProcessor {
         subscription.setExternalSubscriptionId(externalSubscriptionId);
         setIfPresent(subscription::setExternalCustomerId, firstText(attributes, "customer_id", relationshipId(data, "customer")));
         setIfPresent(subscription::setExternalProductId, firstText(attributes, "product_id", relationshipId(data, "product")));
+
         String variantId = firstText(attributes, "variant_id", relationshipId(data, "variant"));
         if (StringUtils.hasText(variantId)) {
             subscription.setExternalVariantId(variantId);
@@ -61,13 +69,19 @@ public class WebhookSubscriptionProcessor {
         } else if (!StringUtils.hasText(subscription.getPlan())) {
             subscription.setPlan("UNKNOWN");
         }
+
         subscription.setStatus(resolveStatus(eventName, attributes));
+
+        if (attributes.get("trial_ends_at") != null) {
+            subscription.setTrialEndsAt(parseInstant(text(attributes, "trial_ends_at")));
+        }
         if (attributes.get("renews_at") != null) {
             subscription.setRenewsAt(parseInstant(text(attributes, "renews_at")));
         }
         if (attributes.get("ends_at") != null) {
             subscription.setEndsAt(parseInstant(text(attributes, "ends_at")));
         }
+
         subscriptionRepository.save(subscription);
         planService.synchronizeUserPlan(user);
     }
@@ -82,6 +96,21 @@ public class WebhookSubscriptionProcessor {
             return id;
         }
         return data.path("type").asText("").contains("subscription") ? text(data, "id") : null;
+    }
+
+    private void validatePayloadSource(JsonNode data, JsonNode attributes, String eventName) {
+        String expectedType = SUBSCRIPTION_INVOICE_REFUND_EVENT.equalsIgnoreCase(eventName)
+                ? "subscription-invoices"
+                : "subscriptions";
+        String dataType = text(data, "type");
+        if (!expectedType.equals(dataType)) {
+            throw new InvalidRequestException("Webhook payload has an unexpected data type");
+        }
+
+        String storeId = text(attributes, "store_id");
+        if (StringUtils.hasText(storeId) && !properties.storeId().equals(storeId)) {
+            throw new InvalidRequestException("Webhook payload belongs to an unexpected Lemon Squeezy store");
+        }
     }
 
     private UserEntity resolveUser(Optional<SubscriptionEntity> existing, Optional<UUID> customUserId) {
@@ -118,10 +147,22 @@ public class WebhookSubscriptionProcessor {
     }
 
     private SubscriptionStatus resolveStatus(String eventName, JsonNode attributes) {
-        if ("subscription_payment_refunded".equalsIgnoreCase(eventName)) {
+        if (SUBSCRIPTION_INVOICE_REFUND_EVENT.equalsIgnoreCase(eventName)) {
             return SubscriptionStatus.REFUNDED;
         }
-        return SubscriptionStatus.fromExternal(text(attributes, "status"));
+
+        SubscriptionStatus status = SubscriptionStatus.fromExternal(text(attributes, "status"));
+        if (status != SubscriptionStatus.UNKNOWN) {
+            return status;
+        }
+
+        return switch (eventName == null ? "" : eventName.toLowerCase()) {
+            case "subscription_cancelled" -> SubscriptionStatus.CANCELLED;
+            case "subscription_resumed", "subscription_unpaused" -> SubscriptionStatus.ACTIVE;
+            case "subscription_expired" -> SubscriptionStatus.EXPIRED;
+            case "subscription_paused" -> SubscriptionStatus.PAUSED;
+            default -> SubscriptionStatus.UNKNOWN;
+        };
     }
 
     private void setIfPresent(java.util.function.Consumer<String> setter, String value) {

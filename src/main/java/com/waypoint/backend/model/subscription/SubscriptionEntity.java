@@ -46,6 +46,8 @@ public class SubscriptionEntity {
     @Column(nullable = false, length = 50)
     private SubscriptionStatus status;
 
+    private Instant trialEndsAt;
+
     private Instant renewsAt;
 
     private Instant endsAt;
@@ -145,6 +147,14 @@ public class SubscriptionEntity {
 
     public void setStatus(SubscriptionStatus status) {
         this.status = status;
+    }
+
+    public Instant getTrialEndsAt() {
+        return trialEndsAt;
+    }
+
+    public void setTrialEndsAt(Instant trialEndsAt) {
+        this.trialEndsAt = trialEndsAt;
     }
 
     public Instant getRenewsAt() {
