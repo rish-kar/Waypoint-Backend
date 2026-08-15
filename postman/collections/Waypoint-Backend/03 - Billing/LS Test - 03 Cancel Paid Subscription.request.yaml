@@ -1,23 +1,11 @@
 $kind: http-request
-description: Step 4 lifecycle test. Cancels the selected paid Lemon Squeezy subscription. For an active paid subscription Lemon Squeezy should return cancelled=true and a future ends_at.
+description: Step 4 lifecycle test. Cancels the selected paid Lemon Squeezy subscription using the dedicated cancellation endpoint. For an active paid subscription Lemon Squeezy should return cancelled=true and a future ends_at.
 url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
-method: PATCH
+method: DELETE
 headers:
   Authorization: Bearer {{lemonSqueezyApiKey}}
   Accept: application/vnd.api+json
   Content-Type: application/vnd.api+json
-body:
-  type: json
-  content: |-
-    {
-      "data": {
-        "type": "subscriptions",
-        "id": "{{lemonSqueezySubscriptionId}}",
-        "attributes": {
-          "cancelled": true
-        }
-      }
-    }
 scripts:
   - type: beforeRequest
     code: |-
