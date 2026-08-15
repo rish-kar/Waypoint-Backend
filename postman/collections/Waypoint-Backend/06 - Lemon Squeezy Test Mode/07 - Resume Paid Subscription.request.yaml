@@ -1,5 +1,5 @@
 $kind: http-request
-description: LS Test 04. Resumes the CANCELLED paid no-trial test subscription during its grace period by setting cancelled=false.
+description: Resumes the CANCELLED paid no-trial Test Mode subscription during its grace period by setting cancelled=false.
 url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
 method: PATCH
 headers:
@@ -25,13 +25,13 @@ scripts:
         throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment.');
       }
       if (!pm.environment.get('lemonSqueezySubscriptionId')) {
-        throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
+        throw new Error('Run 04 - Capture New Paid Subscription first.');
       }
       if (pm.environment.get('lemonSqueezyProviderStatus') !== 'cancelled') {
-        throw new Error('LS Test 04 requires provider status cancelled. Run LS Test 03 first.');
+        throw new Error('07 - Resume Paid Subscription requires provider status cancelled. Run 06 - Cancel Paid Subscription first.');
       }
       if (pm.environment.get('lemonSqueezyNoTrialPaidReady') !== 'true') {
-        throw new Error('LS Test 04 requires the clean paid no-trial subscription created through LS Test 02.');
+        throw new Error('This test requires the clean paid no-trial subscription created in this folder.');
       }
     language: text/javascript
   - type: afterResponse
@@ -47,4 +47,4 @@ scripts:
       });
       pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
     language: text/javascript
-order: 4300
+order: 7000

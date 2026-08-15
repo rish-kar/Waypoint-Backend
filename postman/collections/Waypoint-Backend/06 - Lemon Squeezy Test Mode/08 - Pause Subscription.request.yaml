@@ -1,5 +1,5 @@
 $kind: http-request
-description: LS Test 06. Unpauses the PAUSED paid no-trial test subscription by setting pause=null.
+description: Pauses payment collection in void mode for the ACTIVE paid no-trial Test Mode subscription.
 url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
 method: PATCH
 headers:
@@ -14,7 +14,9 @@ body:
         "type": "subscriptions",
         "id": "{{lemonSqueezySubscriptionId}}",
         "attributes": {
-          "pause": null
+          "pause": {
+            "mode": "void"
+          }
         }
       }
     }
@@ -25,13 +27,13 @@ scripts:
         throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment.');
       }
       if (!pm.environment.get('lemonSqueezySubscriptionId')) {
-        throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
+        throw new Error('Run 04 - Capture New Paid Subscription first.');
       }
-      if (pm.environment.get('lemonSqueezyProviderStatus') !== 'paused') {
-        throw new Error('LS Test 06 requires provider status paused. Run LS Test 05 first.');
+      if (pm.environment.get('lemonSqueezyProviderStatus') !== 'active') {
+        throw new Error('08 - Pause Subscription requires provider status active. Run 07 - Resume Paid Subscription first.');
       }
       if (pm.environment.get('lemonSqueezyNoTrialPaidReady') !== 'true') {
-        throw new Error('LS Test 06 requires the clean paid no-trial subscription created through LS Test 02.');
+        throw new Error('This test requires the clean paid no-trial subscription created in this folder.');
       }
     language: text/javascript
   - type: afterResponse
@@ -39,11 +41,12 @@ scripts:
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const attributes = pm.response.json().data.attributes;
       pm.test('Subscription is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
-      pm.test('Provider clears pause and restores ACTIVE', () => {
-        pm.expect(attributes.pause).to.eql(null);
-        pm.expect(attributes.status).to.eql('active');
+      pm.test('Provider marks subscription paused in void mode', () => {
+        pm.expect(attributes.status).to.eql('paused');
+        pm.expect(attributes.pause).to.be.an('object');
+        pm.expect(attributes.pause.mode).to.eql('void');
         pm.expect(attributes.trial_ends_at).to.eql(null);
       });
       pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
     language: text/javascript
-order: 4500
+order: 8000

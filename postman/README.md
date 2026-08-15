@@ -7,6 +7,15 @@
 - `collections/Waypoint-Backend/` — Git-synced Postman source
 - `environments/Waypoint Local.environment.yaml` — Git-synced environment source
 
+## Collection layout
+
+- `03 - Billing` contains only Waypoint backend billing endpoints.
+- `04 - Webhooks` contains Waypoint webhook endpoint tests.
+- `05 - Admin` contains only Waypoint admin API operations.
+- `06 - Lemon Squeezy Test Mode` contains the direct Lemon Squeezy provider lifecycle tests and the small E2E helpers needed to compare provider state with Waypoint.
+
+Lemon Squeezy test variables are owned by `06 - Lemon Squeezy Test Mode`; normal Waypoint folders must not overwrite the selected provider-test subscription.
+
 ## Local setup
 
 Run the backend with the normal local configuration plus:

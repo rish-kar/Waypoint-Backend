@@ -1,0 +1,41 @@
+$kind: http-request
+description: After completing the Test Mode checkout, captures the NEW Waypoint billing subscription ID without allowing normal Billing Status requests to overwrite Lemon Squeezy lifecycle state.
+url: "{{baseUrl}}/api/v1/billing/status"
+method: GET
+headers:
+  Authorization: Bearer {{jwt}}
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('jwt')) {
+        throw new Error('Run Google Login first so jwt is populated.');
+      }
+      if (!pm.environment.get('lemonSqueezyBootstrapSubscriptionId')) {
+        throw new Error('Run 01 - Bootstrap Test Context before creating the new checkout.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      const bootstrapId = pm.environment.get('lemonSqueezyBootstrapSubscriptionId');
+      pm.test('Waypoint selected the new paid no-trial subscription', () => {
+        pm.expect(body.plan).to.eql('PREMIUM');
+        pm.expect(body.planCode).to.be.oneOf(['PREMIUM_MONTHLY', 'PREMIUM_ANNUAL']);
+        pm.expect(body.status).to.eql('ACTIVE');
+        pm.expect(body.trialEndsAt).to.eql(null);
+        pm.expect(body.externalSubscriptionId).to.be.a('string').and.not.empty;
+        pm.expect(body.externalSubscriptionId).to.not.eql(bootstrapId);
+      });
+      if (body.externalSubscriptionId) {
+        pm.environment.set('lemonSqueezySubscriptionId', body.externalSubscriptionId);
+      }
+      if (body.planCode === 'PREMIUM_MONTHLY') {
+        pm.environment.set('lemonSqueezyWaypointPlan', 'MONTHLY');
+      } else if (body.planCode === 'PREMIUM_ANNUAL') {
+        pm.environment.set('lemonSqueezyWaypointPlan', 'ANNUAL');
+      }
+      pm.environment.set('lemonSqueezyProviderStatus', '');
+      pm.environment.set('lemonSqueezyNoTrialPaidReady', 'false');
+    language: text/javascript
+order: 4000

@@ -1,5 +1,5 @@
 $kind: http-request
-description: LS Test 01. Reads the selected Lemon Squeezy test subscription and stores provider state plus Store/Variant IDs used by the paid no-trial lifecycle setup.
+description: Reads the selected Lemon Squeezy Test Mode subscription and stores provider state plus Store/Variant IDs used by the paid no-trial lifecycle setup.
 url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
 method: GET
 headers:
@@ -13,7 +13,7 @@ scripts:
         throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment.');
       }
       if (!pm.environment.get('lemonSqueezySubscriptionId')) {
-        throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
+        throw new Error('Run 01 - Bootstrap Test Context first.');
       }
     language: text/javascript
   - type: afterResponse
@@ -21,7 +21,7 @@ scripts:
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const body = pm.response.json();
       const attributes = body.data.attributes;
-      pm.test('Subscription ID matches selected billing subscription', () => {
+      pm.test('Subscription ID matches selected Lemon Squeezy test subscription', () => {
         pm.expect(body.data.id).to.eql(pm.environment.get('lemonSqueezySubscriptionId'));
       });
       pm.test('Subscription is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
@@ -39,4 +39,4 @@ scripts:
         && attributes.pause === null;
       pm.environment.set('lemonSqueezyNoTrialPaidReady', String(noTrialReady));
     language: text/javascript
-order: 4000
+order: 2000

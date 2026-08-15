@@ -1,5 +1,5 @@
 $kind: http-request
-description: LS Test 02. Creates a NEW paid Test Mode checkout for the same Store/Variant with skip_trial=true. Open the returned checkout URL, pay with a Lemon Squeezy test card, wait for webhooks, then run Billing Status and LS Test 01 again before Test 03.
+description: Creates a NEW paid Test Mode checkout for the selected Store/Variant with skip_trial=true. Open the returned checkout URL, complete the test payment, wait for the webhook, then run 04 - Capture New Paid Subscription.
 url: "https://api.lemonsqueezy.com/v1/checkouts"
 method: POST
 headers:
@@ -49,11 +49,14 @@ scripts:
       const required = ['lemonSqueezyApiKey', 'userId', 'lemonSqueezyStoreId', 'lemonSqueezyVariantId', 'lemonSqueezyWaypointPlan'];
       required.forEach(key => {
         if (!pm.environment.get(key)) {
-          throw new Error(`Missing ${key}. Run Billing Status and LS Test 01 first.`);
+          throw new Error(`Missing ${key}. Run 01 - Bootstrap Test Context and 02 - Retrieve Provider Subscription first.`);
         }
       });
       if (!['MONTHLY', 'ANNUAL'].includes(pm.environment.get('lemonSqueezyWaypointPlan'))) {
-        throw new Error('lemonSqueezyWaypointPlan must be MONTHLY or ANNUAL. Run Billing Status first.');
+        throw new Error('lemonSqueezyWaypointPlan must be MONTHLY or ANNUAL.');
+      }
+      if (!pm.environment.get('lemonSqueezyBootstrapSubscriptionId')) {
+        pm.environment.set('lemonSqueezyBootstrapSubscriptionId', pm.environment.get('lemonSqueezySubscriptionId'));
       }
       pm.environment.set('lemonSqueezyNoTrialPaidReady', 'false');
       pm.environment.unset('lemonSqueezyCheckoutUrl');
@@ -71,4 +74,4 @@ scripts:
       pm.test('Checkout URL returned', () => pm.expect(attributes.url).to.match(/^https:\/\//));
       pm.environment.set('lemonSqueezyCheckoutUrl', attributes.url);
     language: text/javascript
-order: 4100
+order: 3000

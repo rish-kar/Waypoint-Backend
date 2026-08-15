@@ -1,0 +1,34 @@
+$kind: http-request
+description: Confirms that the newly captured Lemon Squeezy subscription is ACTIVE, paid, no-trial and ready for lifecycle state tests.
+url: "https://api.lemonsqueezy.com/v1/subscriptions/{{lemonSqueezySubscriptionId}}"
+method: GET
+headers:
+  Authorization: Bearer {{lemonSqueezyApiKey}}
+  Accept: application/vnd.api+json
+  Content-Type: application/vnd.api+json
+scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('lemonSqueezyApiKey')) {
+        throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment.');
+      }
+      if (!pm.environment.get('lemonSqueezySubscriptionId')) {
+        throw new Error('Run 04 - Capture New Paid Subscription first.');
+      }
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      const attributes = body.data.attributes;
+      pm.test('Subscription is test-mode data', () => pm.expect(attributes.test_mode).to.eql(true));
+      pm.test('New subscription is clean ACTIVE paid no-trial state', () => {
+        pm.expect(attributes.status).to.eql('active');
+        pm.expect(attributes.trial_ends_at).to.eql(null);
+        pm.expect(attributes.cancelled).to.eql(false);
+        pm.expect(attributes.pause).to.eql(null);
+      });
+      pm.environment.set('lemonSqueezyProviderStatus', attributes.status || '');
+      pm.environment.set('lemonSqueezyNoTrialPaidReady', 'true');
+    language: text/javascript
+order: 5000

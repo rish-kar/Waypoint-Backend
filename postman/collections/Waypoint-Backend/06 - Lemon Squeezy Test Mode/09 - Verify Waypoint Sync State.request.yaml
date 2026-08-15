@@ -1,0 +1,42 @@
+$kind: http-request
+description: Checks the exact Lemon Squeezy lifecycle subscription in Waypoint's database. Run this after any provider state change to verify the webhook synchronized the same subscription and status.
+url: "{{baseUrl}}/api/v1/admin/subscriptions?externalSubscriptionId={{lemonSqueezySubscriptionId}}&size=10&sort=updatedAt&direction=DESC"
+method: GET
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      if (!adminId || !adminPassword) {
+          throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      }
+      if (!pm.environment.get('lemonSqueezySubscriptionId')) {
+          throw new Error('No Lemon Squeezy lifecycle subscription is selected.');
+      }
+      if (!pm.environment.get('lemonSqueezyProviderStatus')) {
+          throw new Error('Run the relevant Lemon Squeezy provider action first.');
+      }
+      pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      const expectedStatus = pm.environment.get('lemonSqueezyProviderStatus').toUpperCase();
+      pm.test('Exact lifecycle subscription exists in Waypoint database', () => {
+        pm.expect(body.items).to.be.an('array').and.not.empty;
+        pm.expect(body.items[0].externalSubscriptionId).to.eql(pm.environment.get('lemonSqueezySubscriptionId'));
+      });
+      pm.test('Waypoint status matches Lemon Squeezy provider status', () => {
+        pm.expect(body.items[0].status).to.eql(expectedStatus);
+      });
+    language: text/javascript
+order: 9000

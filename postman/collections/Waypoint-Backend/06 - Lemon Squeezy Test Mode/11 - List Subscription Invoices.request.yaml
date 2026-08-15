@@ -1,5 +1,5 @@
 $kind: http-request
-description: LS Test 07. Lists invoices for the selected paid no-trial test subscription and stores the newest positive-value paid, non-refunded invoice for refund testing.
+description: Lists invoices for the selected paid no-trial Test Mode subscription and stores the newest positive-value paid, non-refunded invoice for refund testing.
 url: "https://api.lemonsqueezy.com/v1/subscription-invoices?filter[subscription_id]={{lemonSqueezySubscriptionId}}"
 method: GET
 headers:
@@ -13,10 +13,10 @@ scripts:
         throw new Error('Set lemonSqueezyApiKey in the Waypoint Local environment.');
       }
       if (!pm.environment.get('lemonSqueezySubscriptionId')) {
-        throw new Error('Run Billing Status first so lemonSqueezySubscriptionId is populated.');
+        throw new Error('Run 04 - Capture New Paid Subscription first.');
       }
       if (pm.environment.get('lemonSqueezyNoTrialPaidReady') !== 'true') {
-        throw new Error('LS Test 07 requires the clean paid no-trial subscription created through LS Test 02.');
+        throw new Error('This test requires the clean paid no-trial subscription created in this folder.');
       }
       pm.environment.unset('lemonSqueezyInvoiceId');
     language: text/javascript
@@ -41,4 +41,4 @@ scripts:
         pm.environment.set('lemonSqueezyInvoiceId', refundableInvoice.id);
       }
     language: text/javascript
-order: 4600
+order: 11000
