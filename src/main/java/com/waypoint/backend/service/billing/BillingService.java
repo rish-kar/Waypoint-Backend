@@ -3,7 +3,9 @@ package com.waypoint.backend.service.billing;
 import com.waypoint.backend.config.billing.LemonSqueezyProperties;
 import com.waypoint.backend.model.billing.BillingCheckoutSessionEntity;
 import com.waypoint.backend.model.billing.BillingStatusResponse;
+import com.waypoint.backend.model.billing.ProviderPriceCatalog;
 import com.waypoint.backend.model.plan.BillingInterval;
+import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.plan.PlanResponse;
 import com.waypoint.backend.model.subscription.CheckoutPlan;
 import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
@@ -21,6 +23,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -52,10 +55,15 @@ public class BillingService {
     }
 
     public List<PlanResponse> availablePlans() {
-        return planRepository
-                .findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceCentsAsc(BillingInterval.NONE)
-                .stream()
-                .map(PlanResponse::from)
+        List<com.waypoint.backend.model.plan.PlanEntity> plans = planRepository
+                .findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceCentsAsc(BillingInterval.NONE);
+        ProviderPriceCatalog catalog = lemonSqueezyClient.fetchPriceCatalog(
+                properties.monthlyVariantId(),
+                properties.annualVariantId()
+        );
+        return plans.stream()
+                .map(plan -> PlanResponse.from(plan, providerPrice(plan.getCode(), catalog), catalog.currency()))
+                .sorted(Comparator.comparingInt(PlanResponse::priceCents))
                 .toList();
     }
 
@@ -115,6 +123,14 @@ public class BillingService {
                 subscription.renewsAt(),
                 subscription.endsAt()
         );
+    }
+
+    private int providerPrice(PlanCode code, ProviderPriceCatalog catalog) {
+        return switch (code) {
+            case PREMIUM_MONTHLY -> catalog.monthlyPriceCents();
+            case PREMIUM_ANNUAL -> catalog.annualPriceCents();
+            default -> throw new IllegalStateException("Unsupported billable plan: " + code);
+        };
     }
 
     private boolean isReusable(BillingCheckoutSessionEntity session, Instant now) {

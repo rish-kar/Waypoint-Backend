@@ -3,6 +3,7 @@ package com.waypoint.backend.service.billing;
 import com.waypoint.backend.config.billing.LemonSqueezyProperties;
 import com.waypoint.backend.model.billing.BillingCheckoutSessionEntity;
 import com.waypoint.backend.model.billing.BillingStatusResponse;
+import com.waypoint.backend.model.billing.ProviderPriceCatalog;
 import com.waypoint.backend.model.plan.BillingInterval;
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.plan.PlanEntity;
@@ -143,18 +144,21 @@ class BillingServiceTests {
     }
 
     @Test
-    void returnsOnlyPaidPremiumPlansFromDatabase() {
+    void returnsPaidPlansUsingProviderPricesAndCurrency() {
         PlanEntity monthly = plan(PlanCode.PREMIUM_MONTHLY, BillingInterval.MONTHLY, 499);
         PlanEntity annual = plan(PlanCode.PREMIUM_ANNUAL, BillingInterval.ANNUAL, 3999);
         when(planRepository.findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceCentsAsc(BillingInterval.NONE))
                 .thenReturn(List.of(monthly, annual));
+        when(lemonSqueezyClient.fetchPriceCatalog("111", "222"))
+                .thenReturn(new ProviderPriceCatalog(599, 4999, "GBP"));
 
         List<PlanResponse> result = billingService.availablePlans();
 
         assertThat(result).extracting(PlanResponse::code)
                 .containsExactly(PlanCode.PREMIUM_MONTHLY, PlanCode.PREMIUM_ANNUAL);
-        verify(planRepository)
-                .findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceCentsAsc(BillingInterval.NONE);
+        assertThat(result).extracting(PlanResponse::priceCents).containsExactly(599, 4999);
+        assertThat(result).extracting(PlanResponse::currency).containsOnly("GBP");
+        verify(lemonSqueezyClient).fetchPriceCatalog("111", "222");
     }
 
     @Test
