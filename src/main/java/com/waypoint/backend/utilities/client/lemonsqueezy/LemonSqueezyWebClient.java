@@ -11,23 +11,29 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientRequestException;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
 import tools.jackson.databind.JsonNode;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
 @Component
 public class LemonSqueezyWebClient implements LemonSqueezyClient {
     private static final MediaType JSON_API = MediaType.parseMediaType("application/vnd.api+json");
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
 
     private final WebClient webClient;
     private final LemonSqueezyProperties properties;
+    private final Duration requestTimeout;
 
     public LemonSqueezyWebClient(WebClient.Builder builder, LemonSqueezyProperties properties) {
+        this(builder, properties, REQUEST_TIMEOUT);
+    }
+
+    LemonSqueezyWebClient(WebClient.Builder builder, LemonSqueezyProperties properties, Duration requestTimeout) {
         this.webClient = builder.baseUrl(properties.apiBaseUrl()).build();
         this.properties = properties;
+        this.requestTimeout = requestTimeout;
     }
 
     @Override
@@ -67,13 +73,16 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
                     .bodyValue(body)
                     .retrieve()
                     .bodyToMono(JsonNode.class)
+                    .timeout(requestTimeout)
                     .block();
             String url = response == null ? null : response.path("data").path("attributes").path("url").asText(null);
             if (!StringUtils.hasText(url)) {
                 throw new ExternalServiceException("Lemon Squeezy did not return a checkout URL");
             }
             return url;
-        } catch (WebClientResponseException | WebClientRequestException exception) {
+        } catch (ExternalServiceException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
             throw new ExternalServiceException("Unable to create Lemon Squeezy checkout");
         }
     }
