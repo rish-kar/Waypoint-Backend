@@ -84,7 +84,7 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
         } catch (ExternalServiceException exception) {
             throw exception;
         } catch (RuntimeException exception) {
-            throw new ExternalServiceException("Unable to create Lemon Squeezy checkout");
+            throw new ExternalServiceException("Unable to create Lemon Squeezy checkout", exception);
         }
     }
 
@@ -109,7 +109,7 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
         } catch (ExternalServiceException exception) {
             throw exception;
         } catch (RuntimeException exception) {
-            throw new ExternalServiceException("Unable to load Lemon Squeezy plan pricing");
+            throw new ExternalServiceException("Unable to load Lemon Squeezy plan pricing", exception);
         }
     }
 
@@ -167,7 +167,7 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
             }
             return parsed;
         } catch (NumberFormatException exception) {
-            throw new ExternalServiceException("Lemon Squeezy variant configuration is invalid");
+            throw new ExternalServiceException("Lemon Squeezy variant configuration is invalid", exception);
         }
     }
 }
