@@ -1,11 +1,11 @@
 package com.waypoint.backend.security.config;
 
-import com.waypoint.backend.config.admin.AdminProperties;
 import com.waypoint.backend.config.application.CorsProperties;
 import com.waypoint.backend.model.common.ApiErrorResponse;
 import com.waypoint.backend.security.admin.AdminTotpFilter;
 import com.waypoint.backend.security.jwt.JwtAuthenticationFilter;
 import com.waypoint.backend.security.ratelimit.RequestRateLimitFilter;
+import com.waypoint.backend.service.admin.AdminAccountService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -19,11 +19,8 @@ import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
@@ -45,22 +42,11 @@ public class SecurityConfig {
     }
 
     @Bean
-    UserDetailsService adminUserDetailsService(
-            AdminProperties properties,
-            PasswordEncoder adminPasswordEncoder
-    ) {
-        return new InMemoryUserDetailsManager(User.withUsername(properties.id())
-                .password(adminPasswordEncoder.encode(properties.password()))
-                .roles("ADMIN")
-                .build());
-    }
-
-    @Bean
     @Order(1)
     SecurityFilterChain adminSecurityFilterChain(
             HttpSecurity http,
             ObjectMapper objectMapper,
-            AdminProperties adminProperties,
+            AdminAccountService adminAccountService,
             Environment environment
     ) throws Exception {
         http
@@ -71,6 +57,7 @@ public class SecurityConfig {
                 .logout(AbstractHttpConfigurer::disable)
                 .requestCache(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .userDetailsService(adminAccountService)
                 .httpBasic(basic -> basic.authenticationEntryPoint((request, response, authException) ->
                         writeSecurityError(
                                 objectMapper,
@@ -80,7 +67,13 @@ public class SecurityConfig {
                                 "UNAUTHORIZED",
                                 "Invalid admin credentials"
                         )))
-                .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("ADMIN"))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/v1/admin/accounts/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/admin/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/admin/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/**").hasRole("SUPER_ADMIN")
+                        .anyRequest().hasAnyRole("ADMIN", "SUPER_ADMIN"))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, authException) -> writeSecurityError(
                                 objectMapper,
@@ -102,7 +95,7 @@ public class SecurityConfig {
 
         if (environment.acceptsProfiles(Profiles.of("prod"))) {
             http.requiresChannel(channels -> channels.anyRequest().requiresSecure());
-            http.addFilterAfter(new AdminTotpFilter(adminProperties), BasicAuthenticationFilter.class);
+            http.addFilterAfter(new AdminTotpFilter(adminAccountService), BasicAuthenticationFilter.class);
         }
         return http.build();
     }
