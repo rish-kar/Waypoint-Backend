@@ -30,6 +30,8 @@ import java.util.UUID;
 @Service
 public class BillingService {
     private static final Duration CHECKOUT_REUSE_WINDOW = Duration.ofMinutes(15);
+    private static final Duration PRICE_CACHE_TTL = Duration.ofMinutes(5);
+    private static final Duration PRICE_STALE_TTL = Duration.ofHours(1);
 
     private final LemonSqueezyClient lemonSqueezyClient;
     private final LemonSqueezyProperties properties;
@@ -37,6 +39,10 @@ public class BillingService {
     private final PlanRepository planRepository;
     private final BillingCheckoutSessionRepository checkoutSessionRepository;
     private final UserRepository userRepository;
+    private final Object priceCacheLock = new Object();
+
+    private volatile ProviderPriceCatalog cachedPriceCatalog;
+    private volatile Instant cachedPriceCatalogAt;
 
     public BillingService(
             LemonSqueezyClient lemonSqueezyClient,
@@ -57,10 +63,7 @@ public class BillingService {
     public List<PlanResponse> availablePlans() {
         List<com.waypoint.backend.model.plan.PlanEntity> plans = planRepository
                 .findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceCentsAsc(BillingInterval.NONE);
-        ProviderPriceCatalog catalog = lemonSqueezyClient.fetchPriceCatalog(
-                properties.monthlyVariantId(),
-                properties.annualVariantId()
-        );
+        ProviderPriceCatalog catalog = priceCatalog();
         return plans.stream()
                 .map(plan -> PlanResponse.from(plan, providerPrice(plan.getCode(), catalog), catalog.currency()))
                 .sorted(Comparator.comparingInt(PlanResponse::priceCents))
@@ -123,6 +126,39 @@ public class BillingService {
                 subscription.renewsAt(),
                 subscription.endsAt()
         );
+    }
+
+    private ProviderPriceCatalog priceCatalog() {
+        Instant now = Instant.now();
+        ProviderPriceCatalog cached = cachedPriceCatalog;
+        Instant cachedAt = cachedPriceCatalogAt;
+        if (cached != null && cachedAt != null && cachedAt.plus(PRICE_CACHE_TTL).isAfter(now)) {
+            return cached;
+        }
+
+        synchronized (priceCacheLock) {
+            now = Instant.now();
+            cached = cachedPriceCatalog;
+            cachedAt = cachedPriceCatalogAt;
+            if (cached != null && cachedAt != null && cachedAt.plus(PRICE_CACHE_TTL).isAfter(now)) {
+                return cached;
+            }
+
+            try {
+                ProviderPriceCatalog fresh = lemonSqueezyClient.fetchPriceCatalog(
+                        properties.monthlyVariantId(),
+                        properties.annualVariantId()
+                );
+                cachedPriceCatalog = fresh;
+                cachedPriceCatalogAt = now;
+                return fresh;
+            } catch (RuntimeException exception) {
+                if (cached != null && cachedAt != null && cachedAt.plus(PRICE_STALE_TTL).isAfter(now)) {
+                    return cached;
+                }
+                throw exception;
+            }
+        }
     }
 
     private int providerPrice(PlanCode code, ProviderPriceCatalog catalog) {
