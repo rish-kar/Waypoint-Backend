@@ -14,6 +14,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Mono;
+import reactor.util.function.Tuple2;
 import tools.jackson.databind.JsonNode;
 
 import java.time.Duration;
@@ -42,8 +44,14 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
         }
 
         try {
-            JsonNode tokenInfo = fetchTokenInfo(normalizedAccessToken);
-            JsonNode userInfo = fetchUserInfo(normalizedAccessToken);
+            Tuple2<JsonNode, JsonNode> responses = Mono.zip(
+                            fetchTokenInfo(normalizedAccessToken),
+                            fetchUserInfo(normalizedAccessToken)
+                    )
+                    .timeout(REQUEST_TIMEOUT)
+                    .block();
+            JsonNode tokenInfo = responses == null ? null : responses.getT1();
+            JsonNode userInfo = responses == null ? null : responses.getT2();
 
             if (tokenInfo == null) {
                 throw rejected("missing_tokeninfo", "Invalid Google access token");
@@ -108,43 +116,34 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
         }
     }
 
-    private JsonNode fetchTokenInfo(String accessToken) {
-        try {
-            return webClient.get()
-                    .uri(properties.tokenInfoUrl() + "?access_token={accessToken}", accessToken)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .bodyToMono(JsonNode.class)
-                    .timeout(REQUEST_TIMEOUT)
-                    .block();
-        } catch (WebClientResponseException exception) {
-            if (exception.getStatusCode().is4xxClientError()) {
-                throw rejected("tokeninfo_rejected", "Invalid Google access token");
-            }
-            throw new UpstreamServiceException("Google authentication service is unavailable");
-        } catch (WebClientRequestException exception) {
-            throw new UpstreamServiceException("Google authentication service is unavailable");
-        }
+    private Mono<JsonNode> fetchTokenInfo(String accessToken) {
+        return webClient.get()
+                .uri(properties.tokenInfoUrl() + "?access_token={accessToken}", accessToken)
+                .accept(MediaType.APPLICATION_JSON)
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .onErrorMap(WebClientResponseException.class, exception -> mapResponseException(exception, "tokeninfo_rejected"))
+                .onErrorMap(WebClientRequestException.class,
+                        exception -> new UpstreamServiceException("Google authentication service is unavailable"));
     }
 
-    private JsonNode fetchUserInfo(String accessToken) {
-        try {
-            return webClient.get()
-                    .uri(properties.userInfoUrl())
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .bodyToMono(JsonNode.class)
-                    .timeout(REQUEST_TIMEOUT)
-                    .block();
-        } catch (WebClientResponseException exception) {
-            if (exception.getStatusCode().is4xxClientError()) {
-                throw rejected("userinfo_rejected", "Invalid Google access token");
-            }
-            throw new UpstreamServiceException("Google authentication service is unavailable");
-        } catch (WebClientRequestException exception) {
-            throw new UpstreamServiceException("Google authentication service is unavailable");
+    private Mono<JsonNode> fetchUserInfo(String accessToken) {
+        return webClient.get()
+                .uri(properties.userInfoUrl())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                .accept(MediaType.APPLICATION_JSON)
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .onErrorMap(WebClientResponseException.class, exception -> mapResponseException(exception, "userinfo_rejected"))
+                .onErrorMap(WebClientRequestException.class,
+                        exception -> new UpstreamServiceException("Google authentication service is unavailable"));
+    }
+
+    private RuntimeException mapResponseException(WebClientResponseException exception, String reason) {
+        if (exception.getStatusCode().is4xxClientError()) {
+            return rejected(reason, "Invalid Google access token");
         }
+        return new UpstreamServiceException("Google authentication service is unavailable");
     }
 
     private UnauthorizedException rejectedAudience(String configuredClientId, String tokenClientId) {
