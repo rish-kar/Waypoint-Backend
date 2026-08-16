@@ -4,6 +4,7 @@ import com.waypoint.backend.model.subscription.SubscriptionEntity;
 import com.waypoint.backend.model.subscription.SubscriptionStatus;
 
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
@@ -20,12 +21,56 @@ public interface SubscriptionRepository
         extends JpaRepository<SubscriptionEntity, UUID>, JpaSpecificationExecutor<SubscriptionEntity> {
     List<SubscriptionEntity> findByUserIdOrderByUpdatedAtDesc(UUID userId);
 
+    Optional<SubscriptionEntity> findFirstByUserIdOrderByUpdatedAtDesc(UUID userId);
+
     Optional<SubscriptionEntity> findByExternalSubscriptionId(String externalSubscriptionId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select subscription from SubscriptionEntity subscription where subscription.externalSubscriptionId = :externalSubscriptionId")
     Optional<SubscriptionEntity> findByExternalSubscriptionIdForUpdate(
             @Param("externalSubscriptionId") String externalSubscriptionId
+    );
+
+    @Query("""
+            select subscription
+            from SubscriptionEntity subscription
+            where subscription.user.id = :userId
+              and (
+                    (subscription.status = :trialStatus and subscription.trialEndsAt > :now)
+                 or (subscription.status in :renewingStatuses and subscription.renewsAt > :now)
+                 or (subscription.status = :cancelledStatus and subscription.endsAt > :now)
+              )
+            order by case
+                         when subscription.status = :trialStatus then subscription.trialEndsAt
+                         when subscription.status in :renewingStatuses then subscription.renewsAt
+                         when subscription.status = :cancelledStatus then subscription.endsAt
+                     end desc,
+                     subscription.updatedAt desc
+            """)
+    List<SubscriptionEntity> findCurrentPremiumCandidates(
+            @Param("userId") UUID userId,
+            @Param("now") Instant now,
+            @Param("trialStatus") SubscriptionStatus trialStatus,
+            @Param("renewingStatuses") Set<SubscriptionStatus> renewingStatuses,
+            @Param("cancelledStatus") SubscriptionStatus cancelledStatus,
+            Pageable pageable
+    );
+
+    @Query("""
+            select case when count(subscription) > 0 then true else false end
+            from SubscriptionEntity subscription
+            where subscription.user.id = :userId
+              and subscription.externalSubscriptionId is not null
+              and (
+                    subscription.status in :blockingStatuses
+                 or (subscription.status = :cancelledStatus and subscription.endsAt > :now)
+              )
+            """)
+    boolean existsCheckoutBlockingSubscription(
+            @Param("userId") UUID userId,
+            @Param("now") Instant now,
+            @Param("blockingStatuses") Set<SubscriptionStatus> blockingStatuses,
+            @Param("cancelledStatus") SubscriptionStatus cancelledStatus
     );
 
     @Query("""
