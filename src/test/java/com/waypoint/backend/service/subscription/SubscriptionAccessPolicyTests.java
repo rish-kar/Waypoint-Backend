@@ -69,9 +69,33 @@ class SubscriptionAccessPolicyTests {
     }
 
     @Test
-    void pausedAndPastDueSubscriptionsRetainPremiumAccess() {
+    void paidStatusesRequireAFutureRenewalDate() {
+        for (SubscriptionStatus status : List.of(
+                SubscriptionStatus.ACTIVE,
+                SubscriptionStatus.PAUSED,
+                SubscriptionStatus.PAST_DUE
+        )) {
+            SubscriptionEntity missingRenewal = monthly(status);
+            SubscriptionAccessDecision missingDecision = policy.evaluate(missingRenewal, now);
+            assertThat(missingDecision.premium()).as("missing renewal for %s", status).isFalse();
+            assertThat(missingDecision.validUntil()).isNull();
+
+            SubscriptionEntity expiredRenewal = monthly(status);
+            expiredRenewal.setRenewsAt(now.minusSeconds(1));
+            SubscriptionAccessDecision expiredDecision = policy.evaluate(expiredRenewal, now);
+            assertThat(expiredDecision.premium()).as("expired renewal for %s", status).isFalse();
+            assertThat(expiredDecision.validUntil()).isNull();
+        }
+    }
+
+    @Test
+    void paidStatusesRetainPremiumAccessUntilFutureRenewalDate() {
         Instant nextBillingAttempt = now.plusSeconds(3600);
-        for (SubscriptionStatus status : List.of(SubscriptionStatus.PAUSED, SubscriptionStatus.PAST_DUE)) {
+        for (SubscriptionStatus status : List.of(
+                SubscriptionStatus.ACTIVE,
+                SubscriptionStatus.PAUSED,
+                SubscriptionStatus.PAST_DUE
+        )) {
             SubscriptionEntity subscription = monthly(status);
             subscription.setRenewsAt(nextBillingAttempt);
 
