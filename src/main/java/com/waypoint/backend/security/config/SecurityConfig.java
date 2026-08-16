@@ -5,6 +5,7 @@ import com.waypoint.backend.config.application.CorsProperties;
 import com.waypoint.backend.model.common.ApiErrorResponse;
 import com.waypoint.backend.security.admin.AdminTotpFilter;
 import com.waypoint.backend.security.jwt.JwtAuthenticationFilter;
+import com.waypoint.backend.security.ratelimit.RequestRateLimitFilter;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -96,7 +97,8 @@ public class SecurityConfig {
                                 HttpServletResponse.SC_FORBIDDEN,
                                 "FORBIDDEN",
                                 "Admin access denied"
-                        )));
+                        )))
+                .addFilterBefore(new RequestRateLimitFilter(), BasicAuthenticationFilter.class);
 
         if (environment.acceptsProfiles(Profiles.of("prod"))) {
             http.addFilterAfter(new AdminTotpFilter(adminProperties), BasicAuthenticationFilter.class);
@@ -144,6 +146,7 @@ public class SecurityConfig {
                                 "FORBIDDEN",
                                 "Access denied"
                         )))
+                .addFilterBefore(new RequestRateLimitFilter(), JwtAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
