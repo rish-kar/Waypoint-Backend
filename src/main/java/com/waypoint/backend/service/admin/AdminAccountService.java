@@ -9,6 +9,7 @@ import com.waypoint.backend.model.admin.AdminAuditEventEntity;
 import com.waypoint.backend.model.admin.AdminRole;
 import com.waypoint.backend.repository.admin.AdminAccountRepository;
 import com.waypoint.backend.repository.admin.AdminAuditEventRepository;
+import com.waypoint.backend.security.admin.AdminTotpSecretCipher;
 import com.waypoint.backend.security.admin.AdminTotpVerifier;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
 import com.waypoint.backend.utilities.exception.NotFoundException;
@@ -32,17 +33,20 @@ public class AdminAccountService implements UserDetailsService {
     private final AdminAuditEventRepository auditEventRepository;
     private final PasswordEncoder passwordEncoder;
     private final AdminTotpVerifier totpVerifier;
+    private final AdminTotpSecretCipher totpSecretCipher;
 
     public AdminAccountService(
             AdminAccountRepository adminAccountRepository,
             AdminAuditEventRepository auditEventRepository,
             PasswordEncoder passwordEncoder,
-            AdminTotpVerifier totpVerifier
+            AdminTotpVerifier totpVerifier,
+            AdminTotpSecretCipher totpSecretCipher
     ) {
         this.adminAccountRepository = adminAccountRepository;
         this.auditEventRepository = auditEventRepository;
         this.passwordEncoder = passwordEncoder;
         this.totpVerifier = totpVerifier;
+        this.totpSecretCipher = totpSecretCipher;
     }
 
     @Override
@@ -66,8 +70,8 @@ public class AdminAccountService implements UserDetailsService {
             return false;
         }
         try {
-            return totpVerifier.validCode(account.getTotpSecret(), code, java.time.Instant.now());
-        } catch (IllegalArgumentException exception) {
+            return totpVerifier.validCode(totpSecretCipher.decrypt(account.getTotpSecret()), code, java.time.Instant.now());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
             return false;
         }
     }
@@ -81,7 +85,7 @@ public class AdminAccountService implements UserDetailsService {
         account.setUsername(normalizeUsername(properties.id()));
         account.setPasswordHash(passwordEncoder.encode(properties.password()));
         account.setRole(AdminRole.SUPER_ADMIN);
-        account.setTotpSecret(normalizeSecret(properties.totpSecret(), false));
+        account.setTotpSecret(encryptSecret(normalizeSecret(properties.totpSecret(), false)));
         account.setActive(true);
         adminAccountRepository.save(account);
     }
@@ -104,7 +108,7 @@ public class AdminAccountService implements UserDetailsService {
         account.setUsername(username);
         account.setPasswordHash(passwordEncoder.encode(request.password()));
         account.setRole(request.role());
-        account.setTotpSecret(secret);
+        account.setTotpSecret(encryptSecret(secret));
         account.setActive(true);
         AdminAccountEntity saved = adminAccountRepository.save(account);
         audit(actor, "CREATE_ADMIN_ACCOUNT", saved.getId(), "role=" + saved.getRole());
@@ -141,7 +145,7 @@ public class AdminAccountService implements UserDetailsService {
             account.setPasswordHash(passwordEncoder.encode(request.password()));
         }
         if (StringUtils.hasText(request.totpSecret())) {
-            account.setTotpSecret(normalizeSecret(request.totpSecret(), true));
+            account.setTotpSecret(encryptSecret(normalizeSecret(request.totpSecret(), true)));
         }
 
         AdminAccountEntity saved = adminAccountRepository.save(account);
@@ -171,6 +175,10 @@ public class AdminAccountService implements UserDetailsService {
             throw new InvalidRequestException(exception.getMessage());
         }
         return normalized;
+    }
+
+    private String encryptSecret(String secret) {
+        return StringUtils.hasText(secret) ? totpSecretCipher.encrypt(secret) : secret;
     }
 
     private void audit(String actor, String action, UUID accountId, String details) {
