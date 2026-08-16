@@ -10,6 +10,8 @@ import com.waypoint.backend.service.subscription.SubscriptionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 @Service
 public class PlanService {
     private final PlanRepository planRepository;
@@ -32,14 +34,19 @@ public class PlanService {
                 .orElseThrow(() -> new IllegalStateException("Required plan is missing: " + code));
     }
 
+    @Transactional(readOnly = true)
+    public PlanEntity effectivePlan(UUID userId) {
+        return require(subscriptionService.current(userId).planCode());
+    }
+
     @Transactional
     public PlanEntity synchronizeUserPlan(UserEntity user) {
-        PlanCode targetCode = subscriptionService.current(user.getId()).planCode();
+        PlanEntity targetPlan = effectivePlan(user.getId());
 
-        if (user.getPlan() == null || user.getPlan().getCode() != targetCode) {
-            user.setPlan(require(targetCode));
+        if (user.getPlan() == null || user.getPlan().getCode() != targetPlan.getCode()) {
+            user.setPlan(targetPlan);
             userRepository.save(user);
         }
-        return user.getPlan();
+        return targetPlan;
     }
 }
