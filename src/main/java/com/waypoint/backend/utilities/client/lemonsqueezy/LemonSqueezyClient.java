@@ -7,5 +7,7 @@ import com.waypoint.backend.model.user.UserEntity;
 public interface LemonSqueezyClient {
     String createCheckout(UserEntity user, CheckoutPlan plan, String variantId);
 
-    ProviderPriceCatalog fetchPriceCatalog(String monthlyVariantId, String annualVariantId);
+    default ProviderPriceCatalog fetchPriceCatalog(String monthlyVariantId, String annualVariantId) {
+        throw new UnsupportedOperationException("Pricing lookup is not implemented by this Lemon Squeezy client");
+    }
 }
