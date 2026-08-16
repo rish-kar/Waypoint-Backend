@@ -28,6 +28,9 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-waypoint}
       DATABASE_USERNAME: ${POSTGRES_USER:-waypoint}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-waypoint}
+      ADMIN_ID: ${ADMIN_ID:-local-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-local-admin-password-change-me}
+      ADMIN_TOTP_SECRET: ${ADMIN_TOTP_SECRET:-}
       JWT_SECRET: ${JWT_SECRET:-waypoint-local-development-secret-change-before-production}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       LEMON_SQUEEZY_API_KEY: ${LEMON_SQUEEZY_API_KEY:-local-lemon-squeezy-api-key}
