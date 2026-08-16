@@ -57,6 +57,36 @@ public interface SubscriptionRepository
     );
 
     @Query("""
+            select subscription
+            from SubscriptionEntity subscription
+            where subscription.user.id in :userIds
+              and (
+                    (subscription.status = :trialStatus and subscription.trialEndsAt > :now)
+                 or (subscription.status in :renewingStatuses and subscription.renewsAt > :now)
+                 or (subscription.status = :cancelledStatus and subscription.endsAt > :now)
+              )
+            """)
+    List<SubscriptionEntity> findCurrentPremiumCandidatesForUsers(
+            @Param("userIds") Set<UUID> userIds,
+            @Param("now") Instant now,
+            @Param("trialStatus") SubscriptionStatus trialStatus,
+            @Param("renewingStatuses") Set<SubscriptionStatus> renewingStatuses,
+            @Param("cancelledStatus") SubscriptionStatus cancelledStatus
+    );
+
+    @Query("""
+            select subscription
+            from SubscriptionEntity subscription
+            where subscription.user.id in :userIds
+              and subscription.updatedAt = (
+                    select max(latest.updatedAt)
+                    from SubscriptionEntity latest
+                    where latest.user.id = subscription.user.id
+              )
+            """)
+    List<SubscriptionEntity> findLatestForUsers(@Param("userIds") Set<UUID> userIds);
+
+    @Query("""
             select case when count(subscription) > 0 then true else false end
             from SubscriptionEntity subscription
             where subscription.user.id = :userId

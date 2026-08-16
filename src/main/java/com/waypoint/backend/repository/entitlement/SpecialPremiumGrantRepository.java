@@ -20,6 +20,18 @@ public interface SpecialPremiumGrantRepository
     List<SpecialPremiumGrantEntity> findByActiveTrueOrderByGrantedAtDesc();
 
     @Query("""
+            select grant
+            from SpecialPremiumGrantEntity grant
+            where grant.user.id in :userIds
+              and grant.active = true
+              and (grant.validUntil is null or grant.validUntil > :now)
+            """)
+    List<SpecialPremiumGrantEntity> findActiveForUsers(
+            @Param("userIds") Set<UUID> userIds,
+            @Param("now") Instant now
+    );
+
+    @Query("""
             select grant.user.id
             from SpecialPremiumGrantEntity grant
             where grant.active = true
