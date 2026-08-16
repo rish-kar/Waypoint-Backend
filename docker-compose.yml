@@ -5,9 +5,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-waypoint}
       POSTGRES_USER: ${POSTGRES_USER:-waypoint}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-waypoint}
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - waypoint-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -27,7 +25,7 @@ services:
       PORT: 8080
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-waypoint}
       DATABASE_USERNAME: ${POSTGRES_USER:-waypoint}
-      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-waypoint}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       ADMIN_ID: ${ADMIN_ID:-local-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-local-admin-password-change-me}
       ADMIN_TOTP_SECRET: ${ADMIN_TOTP_SECRET:-}
