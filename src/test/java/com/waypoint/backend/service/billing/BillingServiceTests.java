@@ -1,6 +1,7 @@
 package com.waypoint.backend.service.billing;
 
 import com.waypoint.backend.config.billing.LemonSqueezyProperties;
+import com.waypoint.backend.model.billing.BillingCheckoutSessionEntity;
 import com.waypoint.backend.model.billing.BillingStatusResponse;
 import com.waypoint.backend.model.plan.BillingInterval;
 import com.waypoint.backend.model.plan.PlanCode;
@@ -10,7 +11,9 @@ import com.waypoint.backend.model.subscription.CheckoutPlan;
 import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.model.subscription.SubscriptionStatus;
 import com.waypoint.backend.model.user.UserEntity;
+import com.waypoint.backend.repository.billing.BillingCheckoutSessionRepository;
 import com.waypoint.backend.repository.plan.PlanRepository;
+import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.service.subscription.SubscriptionService;
 import com.waypoint.backend.utilities.client.lemonsqueezy.LemonSqueezyClient;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
@@ -20,11 +23,15 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -32,6 +39,8 @@ class BillingServiceTests {
     private LemonSqueezyClient lemonSqueezyClient;
     private SubscriptionService subscriptionService;
     private PlanRepository planRepository;
+    private BillingCheckoutSessionRepository checkoutSessionRepository;
+    private UserRepository userRepository;
     private BillingService billingService;
 
     @BeforeEach
@@ -39,6 +48,8 @@ class BillingServiceTests {
         lemonSqueezyClient = mock(LemonSqueezyClient.class);
         subscriptionService = mock(SubscriptionService.class);
         planRepository = mock(PlanRepository.class);
+        checkoutSessionRepository = mock(BillingCheckoutSessionRepository.class);
+        userRepository = mock(UserRepository.class);
         LemonSqueezyProperties properties = new LemonSqueezyProperties(
                 "test-api-key",
                 "123",
@@ -51,13 +62,16 @@ class BillingServiceTests {
                 lemonSqueezyClient,
                 properties,
                 subscriptionService,
-                planRepository
+                planRepository,
+                checkoutSessionRepository,
+                userRepository
         );
     }
 
     @Test
     void createsMonthlyCheckoutWithMonthlyVariant() {
         UserEntity user = user();
+        when(userRepository.findByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
         when(lemonSqueezyClient.createCheckout(user, CheckoutPlan.MONTHLY, "111"))
                 .thenReturn("https://checkout.example/monthly");
 
@@ -65,11 +79,13 @@ class BillingServiceTests {
 
         assertThat(result).isEqualTo("https://checkout.example/monthly");
         verify(lemonSqueezyClient).createCheckout(user, CheckoutPlan.MONTHLY, "111");
+        verify(checkoutSessionRepository).save(any(BillingCheckoutSessionEntity.class));
     }
 
     @Test
     void createsAnnualCheckoutWithAnnualVariant() {
         UserEntity user = user();
+        when(userRepository.findByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
         when(lemonSqueezyClient.createCheckout(user, CheckoutPlan.ANNUAL, "222"))
                 .thenReturn("https://checkout.example/annual");
 
@@ -77,6 +93,46 @@ class BillingServiceTests {
 
         assertThat(result).isEqualTo("https://checkout.example/annual");
         verify(lemonSqueezyClient).createCheckout(user, CheckoutPlan.ANNUAL, "222");
+    }
+
+    @Test
+    void reusesPendingCheckoutInsteadOfCreatingDuplicateProviderCheckout() {
+        UserEntity user = user();
+        AtomicReference<BillingCheckoutSessionEntity> storedSession = new AtomicReference<>();
+        when(userRepository.findByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
+        when(checkoutSessionRepository.findById(user.getId()))
+                .thenAnswer(invocation -> Optional.ofNullable(storedSession.get()));
+        when(checkoutSessionRepository.save(any(BillingCheckoutSessionEntity.class)))
+                .thenAnswer(invocation -> {
+                    BillingCheckoutSessionEntity session = invocation.getArgument(0);
+                    storedSession.set(session);
+                    return session;
+                });
+        when(lemonSqueezyClient.createCheckout(user, CheckoutPlan.MONTHLY, "111"))
+                .thenReturn("https://checkout.example/monthly");
+
+        String first = billingService.createCheckout(user, CheckoutPlan.MONTHLY);
+        String second = billingService.createCheckout(user, CheckoutPlan.MONTHLY);
+
+        assertThat(first).isEqualTo("https://checkout.example/monthly");
+        assertThat(second).isEqualTo(first);
+        verify(lemonSqueezyClient, times(1)).createCheckout(user, CheckoutPlan.MONTHLY, "111");
+    }
+
+    @Test
+    void rejectsDifferentPlanWhileCheckoutIsStillPending() {
+        UserEntity user = user();
+        BillingCheckoutSessionEntity session = new BillingCheckoutSessionEntity();
+        session.setUserId(user.getId());
+        session.setPlan(CheckoutPlan.MONTHLY);
+        session.setCheckoutUrl("https://checkout.example/monthly");
+        session.setExpiresAt(Instant.now().plusSeconds(300));
+        when(userRepository.findByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
+        when(checkoutSessionRepository.findById(user.getId())).thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> billingService.createCheckout(user, CheckoutPlan.ANNUAL))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessage("A checkout for another billing plan is already pending for this account");
     }
 
     @Test
