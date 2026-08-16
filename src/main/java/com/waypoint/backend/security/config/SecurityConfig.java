@@ -101,6 +101,7 @@ public class SecurityConfig {
                 .addFilterBefore(new RequestRateLimitFilter(), BasicAuthenticationFilter.class);
 
         if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            http.requiresChannel(channels -> channels.anyRequest().requiresSecure());
             http.addFilterAfter(new AdminTotpFilter(adminProperties), BasicAuthenticationFilter.class);
         }
         return http.build();
@@ -111,9 +112,10 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             JwtAuthenticationFilter jwtAuthenticationFilter,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            Environment environment
     ) throws Exception {
-        return http
+        http
                 .csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
@@ -146,9 +148,13 @@ public class SecurityConfig {
                                 "FORBIDDEN",
                                 "Access denied"
                         )))
-                .addFilterBefore(new RequestRateLimitFilter(), JwtAuthenticationFilter.class)
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .build();
+                .addFilterBefore(new RequestRateLimitFilter(), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            http.requiresChannel(channels -> channels.anyRequest().requiresSecure());
+        }
+        return http.build();
     }
 
     @Bean
