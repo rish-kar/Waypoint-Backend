@@ -135,8 +135,9 @@ public class JwtService {
                 throw invalidToken();
             }
 
-            UUID.fromString(tokenId);
-            return new JwtClaims(UUID.fromString(subject), email);
+            UUID parsedTokenId = UUID.fromString(tokenId);
+            UUID parsedUserId = UUID.fromString(subject);
+            return new JwtClaims(parsedUserId, email, parsedTokenId, Instant.ofEpochSecond(expiresAt));
         } catch (IllegalArgumentException | JacksonException exception) {
             throw invalidToken();
         }
