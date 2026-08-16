@@ -19,6 +19,8 @@ import tools.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 @Component
 public class LemonSqueezyWebClient implements LemonSqueezyClient {
@@ -41,7 +43,15 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
 
     @Override
     public String createCheckout(UserEntity user, CheckoutPlan plan, String variantId) {
+        return createCheckout(user, plan, variantId, UUID.randomUUID());
+    }
+
+    @Override
+    public String createCheckout(UserEntity user, CheckoutPlan plan, String variantId, UUID intentId) {
         requireApiConfiguration();
+        if (intentId == null) {
+            throw new InvalidRequestException("Checkout intent is required");
+        }
 
         long enabledVariantId = parseVariantId(variantId);
         Map<String, Object> body = Map.of(
@@ -55,7 +65,8 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
                                         "email", user.getEmail(),
                                         "custom", Map.of(
                                                 "waypoint_user_id", user.getId().toString(),
-                                                "waypoint_plan", plan.name()
+                                                "waypoint_plan", plan.name(),
+                                                "waypoint_checkout_intent", intentId.toString()
                                         )
                                 )
                         ),
@@ -85,6 +96,52 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
             throw exception;
         } catch (RuntimeException exception) {
             throw new ExternalServiceException("Unable to create Lemon Squeezy checkout", exception);
+        }
+    }
+
+    @Override
+    public Optional<String> findCheckoutByIntent(String variantId, UUID intentId) {
+        requireApiConfiguration();
+        if (intentId == null) {
+            return Optional.empty();
+        }
+        parseVariantId(variantId);
+        try {
+            JsonNode response = webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/checkouts")
+                            .queryParam("filter[variant_id]", variantId)
+                            .queryParam("page[size]", 100)
+                            .build())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
+                    .accept(JSON_API)
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .timeout(requestTimeout)
+                    .block();
+            if (response == null || !response.path("data").isArray()) {
+                return Optional.empty();
+            }
+            String expectedIntent = intentId.toString();
+            for (JsonNode checkout : response.path("data")) {
+                JsonNode attributes = checkout.path("attributes");
+                String checkoutIntent = attributes.path("checkout_data")
+                        .path("custom")
+                        .path("waypoint_checkout_intent")
+                        .asText(null);
+                if (!expectedIntent.equals(checkoutIntent)) {
+                    continue;
+                }
+                String url = attributes.path("url").asText(null);
+                if (StringUtils.hasText(url)) {
+                    return Optional.of(url);
+                }
+            }
+            return Optional.empty();
+        } catch (ExternalServiceException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new ExternalServiceException("Unable to recover Lemon Squeezy checkout", exception);
         }
     }
 
