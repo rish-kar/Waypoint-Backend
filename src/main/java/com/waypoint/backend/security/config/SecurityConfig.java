@@ -3,6 +3,7 @@ package com.waypoint.backend.security.config;
 import com.waypoint.backend.config.admin.AdminProperties;
 import com.waypoint.backend.config.application.CorsProperties;
 import com.waypoint.backend.model.common.ApiErrorResponse;
+import com.waypoint.backend.security.admin.AdminTotpFilter;
 import com.waypoint.backend.security.jwt.JwtAuthenticationFilter;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,6 +11,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -22,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -52,8 +56,13 @@ public class SecurityConfig {
 
     @Bean
     @Order(1)
-    SecurityFilterChain adminSecurityFilterChain(HttpSecurity http, ObjectMapper objectMapper) throws Exception {
-        return http
+    SecurityFilterChain adminSecurityFilterChain(
+            HttpSecurity http,
+            ObjectMapper objectMapper,
+            AdminProperties adminProperties,
+            Environment environment
+    ) throws Exception {
+        http
                 .securityMatcher("/api/v1/admin/**")
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(AbstractHttpConfigurer::disable)
@@ -87,8 +96,12 @@ public class SecurityConfig {
                                 HttpServletResponse.SC_FORBIDDEN,
                                 "FORBIDDEN",
                                 "Admin access denied"
-                        )))
-                .build();
+                        )));
+
+        if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            http.addFilterAfter(new AdminTotpFilter(adminProperties), BasicAuthenticationFilter.class);
+        }
+        return http.build();
     }
 
     @Bean
@@ -140,7 +153,9 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(properties.allowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Signature", "X-Request-ID"));
+        configuration.setAllowedHeaders(List.of(
+                "Authorization", "Content-Type", "X-Signature", "X-Request-ID", "X-Admin-TOTP"
+        ));
         configuration.setExposedHeaders(List.of("X-Request-ID"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);

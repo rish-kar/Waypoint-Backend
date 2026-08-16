@@ -63,6 +63,7 @@ management:
 admin:
   id: ${ADMIN_ID:}
   password: ${ADMIN_PASSWORD:}
+  totp-secret: ${ADMIN_TOTP_SECRET:}
 
 jwt:
   secret: ${JWT_SECRET:}
