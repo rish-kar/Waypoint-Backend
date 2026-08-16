@@ -12,6 +12,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.net.URI;
 import java.util.Arrays;
@@ -70,6 +71,7 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
         requireHttps("LEMON_SQUEEZY_API_BASE_URL", lemonSqueezyProperties.apiBaseUrl());
         rejectPlaceholder("ADMIN_ID", adminProperties.id());
         rejectPlaceholder("ADMIN_PASSWORD", adminProperties.password());
+        rejectPlaceholder("JWT_SECRET", jwtProperties.secret());
         rejectPlaceholder("GOOGLE_CLIENT_ID", googleProperties.clientId());
         rejectPlaceholder("LEMON_SQUEEZY_API_KEY", lemonSqueezyProperties.apiKey());
         rejectPlaceholder("LEMON_SQUEEZY_STORE_ID", lemonSqueezyProperties.storeId());
@@ -108,12 +110,17 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
     }
 
     private void rejectPlaceholder(String variableName, String value) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalStateException(variableName + " must be configured in production");
+        }
         String normalized = value.toLowerCase(Locale.ROOT);
         if (normalized.startsWith("local-")
                 || normalized.startsWith("test-")
                 || normalized.contains("placeholder")
                 || normalized.contains("replace")
-                || normalized.contains("change-me")) {
+                || normalized.contains("change-me")
+                || normalized.contains("development")
+                || normalized.contains("change-before-production")) {
             throw new IllegalStateException(variableName + " contains a development placeholder");
         }
     }
