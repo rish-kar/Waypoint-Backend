@@ -24,8 +24,13 @@ public class BillingCheckoutSessionEntity {
     @Column(nullable = false, length = 32)
     private CheckoutPlan plan;
 
-    @Column(nullable = false, length = 2048)
+    @Column(length = 2048)
     private String checkoutUrl;
+
+    @Column(unique = true)
+    private UUID intentId;
+
+    private Instant providerRequestStartedAt;
 
     @Column(nullable = false)
     private Instant expiresAt;
@@ -74,6 +79,22 @@ public class BillingCheckoutSessionEntity {
 
     public void setCheckoutUrl(String checkoutUrl) {
         this.checkoutUrl = checkoutUrl;
+    }
+
+    public UUID getIntentId() {
+        return intentId;
+    }
+
+    public void setIntentId(UUID intentId) {
+        this.intentId = intentId;
+    }
+
+    public Instant getProviderRequestStartedAt() {
+        return providerRequestStartedAt;
+    }
+
+    public void setProviderRequestStartedAt(Instant providerRequestStartedAt) {
+        this.providerRequestStartedAt = providerRequestStartedAt;
     }
 
     public Instant getExpiresAt() {
