@@ -7,6 +7,7 @@ import com.waypoint.backend.utilities.exception.UnauthorizedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.Mac;
@@ -53,6 +54,7 @@ public class WebhookService {
         this.webhookSubscriptionProcessor = webhookSubscriptionProcessor;
     }
 
+    @Transactional
     public void process(byte[] rawBody, String signature) {
         if (rawBody == null || rawBody.length == 0) {
             throw new InvalidRequestException("Webhook payload is empty");

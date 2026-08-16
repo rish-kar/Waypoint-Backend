@@ -38,7 +38,7 @@ public class WebhookEventStore {
         }
     }
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void markProcessed(String eventHash, String eventName, String externalObjectId) {
         WebhookEventEntity event = webhookEventRepository.findByEventHash(eventHash).orElseThrow();
         event.setEventName(normalizeEventName(eventName));
