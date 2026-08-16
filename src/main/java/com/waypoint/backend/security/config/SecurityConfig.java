@@ -4,6 +4,7 @@ import com.waypoint.backend.config.application.CorsProperties;
 import com.waypoint.backend.model.common.ApiErrorResponse;
 import com.waypoint.backend.security.admin.AdminTotpFilter;
 import com.waypoint.backend.security.jwt.JwtAuthenticationFilter;
+import com.waypoint.backend.security.ratelimit.DistributedRateLimiter;
 import com.waypoint.backend.security.ratelimit.RequestRateLimitFilter;
 import com.waypoint.backend.service.admin.AdminAccountService;
 
@@ -47,6 +48,7 @@ public class SecurityConfig {
             HttpSecurity http,
             ObjectMapper objectMapper,
             AdminAccountService adminAccountService,
+            DistributedRateLimiter distributedRateLimiter,
             Environment environment
     ) throws Exception {
         http
@@ -91,7 +93,7 @@ public class SecurityConfig {
                                 "FORBIDDEN",
                                 "Admin access denied"
                         )))
-                .addFilterBefore(new RequestRateLimitFilter(), BasicAuthenticationFilter.class);
+                .addFilterBefore(new RequestRateLimitFilter(distributedRateLimiter), BasicAuthenticationFilter.class);
 
         if (environment.acceptsProfiles(Profiles.of("prod"))) {
             http.requiresChannel(channels -> channels.anyRequest().requiresSecure());
@@ -105,6 +107,7 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             JwtAuthenticationFilter jwtAuthenticationFilter,
+            DistributedRateLimiter distributedRateLimiter,
             ObjectMapper objectMapper,
             Environment environment
     ) throws Exception {
@@ -141,7 +144,7 @@ public class SecurityConfig {
                                 "FORBIDDEN",
                                 "Access denied"
                         )))
-                .addFilterBefore(new RequestRateLimitFilter(), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new RequestRateLimitFilter(distributedRateLimiter), UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         if (environment.acceptsProfiles(Profiles.of("prod"))) {
