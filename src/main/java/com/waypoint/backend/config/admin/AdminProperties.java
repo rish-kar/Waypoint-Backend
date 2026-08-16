@@ -9,6 +9,6 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "admin")
 public record AdminProperties(
         @NotBlank @Size(max = 100) String id,
-        @NotBlank String password
+        @NotBlank @Size(min = 16, max = 200) String password
 ) {
 }
