@@ -63,7 +63,24 @@ public class WebhookService {
         verifySignature(rawBody, signature);
         String eventHash = sha256Hex(rawBody);
         String storedPayload = "{\"redacted\":true,\"size\":" + rawBody.length + "}";
-        WebhookEventStore.WebhookReception reception = webhookEventStore.recordReceived(eventHash, storedPayload);
+
+        JsonNode payload;
+        try {
+            payload = objectMapper.readTree(rawBody);
+        } catch (JacksonException exception) {
+            webhookEventStore.recordReceived(eventHash, storedPayload, "UNKNOWN", null);
+            markFailed(eventHash, "UNKNOWN", null, exception);
+            throw new InvalidRequestException("Unable to parse webhook payload");
+        }
+
+        String eventName = normalizeEventName(text(payload.path("meta"), "event_name"));
+        String externalObjectId = text(payload.path("data"), "id");
+        WebhookEventStore.WebhookReception reception = webhookEventStore.recordReceived(
+                eventHash,
+                storedPayload,
+                eventName,
+                externalObjectId
+        );
         if (!reception.shouldProcess()) {
             LOGGER.atInfo()
                     .addKeyValue("event", "webhook_duplicate_ignored")
@@ -73,13 +90,7 @@ public class WebhookService {
             return;
         }
 
-        String eventName = "UNKNOWN";
-        String externalObjectId = null;
         try {
-            JsonNode payload = objectMapper.readTree(rawBody);
-            eventName = normalizeEventName(text(payload.path("meta"), "event_name"));
-            externalObjectId = text(payload.path("data"), "id");
-
             if (!StringUtils.hasText(eventName) || "UNKNOWN".equals(eventName)) {
                 throw new InvalidRequestException("Webhook payload is missing meta.event_name");
             }
@@ -106,9 +117,6 @@ public class WebhookService {
         } catch (InvalidRequestException exception) {
             markFailed(eventHash, eventName, externalObjectId, exception);
             throw exception;
-        } catch (JacksonException exception) {
-            markFailed(eventHash, eventName, externalObjectId, exception);
-            throw new InvalidRequestException("Unable to parse webhook payload");
         } catch (Exception exception) {
             markFailed(eventHash, eventName, externalObjectId, exception);
             throw new IllegalStateException("Unable to process webhook payload", exception);
