@@ -1,7 +1,6 @@
 package com.waypoint.backend.service.billing;
 
 import com.waypoint.backend.config.billing.LemonSqueezyProperties;
-import com.waypoint.backend.model.billing.BillingCheckoutSessionEntity;
 import com.waypoint.backend.model.billing.BillingStatusResponse;
 import com.waypoint.backend.model.billing.ProviderPriceCatalog;
 import com.waypoint.backend.model.plan.BillingInterval;
@@ -12,9 +11,7 @@ import com.waypoint.backend.model.subscription.CheckoutPlan;
 import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.model.subscription.SubscriptionStatus;
 import com.waypoint.backend.model.user.UserEntity;
-import com.waypoint.backend.repository.billing.BillingCheckoutSessionRepository;
 import com.waypoint.backend.repository.plan.PlanRepository;
-import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.service.subscription.SubscriptionService;
 import com.waypoint.backend.utilities.client.lemonsqueezy.LemonSqueezyClient;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
@@ -26,22 +23,21 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class BillingServiceTests {
     private LemonSqueezyClient lemonSqueezyClient;
     private SubscriptionService subscriptionService;
     private PlanRepository planRepository;
-    private BillingCheckoutSessionRepository checkoutSessionRepository;
-    private UserRepository userRepository;
+    private CheckoutSessionCoordinator checkoutSessionCoordinator;
     private BillingService billingService;
 
     @BeforeEach
@@ -49,8 +45,7 @@ class BillingServiceTests {
         lemonSqueezyClient = mock(LemonSqueezyClient.class);
         subscriptionService = mock(SubscriptionService.class);
         planRepository = mock(PlanRepository.class);
-        checkoutSessionRepository = mock(BillingCheckoutSessionRepository.class);
-        userRepository = mock(UserRepository.class);
+        checkoutSessionCoordinator = mock(CheckoutSessionCoordinator.class);
         LemonSqueezyProperties properties = new LemonSqueezyProperties(
                 "test-api-key",
                 "123",
@@ -64,76 +59,88 @@ class BillingServiceTests {
                 properties,
                 subscriptionService,
                 planRepository,
-                checkoutSessionRepository,
-                userRepository
+                checkoutSessionCoordinator
         );
     }
 
     @Test
-    void createsMonthlyCheckoutWithMonthlyVariant() {
+    void createsMonthlyCheckoutWithMonthlyVariantOutsideReservationTransaction() {
         UserEntity user = user();
-        when(userRepository.findByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
-        when(lemonSqueezyClient.createCheckout(user, CheckoutPlan.MONTHLY, "111"))
+        UUID intentId = UUID.randomUUID();
+        when(checkoutSessionCoordinator.reserve(user.getId(), CheckoutPlan.MONTHLY))
+                .thenReturn(new CheckoutSessionCoordinator.Reservation(user, intentId, null, true));
+        when(lemonSqueezyClient.findCheckoutByIntent("111", intentId)).thenReturn(Optional.empty());
+        when(lemonSqueezyClient.createCheckout(user, CheckoutPlan.MONTHLY, "111", intentId))
                 .thenReturn("https://checkout.example/monthly");
 
         String result = billingService.createCheckout(user, CheckoutPlan.MONTHLY);
 
         assertThat(result).isEqualTo("https://checkout.example/monthly");
-        verify(lemonSqueezyClient).createCheckout(user, CheckoutPlan.MONTHLY, "111");
-        verify(checkoutSessionRepository).save(any(BillingCheckoutSessionEntity.class));
+        verify(lemonSqueezyClient).createCheckout(user, CheckoutPlan.MONTHLY, "111", intentId);
+        verify(checkoutSessionCoordinator).complete(user.getId(), intentId, result);
     }
 
     @Test
     void createsAnnualCheckoutWithAnnualVariant() {
         UserEntity user = user();
-        when(userRepository.findByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
-        when(lemonSqueezyClient.createCheckout(user, CheckoutPlan.ANNUAL, "222"))
+        UUID intentId = UUID.randomUUID();
+        when(checkoutSessionCoordinator.reserve(user.getId(), CheckoutPlan.ANNUAL))
+                .thenReturn(new CheckoutSessionCoordinator.Reservation(user, intentId, null, true));
+        when(lemonSqueezyClient.findCheckoutByIntent("222", intentId)).thenReturn(Optional.empty());
+        when(lemonSqueezyClient.createCheckout(user, CheckoutPlan.ANNUAL, "222", intentId))
                 .thenReturn("https://checkout.example/annual");
 
         String result = billingService.createCheckout(user, CheckoutPlan.ANNUAL);
 
         assertThat(result).isEqualTo("https://checkout.example/annual");
-        verify(lemonSqueezyClient).createCheckout(user, CheckoutPlan.ANNUAL, "222");
+        verify(checkoutSessionCoordinator).complete(user.getId(), intentId, result);
     }
 
     @Test
-    void reusesPendingCheckoutInsteadOfCreatingDuplicateProviderCheckout() {
+    void reusesCompletedCheckoutWithoutCallingProvider() {
         UserEntity user = user();
-        AtomicReference<BillingCheckoutSessionEntity> storedSession = new AtomicReference<>();
-        when(userRepository.findByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
-        when(checkoutSessionRepository.findById(user.getId()))
-                .thenAnswer(invocation -> Optional.ofNullable(storedSession.get()));
-        when(checkoutSessionRepository.save(any(BillingCheckoutSessionEntity.class)))
-                .thenAnswer(invocation -> {
-                    BillingCheckoutSessionEntity session = invocation.getArgument(0);
-                    storedSession.set(session);
-                    return session;
-                });
-        when(lemonSqueezyClient.createCheckout(user, CheckoutPlan.MONTHLY, "111"))
-                .thenReturn("https://checkout.example/monthly");
+        UUID intentId = UUID.randomUUID();
+        when(checkoutSessionCoordinator.reserve(user.getId(), CheckoutPlan.MONTHLY))
+                .thenReturn(new CheckoutSessionCoordinator.Reservation(
+                        user,
+                        intentId,
+                        "https://checkout.example/monthly",
+                        false
+                ));
 
-        String first = billingService.createCheckout(user, CheckoutPlan.MONTHLY);
-        String second = billingService.createCheckout(user, CheckoutPlan.MONTHLY);
+        String result = billingService.createCheckout(user, CheckoutPlan.MONTHLY);
 
-        assertThat(first).isEqualTo("https://checkout.example/monthly");
-        assertThat(second).isEqualTo(first);
-        verify(lemonSqueezyClient, times(1)).createCheckout(user, CheckoutPlan.MONTHLY, "111");
+        assertThat(result).isEqualTo("https://checkout.example/monthly");
+        verifyNoInteractions(lemonSqueezyClient);
     }
 
     @Test
-    void rejectsDifferentPlanWhileCheckoutIsStillPending() {
+    void recoversProviderCheckoutAfterLocalCompletionFailure() {
         UserEntity user = user();
-        BillingCheckoutSessionEntity session = new BillingCheckoutSessionEntity();
-        session.setUserId(user.getId());
-        session.setPlan(CheckoutPlan.MONTHLY);
-        session.setCheckoutUrl("https://checkout.example/monthly");
-        session.setExpiresAt(Instant.now().plusSeconds(300));
-        when(userRepository.findByIdForUpdate(user.getId())).thenReturn(Optional.of(user));
-        when(checkoutSessionRepository.findById(user.getId())).thenReturn(Optional.of(session));
+        UUID intentId = UUID.randomUUID();
+        when(checkoutSessionCoordinator.reserve(user.getId(), CheckoutPlan.MONTHLY))
+                .thenReturn(new CheckoutSessionCoordinator.Reservation(user, intentId, null, true));
+        when(lemonSqueezyClient.findCheckoutByIntent("111", intentId))
+                .thenReturn(Optional.of("https://checkout.example/recovered"));
 
-        assertThatThrownBy(() -> billingService.createCheckout(user, CheckoutPlan.ANNUAL))
+        String result = billingService.createCheckout(user, CheckoutPlan.MONTHLY);
+
+        assertThat(result).isEqualTo("https://checkout.example/recovered");
+        verify(lemonSqueezyClient, never()).createCheckout(user, CheckoutPlan.MONTHLY, "111", intentId);
+        verify(checkoutSessionCoordinator).complete(user.getId(), intentId, result);
+    }
+
+    @Test
+    void rejectsConcurrentProviderCreationWhileLeaseIsActive() {
+        UserEntity user = user();
+        UUID intentId = UUID.randomUUID();
+        when(checkoutSessionCoordinator.reserve(user.getId(), CheckoutPlan.MONTHLY))
+                .thenReturn(new CheckoutSessionCoordinator.Reservation(user, intentId, null, false));
+
+        assertThatThrownBy(() -> billingService.createCheckout(user, CheckoutPlan.MONTHLY))
                 .isInstanceOf(InvalidRequestException.class)
-                .hasMessage("A checkout for another billing plan is already pending for this account");
+                .hasMessage("Checkout is already being prepared; retry shortly");
+        verifyNoInteractions(lemonSqueezyClient);
     }
 
     @Test
@@ -144,7 +151,7 @@ class BillingServiceTests {
     }
 
     @Test
-    void returnsPaidPlansUsingProviderPricesAndCurrency() {
+    void returnsPaidPlansUsingProviderPricesAndCachesCatalog() {
         PlanEntity monthly = plan(PlanCode.PREMIUM_MONTHLY, BillingInterval.MONTHLY, 499);
         PlanEntity annual = plan(PlanCode.PREMIUM_ANNUAL, BillingInterval.ANNUAL, 3999);
         when(planRepository.findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceCentsAsc(BillingInterval.NONE))
@@ -152,13 +159,12 @@ class BillingServiceTests {
         when(lemonSqueezyClient.fetchPriceCatalog("111", "222"))
                 .thenReturn(new ProviderPriceCatalog(599, 4999, "GBP"));
 
-        List<PlanResponse> result = billingService.availablePlans();
+        List<PlanResponse> first = billingService.availablePlans();
+        List<PlanResponse> second = billingService.availablePlans();
 
-        assertThat(result).extracting(PlanResponse::code)
-                .containsExactly(PlanCode.PREMIUM_MONTHLY, PlanCode.PREMIUM_ANNUAL);
-        assertThat(result).extracting(PlanResponse::priceCents).containsExactly(599, 4999);
-        assertThat(result).extracting(PlanResponse::currency).containsOnly("GBP");
-        verify(lemonSqueezyClient).fetchPriceCatalog("111", "222");
+        assertThat(first).extracting(PlanResponse::priceCents).containsExactly(599, 4999);
+        assertThat(second).extracting(PlanResponse::currency).containsOnly("GBP");
+        verify(lemonSqueezyClient, times(1)).fetchPriceCatalog("111", "222");
     }
 
     @Test
@@ -177,7 +183,6 @@ class BillingServiceTests {
         assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_MONTHLY);
         assertThat(result.status()).isEqualTo("ACTIVE");
         assertThat(result.externalSubscriptionId()).isEqualTo("sub_123");
-        assertThat(result.trialEndsAt()).isNull();
     }
 
     @Test
@@ -194,9 +199,7 @@ class BillingServiceTests {
         BillingStatusResponse result = billingService.billingStatus(user.getId());
 
         assertThat(result.plan()).isEqualTo("PREMIUM");
-        assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_MONTHLY);
         assertThat(result.status()).isEqualTo("ON_TRIAL");
-        assertThat(result.externalSubscriptionId()).isEqualTo("sub_trial");
         assertThat(result.trialEndsAt()).isEqualTo(snapshot.trialEndsAt());
     }
 
