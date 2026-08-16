@@ -11,7 +11,6 @@ import org.springframework.util.StringUtils;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Locale;
@@ -61,8 +60,8 @@ public class WebhookService {
 
         verifySignature(rawBody, signature);
         String eventHash = sha256Hex(rawBody);
-        String payloadJson = new String(rawBody, StandardCharsets.UTF_8);
-        WebhookEventStore.WebhookReception reception = webhookEventStore.recordReceived(eventHash, payloadJson);
+        String storedPayload = "{\"redacted\":true,\"size\":" + rawBody.length + "}";
+        WebhookEventStore.WebhookReception reception = webhookEventStore.recordReceived(eventHash, storedPayload);
         if (!reception.shouldProcess()) {
             LOGGER.atInfo()
                     .addKeyValue("event", "webhook_duplicate_ignored")
@@ -156,7 +155,7 @@ public class WebhookService {
     private byte[] hmac(byte[] rawBody, String secret) {
         try {
             Mac mac = Mac.getInstance(HMAC_ALGORITHM);
-            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), HMAC_ALGORITHM));
+            mac.init(new SecretKeySpec(secret.getBytes(java.nio.charset.StandardCharsets.UTF_8), HMAC_ALGORITHM));
             return mac.doFinal(rawBody);
         } catch (Exception exception) {
             throw new IllegalStateException("Unable to verify webhook signature");
