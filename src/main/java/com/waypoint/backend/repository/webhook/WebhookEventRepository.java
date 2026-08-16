@@ -1,5 +1,6 @@
 package com.waypoint.backend.repository.webhook;
 
+import com.waypoint.backend.model.webhook.ProcessingStatus;
 import com.waypoint.backend.model.webhook.WebhookEventEntity;
 
 import jakarta.persistence.LockModeType;
@@ -15,6 +16,8 @@ import java.util.UUID;
 public interface WebhookEventRepository
         extends JpaRepository<WebhookEventEntity, UUID>, JpaSpecificationExecutor<WebhookEventEntity> {
     Optional<WebhookEventEntity> findByEventHash(String eventHash);
+
+    long countByProcessingStatus(ProcessingStatus processingStatus);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select event from WebhookEventEntity event where event.eventHash = :eventHash")
