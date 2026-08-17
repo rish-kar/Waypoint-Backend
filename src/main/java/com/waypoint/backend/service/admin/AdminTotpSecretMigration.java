@@ -28,7 +28,7 @@ public class AdminTotpSecretMigration implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         for (AdminAccountEntity account : adminAccountRepository.findAll()) {
             String secret = account.getTotpSecret();
-            if (StringUtils.hasText(secret) && !totpSecretCipher.isEncrypted(secret)) {
+            if (StringUtils.hasText(secret) && totpSecretCipher.needsReencryption(secret)) {
                 account.setTotpSecret(totpSecretCipher.encrypt(secret));
             }
         }

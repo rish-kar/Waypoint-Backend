@@ -10,6 +10,7 @@ import org.springframework.validation.annotation.Validated;
 public record AdminProperties(
         @NotBlank @Size(max = 100) String id,
         @NotBlank @Size(min = 16, max = 200) String password,
-        String totpSecret
+        String totpSecret,
+        @NotBlank @Size(min = 32, max = 500) String totpEncryptionKey
 ) {
 }

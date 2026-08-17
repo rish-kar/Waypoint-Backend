@@ -72,6 +72,7 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
         rejectPlaceholder("ADMIN_ID", adminProperties.id());
         rejectPlaceholder("ADMIN_PASSWORD", adminProperties.password());
         rejectPlaceholder("ADMIN_TOTP_SECRET", adminProperties.totpSecret());
+        rejectPlaceholder("ADMIN_TOTP_ENCRYPTION_KEY", adminProperties.totpEncryptionKey());
         rejectPlaceholder("JWT_SECRET", jwtProperties.secret());
         rejectPlaceholder("GOOGLE_CLIENT_ID", googleProperties.clientId());
         rejectPlaceholder("LEMON_SQUEEZY_API_KEY", lemonSqueezyProperties.apiKey());
