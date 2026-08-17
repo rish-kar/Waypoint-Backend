@@ -26,6 +26,7 @@ import java.util.UUID;
 public class LemonSqueezyWebClient implements LemonSqueezyClient {
     private static final MediaType JSON_API = MediaType.parseMediaType("application/vnd.api+json");
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
+    private static final int CHECKOUT_PAGE_SIZE = 100;
 
     private final WebClient webClient;
     private final LemonSqueezyProperties properties;
@@ -107,37 +108,35 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
         }
         parseVariantId(variantId);
         try {
-            JsonNode response = webClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/checkouts")
-                            .queryParam("filter[variant_id]", variantId)
-                            .queryParam("page[size]", 100)
-                            .build())
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
-                    .accept(JSON_API)
-                    .retrieve()
-                    .bodyToMono(JsonNode.class)
-                    .timeout(requestTimeout)
-                    .block();
-            if (response == null || !response.path("data").isArray()) {
-                return Optional.empty();
-            }
             String expectedIntent = intentId.toString();
-            for (JsonNode checkout : response.path("data")) {
-                JsonNode attributes = checkout.path("attributes");
-                String checkoutIntent = attributes.path("checkout_data")
-                        .path("custom")
-                        .path("waypoint_checkout_intent")
-                        .asText(null);
-                if (!expectedIntent.equals(checkoutIntent)) {
-                    continue;
+            int pageNumber = 1;
+            while (true) {
+                JsonNode response = fetchCheckoutPage(variantId, pageNumber);
+                JsonNode data = response.path("data");
+                if (!data.isArray()) {
+                    return Optional.empty();
                 }
-                String url = attributes.path("url").asText(null);
-                if (StringUtils.hasText(url)) {
-                    return Optional.of(url);
+                for (JsonNode checkout : data) {
+                    JsonNode attributes = checkout.path("attributes");
+                    String checkoutIntent = attributes.path("checkout_data")
+                            .path("custom")
+                            .path("waypoint_checkout_intent")
+                            .asText(null);
+                    if (!expectedIntent.equals(checkoutIntent)) {
+                        continue;
+                    }
+                    String url = attributes.path("url").asText(null);
+                    if (StringUtils.hasText(url)) {
+                        return Optional.of(url);
+                    }
                 }
+
+                int lastPage = response.path("meta").path("page").path("lastPage").asInt(pageNumber);
+                if (pageNumber >= lastPage || data.isEmpty()) {
+                    return Optional.empty();
+                }
+                pageNumber++;
             }
-            return Optional.empty();
         } catch (ExternalServiceException exception) {
             throw exception;
         } catch (RuntimeException exception) {
@@ -168,6 +167,26 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
         } catch (RuntimeException exception) {
             throw new ExternalServiceException("Unable to load Lemon Squeezy plan pricing", exception);
         }
+    }
+
+    private JsonNode fetchCheckoutPage(String variantId, int pageNumber) {
+        JsonNode response = webClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/checkouts")
+                        .queryParam("filter[variant_id]", variantId)
+                        .queryParam("page[size]", CHECKOUT_PAGE_SIZE)
+                        .queryParam("page[number]", pageNumber)
+                        .build())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
+                .accept(JSON_API)
+                .retrieve()
+                .bodyToMono(JsonNode.class)
+                .timeout(requestTimeout)
+                .block();
+        if (response == null) {
+            throw new ExternalServiceException("Lemon Squeezy did not return checkout recovery data");
+        }
+        return response;
     }
 
     private Mono<Integer> fetchCurrentPrice(String variantId) {

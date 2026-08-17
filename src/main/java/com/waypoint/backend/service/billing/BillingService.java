@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -86,13 +87,21 @@ public class BillingService {
             throw new InvalidRequestException("Checkout is already being prepared; retry shortly");
         }
 
-        String checkoutUrl = lemonSqueezyClient.findCheckoutByIntent(variantId, reservation.intentId())
-                .orElseGet(() -> lemonSqueezyClient.createCheckout(
-                        reservation.user(),
-                        plan,
-                        variantId,
-                        reservation.intentId()
-                ));
+        Optional<String> recoveredCheckout = lemonSqueezyClient.findCheckoutByIntent(variantId, reservation.intentId());
+        if (recoveredCheckout.isPresent()) {
+            checkoutSessionCoordinator.complete(user.getId(), reservation.intentId(), recoveredCheckout.get());
+            return recoveredCheckout.get();
+        }
+        if (reservation.recoveryOnly()) {
+            throw new InvalidRequestException("Checkout creation is being recovered; retry shortly");
+        }
+
+        String checkoutUrl = lemonSqueezyClient.createCheckout(
+                reservation.user(),
+                plan,
+                variantId,
+                reservation.intentId()
+        );
         checkoutSessionCoordinator.complete(user.getId(), reservation.intentId(), checkoutUrl);
         return checkoutUrl;
     }

@@ -18,7 +18,7 @@ import java.util.UUID;
 
 @Service
 public class CheckoutSessionCoordinator {
-    private static final Duration PROVIDER_CALL_LEASE = Duration.ofSeconds(10);
+    private static final Duration PROVIDER_CALL_LEASE = Duration.ofSeconds(30);
     private static final Duration INTENT_RECOVERY_WINDOW = Duration.ofHours(1);
     private static final Duration COMPLETED_CHECKOUT_REUSE_WINDOW = Duration.ofMinutes(15);
 
@@ -46,17 +46,17 @@ public class CheckoutSessionCoordinator {
 
         Instant now = Instant.now();
         BillingCheckoutSessionEntity session = checkoutSessionRepository.findById(userId).orElse(null);
+        boolean recoveryOnly = false;
         if (session != null && session.getExpiresAt() != null && session.getExpiresAt().isAfter(now)) {
             if (session.getPlan() != plan) {
                 throw new InvalidRequestException("A checkout for another billing plan is already pending for this account");
             }
             if (StringUtils.hasText(session.getCheckoutUrl())) {
-                return new Reservation(lockedUser, session.getIntentId(), session.getCheckoutUrl(), false);
+                return new Reservation(lockedUser, session.getIntentId(), session.getCheckoutUrl(), false, false);
             }
-            if (session.getIntentId() != null
-                    && session.getProviderRequestStartedAt() != null
-                    && session.getProviderRequestStartedAt().plus(PROVIDER_CALL_LEASE).isAfter(now)) {
-                return new Reservation(lockedUser, session.getIntentId(), null, false);
+            recoveryOnly = session.getIntentId() != null && session.getProviderRequestStartedAt() != null;
+            if (recoveryOnly && session.getProviderRequestStartedAt().plus(PROVIDER_CALL_LEASE).isAfter(now)) {
+                return new Reservation(lockedUser, session.getIntentId(), null, false, true);
             }
         }
 
@@ -68,11 +68,12 @@ public class CheckoutSessionCoordinator {
         session.setCheckoutUrl(null);
         if (session.getIntentId() == null || session.getExpiresAt() == null || !session.getExpiresAt().isAfter(now)) {
             session.setIntentId(UUID.randomUUID());
+            recoveryOnly = false;
         }
         session.setProviderRequestStartedAt(now);
         session.setExpiresAt(now.plus(INTENT_RECOVERY_WINDOW));
         checkoutSessionRepository.saveAndFlush(session);
-        return new Reservation(lockedUser, session.getIntentId(), null, true);
+        return new Reservation(lockedUser, session.getIntentId(), null, true, recoveryOnly);
     }
 
     @Transactional
@@ -90,6 +91,12 @@ public class CheckoutSessionCoordinator {
         checkoutSessionRepository.save(session);
     }
 
-    public record Reservation(UserEntity user, UUID intentId, String checkoutUrl, boolean providerOwner) {
+    public record Reservation(
+            UserEntity user,
+            UUID intentId,
+            String checkoutUrl,
+            boolean providerOwner,
+            boolean recoveryOnly
+    ) {
     }
 }
