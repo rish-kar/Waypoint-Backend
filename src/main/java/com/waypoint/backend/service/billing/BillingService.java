@@ -26,8 +26,7 @@ import java.util.UUID;
 
 @Service
 public class BillingService {
-    private static final Duration PRICE_CACHE_TTL = Duration.ofMinutes(5);
-    private static final Duration PRICE_STALE_TTL = Duration.ofHours(1);
+    private static final Duration PRICE_CACHE_TTL = Duration.ofSeconds(30);
 
     private final LemonSqueezyClient lemonSqueezyClient;
     private final LemonSqueezyProperties properties;
@@ -135,20 +134,13 @@ public class BillingService {
                 return cached;
             }
 
-            try {
-                ProviderPriceCatalog fresh = lemonSqueezyClient.fetchPriceCatalog(
-                        properties.monthlyVariantId(),
-                        properties.annualVariantId()
-                );
-                cachedPriceCatalog = fresh;
-                cachedPriceCatalogAt = now;
-                return fresh;
-            } catch (RuntimeException exception) {
-                if (cached != null && cachedAt != null && cachedAt.plus(PRICE_STALE_TTL).isAfter(now)) {
-                    return cached;
-                }
-                throw exception;
-            }
+            ProviderPriceCatalog fresh = lemonSqueezyClient.fetchPriceCatalog(
+                    properties.monthlyVariantId(),
+                    properties.annualVariantId()
+            );
+            cachedPriceCatalog = fresh;
+            cachedPriceCatalogAt = now;
+            return fresh;
         }
     }
 
