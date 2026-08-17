@@ -16,6 +16,17 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    container_name: waypoint-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   backend:
     build:
       context: .
@@ -26,6 +37,7 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-waypoint}
       DATABASE_USERNAME: ${POSTGRES_USER:-waypoint}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       ADMIN_ID: ${ADMIN_ID:-local-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-local-admin-password-change-me}
       ADMIN_TOTP_SECRET: ${ADMIN_TOTP_SECRET:-}
@@ -43,6 +55,8 @@ services:
       - "8080:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 

@@ -69,6 +69,10 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
         requireHttps("GOOGLE_TOKEN_INFO_URL", googleProperties.tokenInfoUrl());
         requireHttps("GOOGLE_USER_INFO_URL", googleProperties.userInfoUrl());
         requireHttps("LEMON_SQUEEZY_API_BASE_URL", lemonSqueezyProperties.apiBaseUrl());
+        requireRedisUrl(environment.getProperty("spring.data.redis.url"));
+        if (!environment.getProperty("security.distributed-state-enabled", Boolean.class, false)) {
+            throw new IllegalStateException("Distributed security state must be enabled in production");
+        }
         rejectPlaceholder("ADMIN_ID", adminProperties.id());
         rejectPlaceholder("ADMIN_PASSWORD", adminProperties.password());
         rejectPlaceholder("ADMIN_TOTP_SECRET", adminProperties.totpSecret());
@@ -108,6 +112,22 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
         }
         if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
             throw new IllegalStateException(variableName + " must be a valid absolute HTTPS URL");
+        }
+    }
+
+    private void requireRedisUrl(String value) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalStateException("REDIS_URL must be configured in production");
+        }
+        URI uri;
+        try {
+            uri = URI.create(value);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("REDIS_URL must be a valid redis:// or rediss:// URL", exception);
+        }
+        if ((!("redis".equalsIgnoreCase(uri.getScheme()) || "rediss".equalsIgnoreCase(uri.getScheme())))
+                || uri.getHost() == null) {
+            throw new IllegalStateException("REDIS_URL must be a valid redis:// or rediss:// URL");
         }
     }
 
