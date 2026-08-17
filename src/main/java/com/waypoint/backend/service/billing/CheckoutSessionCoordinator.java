@@ -98,5 +98,8 @@ public class CheckoutSessionCoordinator {
             boolean providerOwner,
             boolean recoveryOnly
     ) {
+        public Reservation(UserEntity user, UUID intentId, String checkoutUrl, boolean providerOwner) {
+            this(user, intentId, checkoutUrl, providerOwner, false);
+        }
     }
 }
