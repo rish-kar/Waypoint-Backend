@@ -34,105 +34,53 @@ import java.util.List;
 
 @Configuration
 public class SecurityConfig {
-    @Bean
-    PasswordEncoder adminPasswordEncoder() {
-        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
-    }
+    @Bean PasswordEncoder adminPasswordEncoder() { return PasswordEncoderFactories.createDelegatingPasswordEncoder(); }
 
     @Bean
-    UserDetailsService adminUserDetailsService(
-            AdminProperties properties,
-            PasswordEncoder adminPasswordEncoder
-    ) {
+    UserDetailsService adminUserDetailsService(AdminProperties properties, PasswordEncoder adminPasswordEncoder) {
         return new InMemoryUserDetailsManager(User.withUsername(properties.id())
-                .password(adminPasswordEncoder.encode(properties.password()))
-                .roles("ADMIN")
-                .build());
+                .password(adminPasswordEncoder.encode(properties.password())).roles("ADMIN").build());
     }
 
-    @Bean
-    @Order(1)
+    @Bean @Order(1)
     SecurityFilterChain adminSecurityFilterChain(HttpSecurity http, ObjectMapper objectMapper) throws Exception {
-        return http
-                .securityMatcher("/api/v1/admin/**")
-                .csrf(AbstractHttpConfigurer::disable)
-                .cors(AbstractHttpConfigurer::disable)
-                .formLogin(AbstractHttpConfigurer::disable)
-                .logout(AbstractHttpConfigurer::disable)
-                .requestCache(AbstractHttpConfigurer::disable)
+        return http.securityMatcher("/api/v1/admin/**").csrf(AbstractHttpConfigurer::disable)
+                .cors(AbstractHttpConfigurer::disable).formLogin(AbstractHttpConfigurer::disable)
+                .logout(AbstractHttpConfigurer::disable).requestCache(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .httpBasic(basic -> basic.authenticationEntryPoint((request, response, authException) ->
-                        writeSecurityError(
-                                objectMapper,
-                                request,
-                                response,
-                                HttpServletResponse.SC_UNAUTHORIZED,
-                                "UNAUTHORIZED",
-                                "Invalid admin credentials"
-                        )))
+                        writeSecurityError(objectMapper, request, response, HttpServletResponse.SC_UNAUTHORIZED,
+                                "UNAUTHORIZED", "Invalid admin credentials")))
                 .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("ADMIN"))
                 .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint((request, response, authException) -> writeSecurityError(
-                                objectMapper,
-                                request,
-                                response,
-                                HttpServletResponse.SC_UNAUTHORIZED,
-                                "UNAUTHORIZED",
-                                "Invalid admin credentials"
-                        ))
-                        .accessDeniedHandler((request, response, accessDeniedException) -> writeSecurityError(
-                                objectMapper,
-                                request,
-                                response,
-                                HttpServletResponse.SC_FORBIDDEN,
-                                "FORBIDDEN",
-                                "Admin access denied"
-                        )))
-                .build();
+                        .authenticationEntryPoint((request, response, authException) -> writeSecurityError(objectMapper, request, response,
+                                HttpServletResponse.SC_UNAUTHORIZED, "UNAUTHORIZED", "Invalid admin credentials"))
+                        .accessDeniedHandler((request, response, accessDeniedException) -> writeSecurityError(objectMapper, request, response,
+                                HttpServletResponse.SC_FORBIDDEN, "FORBIDDEN", "Admin access denied"))).build();
     }
 
-    @Bean
-    @Order(2)
-    SecurityFilterChain securityFilterChain(
-            HttpSecurity http,
-            JwtAuthenticationFilter jwtAuthenticationFilter,
-            ObjectMapper objectMapper
-    ) throws Exception {
-        return http
-                .csrf(AbstractHttpConfigurer::disable)
-                .httpBasic(AbstractHttpConfigurer::disable)
-                .formLogin(AbstractHttpConfigurer::disable)
-                .logout(AbstractHttpConfigurer::disable)
-                .requestCache(AbstractHttpConfigurer::disable)
-                .cors(cors -> {
-                })
+    @Bean @Order(2)
+    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter,
+                                            ObjectMapper objectMapper) throws Exception {
+        return http.csrf(AbstractHttpConfigurer::disable).httpBasic(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable).logout(AbstractHttpConfigurer::disable)
+                .requestCache(AbstractHttpConfigurer::disable).cors(cors -> { })
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .authorizeHttpRequests(auth -> auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/google").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/microsoft/start").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/microsoft/callback").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/session/exchange").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/session").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/lemonsqueezy").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
-                        .anyRequest().authenticated()
-                )
+                        .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint((request, response, authException) -> writeSecurityError(
-                                objectMapper,
-                                request,
-                                response,
-                                HttpServletResponse.SC_UNAUTHORIZED,
-                                "UNAUTHORIZED",
-                                "Authentication required"
-                        ))
-                        .accessDeniedHandler((request, response, accessDeniedException) -> writeSecurityError(
-                                objectMapper,
-                                request,
-                                response,
-                                HttpServletResponse.SC_FORBIDDEN,
-                                "FORBIDDEN",
-                                "Access denied"
-                        )))
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .build();
+                        .authenticationEntryPoint((request, response, authException) -> writeSecurityError(objectMapper, request, response,
+                                HttpServletResponse.SC_UNAUTHORIZED, "UNAUTHORIZED", "Authentication required"))
+                        .accessDeniedHandler((request, response, accessDeniedException) -> writeSecurityError(objectMapper, request, response,
+                                HttpServletResponse.SC_FORBIDDEN, "FORBIDDEN", "Access denied")))
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class).build();
     }
 
     @Bean
@@ -149,23 +97,12 @@ public class SecurityConfig {
         return source;
     }
 
-    private void writeSecurityError(
-            ObjectMapper objectMapper,
-            HttpServletRequest request,
-            HttpServletResponse response,
-            int status,
-            String code,
-            String message
-    ) throws IOException {
+    private void writeSecurityError(ObjectMapper objectMapper, HttpServletRequest request, HttpServletResponse response,
+                                    int status, String code, String message) throws IOException {
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        objectMapper.writeValue(response.getOutputStream(), new ApiErrorResponse(
-                Instant.now(),
-                status,
-                code,
-                message,
-                request.getRequestURI()
-        ));
+        objectMapper.writeValue(response.getOutputStream(),
+                new ApiErrorResponse(Instant.now(), status, code, message, request.getRequestURI()));
     }
 }
