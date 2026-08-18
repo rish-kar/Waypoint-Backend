@@ -7,6 +7,7 @@ import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.utilities.exception.ExternalServiceException;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -32,6 +33,7 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
     private final LemonSqueezyProperties properties;
     private final Duration requestTimeout;
 
+    @Autowired
     public LemonSqueezyWebClient(WebClient.Builder builder, LemonSqueezyProperties properties) {
         this(builder, properties, REQUEST_TIMEOUT);
     }
