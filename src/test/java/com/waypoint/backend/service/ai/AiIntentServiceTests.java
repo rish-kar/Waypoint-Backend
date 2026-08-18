@@ -1,5 +1,7 @@
 package com.waypoint.backend.service.ai;
 
+import com.waypoint.backend.model.ai.AiChatRequest;
+import com.waypoint.backend.model.ai.AiChatResponse;
 import com.waypoint.backend.model.ai.AiIntentRequest;
 import com.waypoint.backend.model.ai.AiIntentResponse;
 import com.waypoint.backend.utilities.client.ai.AiModelClient;
@@ -84,6 +86,7 @@ class AiIntentServiceTests {
         assertThat(service.models().defaultModel()).isEqualTo("self-hosted");
         assertThat(service.models().models()).hasSize(1);
         assertThat(service.models().models().getFirst().enabled()).isTrue();
+        assertThat(service.models().models().getFirst().label()).isEqualTo("Cloud AI");
     }
 
     private AiIntentRequest request(String model) {
@@ -138,6 +141,11 @@ class AiIntentServiceTests {
         @Override
         public AiIntentResponse route(AiIntentRequest request) {
             return response;
+        }
+
+        @Override
+        public AiChatResponse chat(AiChatRequest request) {
+            return new AiChatResponse("Test answer", "page", "self-hosted");
         }
 
         @Override
