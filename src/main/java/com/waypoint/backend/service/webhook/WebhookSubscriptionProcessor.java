@@ -17,6 +17,7 @@ import tools.jackson.databind.JsonNode;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,6 +30,7 @@ public class WebhookSubscriptionProcessor {
     private final SubscriptionAccessPolicy subscriptionAccessPolicy;
     private final PlanService planService;
     private final LemonSqueezyProperties properties;
+    private final ProviderEventOrderPolicy eventOrderPolicy = new ProviderEventOrderPolicy();
 
     public WebhookSubscriptionProcessor(
             SubscriptionRepository subscriptionRepository,
@@ -51,7 +53,14 @@ public class WebhookSubscriptionProcessor {
         validatePayloadSource(data, attributes, eventName);
 
         String externalSubscriptionId = requireSubscriptionId(data, attributes);
-        Optional<SubscriptionEntity> existing = subscriptionRepository.findByExternalSubscriptionId(externalSubscriptionId);
+        Instant providerEventAt = parseInstant(text(attributes, "updated_at"), "updated_at");
+        Optional<SubscriptionEntity> existing =
+                subscriptionRepository.findByExternalSubscriptionIdForUpdate(externalSubscriptionId);
+        if (existing.isPresent()
+                && !eventOrderPolicy.shouldApply(existing.get().getLastProviderEventAt(), providerEventAt)) {
+            return;
+        }
+
         Optional<UUID> customUserId = optionalWaypointUserId(payload);
         UserEntity user = resolveUser(existing, customUserId);
 
@@ -73,15 +82,16 @@ public class WebhookSubscriptionProcessor {
         subscription.setStatus(resolveStatus(eventName, attributes));
 
         if (attributes.get("trial_ends_at") != null) {
-            subscription.setTrialEndsAt(parseInstant(text(attributes, "trial_ends_at")));
+            subscription.setTrialEndsAt(parseInstant(text(attributes, "trial_ends_at"), "trial_ends_at"));
         }
         if (attributes.get("renews_at") != null) {
-            subscription.setRenewsAt(parseInstant(text(attributes, "renews_at")));
+            subscription.setRenewsAt(parseInstant(text(attributes, "renews_at"), "renews_at"));
         }
         if (attributes.get("ends_at") != null) {
-            subscription.setEndsAt(parseInstant(text(attributes, "ends_at")));
+            subscription.setEndsAt(parseInstant(text(attributes, "ends_at"), "ends_at"));
         }
 
+        subscription.setLastProviderEventAt(providerEventAt);
         subscriptionRepository.save(subscription);
         planService.synchronizeUserPlan(user);
     }
@@ -180,17 +190,17 @@ public class WebhookSubscriptionProcessor {
         return StringUtils.hasText(value) ? value : fallback;
     }
 
-    private Instant parseInstant(String value) {
+    private Instant parseInstant(String value, String field) {
         if (!StringUtils.hasText(value)) {
             return null;
         }
         try {
             return OffsetDateTime.parse(value).toInstant();
-        } catch (Exception ignored) {
+        } catch (DateTimeParseException ignored) {
             try {
                 return Instant.parse(value);
-            } catch (Exception exception) {
-                return null;
+            } catch (DateTimeParseException exception) {
+                throw new InvalidRequestException("Webhook payload has an invalid " + field);
             }
         }
     }

@@ -1,27 +1,30 @@
 package com.waypoint.backend.security.config;
 
-import com.waypoint.backend.config.admin.AdminProperties;
 import com.waypoint.backend.config.application.CorsProperties;
 import com.waypoint.backend.model.common.ApiErrorResponse;
+import com.waypoint.backend.security.admin.AdminTotpFilter;
 import com.waypoint.backend.security.jwt.JwtAuthenticationFilter;
+import com.waypoint.backend.security.ratelimit.DistributedRateLimiter;
+import com.waypoint.backend.security.ratelimit.RequestRateLimitFilter;
+import com.waypoint.backend.service.admin.AdminAccountService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -40,27 +43,25 @@ public class SecurityConfig {
     }
 
     @Bean
-    UserDetailsService adminUserDetailsService(
-            AdminProperties properties,
-            PasswordEncoder adminPasswordEncoder
-    ) {
-        return new InMemoryUserDetailsManager(User.withUsername(properties.id())
-                .password(adminPasswordEncoder.encode(properties.password()))
-                .roles("ADMIN")
-                .build());
-    }
-
-    @Bean
     @Order(1)
-    SecurityFilterChain adminSecurityFilterChain(HttpSecurity http, ObjectMapper objectMapper) throws Exception {
-        return http
+    SecurityFilterChain adminSecurityFilterChain(
+            HttpSecurity http,
+            ObjectMapper objectMapper,
+            AdminAccountService adminAccountService,
+            DistributedRateLimiter distributedRateLimiter,
+            Environment environment
+    ) throws Exception {
+        http
                 .securityMatcher("/api/v1/admin/**")
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf.ignoringRequestMatchers(request ->
+                        environment.acceptsProfiles(Profiles.of("test"))
+                                || request.getHeader("X-Admin-TOTP") != null))
                 .cors(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
                 .requestCache(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .userDetailsService(adminAccountService)
                 .httpBasic(basic -> basic.authenticationEntryPoint((request, response, authException) ->
                         writeSecurityError(
                                 objectMapper,
@@ -70,7 +71,13 @@ public class SecurityConfig {
                                 "UNAUTHORIZED",
                                 "Invalid admin credentials"
                         )))
-                .authorizeHttpRequests(auth -> auth.anyRequest().hasRole("ADMIN"))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/v1/admin/accounts/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/admin/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/admin/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/**").hasRole("SUPER_ADMIN")
+                        .anyRequest().hasAnyRole("ADMIN", "SUPER_ADMIN"))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, authException) -> writeSecurityError(
                                 objectMapper,
@@ -88,7 +95,13 @@ public class SecurityConfig {
                                 "FORBIDDEN",
                                 "Admin access denied"
                         )))
-                .build();
+                .addFilterBefore(new RequestRateLimitFilter(distributedRateLimiter), BasicAuthenticationFilter.class);
+
+        if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            http.requiresChannel(channels -> channels.anyRequest().requiresSecure());
+            http.addFilterAfter(new AdminTotpFilter(adminAccountService), BasicAuthenticationFilter.class);
+        }
+        return http.build();
     }
 
     @Bean
@@ -96,10 +109,13 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             JwtAuthenticationFilter jwtAuthenticationFilter,
-            ObjectMapper objectMapper
+            DistributedRateLimiter distributedRateLimiter,
+            ObjectMapper objectMapper,
+            Environment environment
     ) throws Exception {
-        return http
-                .csrf(AbstractHttpConfigurer::disable)
+        http
+                // Stateless bearer-token API; authentication is never supplied by cookies or an HTTP session.
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/**"))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
@@ -131,8 +147,13 @@ public class SecurityConfig {
                                 "FORBIDDEN",
                                 "Access denied"
                         )))
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .build();
+                .addFilterBefore(new RequestRateLimitFilter(distributedRateLimiter), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            http.requiresChannel(channels -> channels.anyRequest().requiresSecure());
+        }
+        return http.build();
     }
 
     @Bean
@@ -140,7 +161,9 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(properties.allowedOrigins());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Signature", "X-Request-ID"));
+        configuration.setAllowedHeaders(List.of(
+                "Authorization", "Content-Type", "X-Signature", "X-Request-ID", "X-Admin-TOTP"
+        ));
         configuration.setExposedHeaders(List.of("X-Request-ID"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);

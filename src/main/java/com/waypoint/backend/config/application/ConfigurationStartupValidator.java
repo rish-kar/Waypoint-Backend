@@ -12,6 +12,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.net.URI;
 import java.util.Arrays;
@@ -68,8 +69,15 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
         requireHttps("GOOGLE_TOKEN_INFO_URL", googleProperties.tokenInfoUrl());
         requireHttps("GOOGLE_USER_INFO_URL", googleProperties.userInfoUrl());
         requireHttps("LEMON_SQUEEZY_API_BASE_URL", lemonSqueezyProperties.apiBaseUrl());
+        requireRedisUrl(environment.getProperty("spring.data.redis.url"));
+        if (!environment.getProperty("security.distributed-state-enabled", Boolean.class, false)) {
+            throw new IllegalStateException("Distributed security state must be enabled in production");
+        }
         rejectPlaceholder("ADMIN_ID", adminProperties.id());
         rejectPlaceholder("ADMIN_PASSWORD", adminProperties.password());
+        rejectPlaceholder("ADMIN_TOTP_SECRET", adminProperties.totpSecret());
+        rejectPlaceholder("ADMIN_TOTP_ENCRYPTION_KEY", adminProperties.totpEncryptionKey());
+        rejectPlaceholder("JWT_SECRET", jwtProperties.secret());
         rejectPlaceholder("GOOGLE_CLIENT_ID", googleProperties.clientId());
         rejectPlaceholder("LEMON_SQUEEZY_API_KEY", lemonSqueezyProperties.apiKey());
         rejectPlaceholder("LEMON_SQUEEZY_STORE_ID", lemonSqueezyProperties.storeId());
@@ -107,13 +115,34 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
         }
     }
 
+    private void requireRedisUrl(String value) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalStateException("REDIS_URL must be configured in production");
+        }
+        URI uri;
+        try {
+            uri = URI.create(value);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("REDIS_URL must be a valid redis:// or rediss:// URL", exception);
+        }
+        if ((!("redis".equalsIgnoreCase(uri.getScheme()) || "rediss".equalsIgnoreCase(uri.getScheme())))
+                || uri.getHost() == null) {
+            throw new IllegalStateException("REDIS_URL must be a valid redis:// or rediss:// URL");
+        }
+    }
+
     private void rejectPlaceholder(String variableName, String value) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalStateException(variableName + " must be configured in production");
+        }
         String normalized = value.toLowerCase(Locale.ROOT);
         if (normalized.startsWith("local-")
                 || normalized.startsWith("test-")
                 || normalized.contains("placeholder")
                 || normalized.contains("replace")
-                || normalized.contains("change-me")) {
+                || normalized.contains("change-me")
+                || normalized.contains("development")
+                || normalized.contains("change-before-production")) {
             throw new IllegalStateException(variableName + " contains a development placeholder");
         }
     }

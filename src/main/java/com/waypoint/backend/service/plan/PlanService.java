@@ -2,6 +2,7 @@ package com.waypoint.backend.service.plan;
 
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.plan.PlanEntity;
+import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.plan.PlanRepository;
 import com.waypoint.backend.repository.user.UserRepository;
@@ -9,6 +10,8 @@ import com.waypoint.backend.service.subscription.SubscriptionService;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
 
 @Service
 public class PlanService {
@@ -32,14 +35,23 @@ public class PlanService {
                 .orElseThrow(() -> new IllegalStateException("Required plan is missing: " + code));
     }
 
+    @Transactional(readOnly = true)
+    public PlanEntity effectivePlan(UUID userId) {
+        return require(subscriptionService.current(userId).planCode());
+    }
+
     @Transactional
     public PlanEntity synchronizeUserPlan(UserEntity user) {
-        PlanCode targetCode = subscriptionService.current(user.getId()).planCode();
+        SubscriptionSnapshot snapshot = subscriptionService.current(user.getId());
+        PlanCode targetCode = snapshot.planCode();
 
-        if (user.getPlan() == null || user.getPlan().getCode() != targetCode) {
-            user.setPlan(require(targetCode));
-            userRepository.save(user);
+        if (user.getPlan() != null && user.getPlan().getCode() == targetCode) {
+            return user.getPlan();
         }
-        return user.getPlan();
+
+        PlanEntity targetPlan = require(targetCode);
+        user.setPlan(targetPlan);
+        userRepository.save(user);
+        return targetPlan;
     }
 }
