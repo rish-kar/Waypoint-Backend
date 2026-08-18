@@ -39,3 +39,5 @@ jobs:
           git add -A
           git commit -m "Add Cloud AI page conversations" || true
           git push origin HEAD:AI-Integration
+
+# Triggered after workflow registration.
