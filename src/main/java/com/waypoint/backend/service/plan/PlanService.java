@@ -2,6 +2,7 @@ package com.waypoint.backend.service.plan;
 
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.plan.PlanEntity;
+import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.plan.PlanRepository;
 import com.waypoint.backend.repository.user.UserRepository;
@@ -41,12 +42,16 @@ public class PlanService {
 
     @Transactional
     public PlanEntity synchronizeUserPlan(UserEntity user) {
-        PlanEntity targetPlan = effectivePlan(user.getId());
+        SubscriptionSnapshot snapshot = subscriptionService.current(user.getId());
+        PlanCode targetCode = snapshot.planCode();
 
-        if (user.getPlan() == null || user.getPlan().getCode() != targetPlan.getCode()) {
-            user.setPlan(targetPlan);
-            userRepository.save(user);
+        if (user.getPlan() != null && user.getPlan().getCode() == targetCode) {
+            return user.getPlan();
         }
+
+        PlanEntity targetPlan = require(targetCode);
+        user.setPlan(targetPlan);
+        userRepository.save(user);
         return targetPlan;
     }
 }
