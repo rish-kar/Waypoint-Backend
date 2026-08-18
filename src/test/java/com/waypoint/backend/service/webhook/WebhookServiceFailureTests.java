@@ -47,7 +47,7 @@ class WebhookServiceFailureTests {
                 webhookEventStore,
                 webhookSubscriptionProcessor
         );
-        when(webhookEventStore.recordReceived(anyString(), anyString()))
+        when(webhookEventStore.recordReceived(anyString(), anyString(), anyString(), any()))
                 .thenReturn(new WebhookEventStore.WebhookReception(null, true, true));
     }
 
