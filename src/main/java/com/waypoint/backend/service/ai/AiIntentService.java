@@ -1,5 +1,7 @@
 package com.waypoint.backend.service.ai;
 
+import com.waypoint.backend.model.ai.AiChatRequest;
+import com.waypoint.backend.model.ai.AiChatResponse;
 import com.waypoint.backend.model.ai.AiIntentRequest;
 import com.waypoint.backend.model.ai.AiIntentResponse;
 import com.waypoint.backend.model.ai.AiModelCatalogResponse;
@@ -51,23 +53,37 @@ public class AiIntentService {
 
     public AiIntentResponse route(AiIntentRequest request) {
         String requestedModel = normalizeModel(request.model());
+        validateModel(requestedModel);
+        return normalize(selfHostedClient.route(request));
+    }
+
+    public AiChatResponse chat(AiChatRequest request) {
+        String requestedModel = normalizeModel(request.model());
+        validateModel(requestedModel);
+        AiChatResponse response = selfHostedClient.chat(request);
+        if (response == null || !StringUtils.hasText(response.answer())) {
+            throw new ExternalServiceException("Cloud AI returned an empty answer");
+        }
+        return response;
+    }
+
+    public AiModelCatalogResponse models() {
+        AiModelDescriptorResponse selfHosted = new AiModelDescriptorResponse(
+                selfHostedClient.modelId(),
+                "Cloud AI",
+                selfHostedClient.enabled(),
+                "server"
+        );
+        return new AiModelCatalogResponse(selfHostedClient.modelId(), List.of(selfHosted));
+    }
+
+    private void validateModel(String requestedModel) {
         if (!selfHostedClient.modelId().equals(requestedModel)) {
             throw new InvalidRequestException("Unsupported AI model: " + requestedModel);
         }
         if (!selfHostedClient.enabled()) {
             throw new AiUnavailableException("The selected AI model is not enabled");
         }
-        return normalize(selfHostedClient.route(request));
-    }
-
-    public AiModelCatalogResponse models() {
-        AiModelDescriptorResponse selfHosted = new AiModelDescriptorResponse(
-                selfHostedClient.modelId(),
-                "Self-hosted AI",
-                selfHostedClient.enabled(),
-                "server"
-        );
-        return new AiModelCatalogResponse(selfHostedClient.modelId(), List.of(selfHosted));
     }
 
     private AiIntentResponse normalize(AiIntentResponse raw) {
@@ -234,6 +250,6 @@ public class AiIntentService {
     }
 
     private ExternalServiceException invalidModelOutput() {
-        return new ExternalServiceException("Self-hosted AI returned an invalid intent");
+        return new ExternalServiceException("Cloud AI returned an invalid intent");
     }
 }
