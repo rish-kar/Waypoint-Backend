@@ -13,6 +13,7 @@ import com.waypoint.backend.repository.subscription.SubscriptionRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.util.List;
@@ -20,6 +21,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -48,7 +52,8 @@ class SubscriptionServiceTests {
 
     @Test
     void returnsFreeInactiveWhenUserHasNoSubscription() {
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(List.of());
+        premiumCandidates(List.of());
+        when(subscriptionRepository.findFirstByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(Optional.empty());
 
         SubscriptionSnapshot result = subscriptionService.current(userId, now);
 
@@ -85,7 +90,7 @@ class SubscriptionServiceTests {
         Instant trialEndsAt = now.plusSeconds(604800);
         trial.setTrialEndsAt(trialEndsAt);
         trial.setRenewsAt(trialEndsAt);
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(List.of(trial));
+        premiumCandidates(List.of(trial));
         when(subscriptionAccessPolicy.evaluate(trial, now))
                 .thenReturn(new SubscriptionAccessDecision(true, SubscriptionStatus.ON_TRIAL, trialEndsAt));
 
@@ -105,7 +110,8 @@ class SubscriptionServiceTests {
         grant.setActive(true);
         grant.setValidUntil(now.minusSeconds(1));
         when(specialPremiumGrantRepository.findByUserId(userId)).thenReturn(Optional.of(grant));
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(List.of());
+        premiumCandidates(List.of());
+        when(subscriptionRepository.findFirstByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(Optional.empty());
 
         SubscriptionSnapshot result = subscriptionService.current(userId, now);
 
@@ -118,7 +124,7 @@ class SubscriptionServiceTests {
         SubscriptionEntity monthly = subscription(CheckoutPlan.MONTHLY, SubscriptionStatus.ACTIVE, now.minusSeconds(60));
         Instant renewsAt = now.plusSeconds(3600);
         monthly.setRenewsAt(renewsAt);
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(List.of(monthly));
+        premiumCandidates(List.of(monthly));
         when(subscriptionAccessPolicy.evaluate(monthly, now))
                 .thenReturn(new SubscriptionAccessDecision(true, SubscriptionStatus.ACTIVE, renewsAt));
 
@@ -135,7 +141,7 @@ class SubscriptionServiceTests {
         SubscriptionEntity annual = subscription(CheckoutPlan.ANNUAL, SubscriptionStatus.CANCELLED, now.minusSeconds(60));
         Instant endsAt = now.plusSeconds(7200);
         annual.setEndsAt(endsAt);
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(List.of(annual));
+        premiumCandidates(List.of(annual));
         when(subscriptionAccessPolicy.evaluate(annual, now))
                 .thenReturn(new SubscriptionAccessDecision(true, SubscriptionStatus.CANCELLED, endsAt));
 
@@ -150,9 +156,8 @@ class SubscriptionServiceTests {
     @Test
     void fallsBackToFreeWhenLatestSubscriptionHasNoPremiumAccess() {
         SubscriptionEntity expired = subscription(CheckoutPlan.MONTHLY, SubscriptionStatus.EXPIRED, now.minusSeconds(60));
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(List.of(expired));
-        when(subscriptionAccessPolicy.evaluate(expired, now))
-                .thenReturn(new SubscriptionAccessDecision(false, SubscriptionStatus.EXPIRED, null));
+        premiumCandidates(List.of());
+        when(subscriptionRepository.findFirstByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(Optional.of(expired));
 
         SubscriptionSnapshot result = subscriptionService.current(userId, now);
 
@@ -164,13 +169,10 @@ class SubscriptionServiceTests {
 
     @Test
     void selectsPremiumSubscriptionWithLongestRemainingAccess() {
-        SubscriptionEntity monthly = subscription(CheckoutPlan.MONTHLY, SubscriptionStatus.ACTIVE, now);
         SubscriptionEntity annual = subscription(CheckoutPlan.ANNUAL, SubscriptionStatus.CANCELLED, now.minusSeconds(120));
-        Instant monthlyUntil = now.plusSeconds(3600);
         Instant annualUntil = now.plusSeconds(86400);
-        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId)).thenReturn(List.of(monthly, annual));
-        when(subscriptionAccessPolicy.evaluate(monthly, now))
-                .thenReturn(new SubscriptionAccessDecision(true, SubscriptionStatus.ACTIVE, monthlyUntil));
+        annual.setEndsAt(annualUntil);
+        premiumCandidates(List.of(annual));
         when(subscriptionAccessPolicy.evaluate(annual, now))
                 .thenReturn(new SubscriptionAccessDecision(true, SubscriptionStatus.CANCELLED, annualUntil));
 
@@ -179,6 +181,17 @@ class SubscriptionServiceTests {
         assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_ANNUAL);
         assertThat(result.externalSubscriptionId()).isEqualTo(annual.getExternalSubscriptionId());
         assertThat(result.validUntil()).isEqualTo(annualUntil);
+    }
+
+    private void premiumCandidates(List<SubscriptionEntity> candidates) {
+        when(subscriptionRepository.findCurrentPremiumCandidates(
+                eq(userId),
+                eq(now),
+                eq(SubscriptionStatus.ON_TRIAL),
+                anySet(),
+                eq(SubscriptionStatus.CANCELLED),
+                any(Pageable.class)
+        )).thenReturn(candidates);
     }
 
     private SubscriptionEntity subscription(
