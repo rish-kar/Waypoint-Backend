@@ -2,6 +2,9 @@ package com.waypoint.backend.utilities.client.ai;
 
 import com.sun.net.httpserver.HttpServer;
 import com.waypoint.backend.config.ai.AiProperties;
+import com.waypoint.backend.model.ai.AiChatMessage;
+import com.waypoint.backend.model.ai.AiChatRequest;
+import com.waypoint.backend.model.ai.AiChatResponse;
 import com.waypoint.backend.model.ai.AiIntentRequest;
 import com.waypoint.backend.model.ai.AiIntentResponse;
 import com.waypoint.backend.utilities.exception.ExternalServiceException;
@@ -17,6 +20,8 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,16 +32,19 @@ class SelfHostedAiClientTests {
     private AtomicReference<String> requestBody;
     private AtomicReference<String> authorizationHeader;
     private AtomicReference<String> responseContent;
+    private AtomicInteger requestCount;
     private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() throws IOException {
         requestBody = new AtomicReference<>();
         authorizationHeader = new AtomicReference<>();
+        requestCount = new AtomicInteger();
         responseContent = new AtomicReference<>("{\"kind\":\"browser-action\",\"action\":\"group-tabs\",\"scope\":\"matching-tabs\",\"target\":\"project tabs\",\"matchTerms\":[\"project\",\"projects\"],\"sites\":[],\"explicitCurrent\":false,\"explicitAll\":false,\"groupTitle\":\"Project\",\"workspaceName\":\"\",\"wakeAt\":\"\",\"clarification\":\"\"}");
         objectMapper = new ObjectMapper();
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/v1/chat/completions", exchange -> {
+            requestCount.incrementAndGet();
             requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             authorizationHeader.set(exchange.getRequestHeaders().getFirst("Authorization"));
             String response = "{\"choices\":[{\"message\":{\"content\":"
@@ -87,7 +95,33 @@ class SelfHostedAiClientTests {
     }
 
     @Test
-    void failsClosedWhenModelDoesNotReturnStructuredIntent() {
+    void answersFollowUpQuestionsWithRecentConversationHistory() throws Exception {
+        responseContent.set("Her name is Jane.");
+        SelfHostedAiClient client = client("");
+
+        AiChatResponse response = client.chat(new AiChatRequest(
+                "What is the name of his mother?",
+                "John profile",
+                "Profile page",
+                "John is an engineer. His mother is Jane.",
+                List.of(
+                        new AiChatMessage("user", "Who is John?"),
+                        new AiChatMessage("assistant", "John is the engineer described on this page.")
+                ),
+                false,
+                "self-hosted"
+        ));
+
+        assertThat(response.answer()).isEqualTo("Her name is Jane.");
+        assertThat(response.source()).isEqualTo("page");
+        JsonNode outbound = objectMapper.readTree(requestBody.get());
+        assertThat(outbound.at("/messages/1/content").asText()).isEqualTo("Who is John?");
+        assertThat(outbound.at("/messages/2/content").asText()).contains("John is the engineer");
+        assertThat(outbound.at("/messages/3/content").asText()).contains("QUESTION: What is the name of his mother?");
+    }
+
+    @Test
+    void retriesMalformedIntentOnceBeforeFailingClosed() {
         responseContent.set("not-json");
         SelfHostedAiClient client = client("");
 
@@ -102,6 +136,7 @@ class SelfHostedAiClientTests {
         )))
                 .isInstanceOf(ExternalServiceException.class)
                 .hasMessageContaining("malformed structured output");
+        assertThat(requestCount.get()).isEqualTo(2);
         assertThat(authorizationHeader.get()).isNull();
     }
 
