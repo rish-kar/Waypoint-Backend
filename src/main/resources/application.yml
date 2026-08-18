@@ -81,6 +81,14 @@ lemon-squeezy:
   webhook-secret: ${LEMON_SQUEEZY_WEBHOOK_SECRET:}
   api-base-url: ${LEMON_SQUEEZY_API_BASE_URL:https://api.lemonsqueezy.com/v1}
 
+ai:
+  self-hosted:
+    enabled: ${AI_SELF_HOSTED_ENABLED:false}
+    base-url: ${AI_SELF_HOSTED_BASE_URL:http://localhost:11434/v1}
+    api-key: ${AI_SELF_HOSTED_API_KEY:}
+    model: ${AI_SELF_HOSTED_MODEL:qwen3:4b}
+    request-timeout: ${AI_SELF_HOSTED_REQUEST_TIMEOUT:30s}
+
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:}
 
