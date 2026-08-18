@@ -5,6 +5,8 @@ import com.waypoint.backend.utilities.exception.ApiException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -18,9 +20,13 @@ import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ApiErrorResponse> handleApiException(ApiException exception, HttpServletRequest request) {
+        if (exception.status().is5xxServerError()) {
+            logServerError(exception, request, exception.status());
+        }
         return error(exception.status(), exception.code(), exception.getMessage(), request);
     }
 
@@ -44,7 +50,19 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiErrorResponse> handleUnhandled(Exception exception, HttpServletRequest request) {
+        logServerError(exception, request, HttpStatus.INTERNAL_SERVER_ERROR);
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Unexpected server error", request);
+    }
+
+    private void logServerError(Exception exception, HttpServletRequest request, HttpStatus status) {
+        LOGGER.atError()
+                .setCause(exception)
+                .addKeyValue("event", "server_request_failed")
+                .addKeyValue("status", status.value())
+                .addKeyValue("method", request.getMethod())
+                .addKeyValue("path", request.getRequestURI())
+                .addKeyValue("request_id", request.getHeader("X-Request-ID"))
+                .log("Server request failed");
     }
 
     private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String code, String message, HttpServletRequest request) {

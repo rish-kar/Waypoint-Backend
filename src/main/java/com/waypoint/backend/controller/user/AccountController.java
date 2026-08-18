@@ -35,14 +35,13 @@ public class AccountController {
     @GetMapping
     public AccountResponse account(@AuthenticationPrincipal UUID userId) {
         UserEntity user = userService.requireById(userId);
-        planService.synchronizeUserPlan(user);
         EntitlementResponse entitlement = entitlementService.currentEntitlement(userId, false);
         return new AccountResponse(
                 user.getId(),
                 user.getEmail(),
                 user.getDisplayName(),
                 user.getPictureUrl(),
-                PlanResponse.from(user.getPlan()),
+                PlanResponse.from(planService.effectivePlan(userId)),
                 entitlement
         );
     }

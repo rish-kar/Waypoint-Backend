@@ -1,14 +1,14 @@
-FROM maven:3.9.14-eclipse-temurin-21 AS build
-WORKDIR /workspace
-COPY pom.xml .
-COPY src ./src
-RUN mvn -B -DskipTests package
-
-FROM eclipse-temurin:21-jre
+FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /app
-RUN groupadd --system waypoint && useradd --system --gid waypoint --home-dir /app waypoint
-COPY --from=build --chown=waypoint:waypoint /workspace/target/waypoint-backend-0.0.1-SNAPSHOT.jar app.jar
+COPY pom.xml .
+RUN mvn -B -q dependency:go-offline
+COPY src ./src
+RUN mvn -B -q clean verify
+
+FROM eclipse-temurin:21-jre-alpine
+RUN addgroup -S waypoint && adduser -S waypoint -G waypoint
+WORKDIR /app
+COPY --from=build /app/target/waypoint-backend-*.jar app.jar
 USER waypoint
-ENV SPRING_PROFILES_ACTIVE=prod
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "/app/app.jar"]

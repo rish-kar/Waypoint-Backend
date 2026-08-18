@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer;
 import com.waypoint.backend.config.billing.LemonSqueezyProperties;
 import com.waypoint.backend.model.subscription.CheckoutPlan;
 import com.waypoint.backend.model.user.UserEntity;
+import com.waypoint.backend.utilities.exception.ExternalServiceException;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,10 +16,12 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class LemonSqueezyWebClientTests {
     private HttpServer server;
@@ -50,18 +53,9 @@ class LemonSqueezyWebClientTests {
 
     @Test
     void createsCheckoutLockedToRequestedVariantAndPassesWaypointIdentity() throws Exception {
-        LemonSqueezyProperties properties = new LemonSqueezyProperties(
-                "secret-api-key",
-                "123",
-                "111",
-                "222",
-                "webhook-secret",
-                "http://localhost:" + server.getAddress().getPort()
-        );
+        LemonSqueezyProperties properties = properties();
         LemonSqueezyWebClient client = new LemonSqueezyWebClient(WebClient.builder(), properties);
-        UserEntity user = new UserEntity();
-        user.setId(UUID.randomUUID());
-        user.setEmail("user@example.com");
+        UserEntity user = user();
 
         String checkoutUrl = client.createCheckout(user, CheckoutPlan.MONTHLY, "111");
 
@@ -77,5 +71,52 @@ class LemonSqueezyWebClientTests {
                 .isEqualTo(user.getId().toString());
         assertThat(payload.at("/data/attributes/checkout_data/custom/waypoint_plan").asText())
                 .isEqualTo("MONTHLY");
+    }
+
+    @Test
+    void timesOutSlowCheckoutRequests() {
+        server.removeContext("/checkouts");
+        server.createContext("/checkouts", exchange -> {
+            try {
+                Thread.sleep(250);
+                byte[] response = "{\"data\":{\"attributes\":{\"url\":\"https://checkout.example/late\"}}}"
+                        .getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type", "application/vnd.api+json");
+                exchange.sendResponseHeaders(200, response.length);
+                exchange.getResponseBody().write(response);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        });
+
+        LemonSqueezyWebClient client = new LemonSqueezyWebClient(
+                WebClient.builder(),
+                properties(),
+                Duration.ofMillis(50)
+        );
+
+        assertThatThrownBy(() -> client.createCheckout(user(), CheckoutPlan.MONTHLY, "111"))
+                .isInstanceOf(ExternalServiceException.class)
+                .hasMessage("Unable to create Lemon Squeezy checkout");
+    }
+
+    private LemonSqueezyProperties properties() {
+        return new LemonSqueezyProperties(
+                "secret-api-key",
+                "123",
+                "111",
+                "222",
+                "webhook-secret",
+                "http://localhost:" + server.getAddress().getPort()
+        );
+    }
+
+    private UserEntity user() {
+        UserEntity user = new UserEntity();
+        user.setId(UUID.randomUUID());
+        user.setEmail("user@example.com");
+        return user;
     }
 }

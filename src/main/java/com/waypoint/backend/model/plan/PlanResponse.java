@@ -21,4 +21,18 @@ public record PlanResponse(
                 plan.isPremium()
         );
     }
+
+    public static PlanResponse from(PlanEntity plan, int priceCents, String currency) {
+        if (plan == null) {
+            return null;
+        }
+        return new PlanResponse(
+                plan.getCode(),
+                plan.getDisplayName(),
+                plan.getBillingInterval(),
+                priceCents,
+                currency,
+                plan.isPremium()
+        );
+    }
 }

@@ -166,6 +166,46 @@ class WebhookIntegrationTests {
     }
 
     @Test
+    void rejectsMalformedSubscriptionDateAndPersistsFailure() throws Exception {
+        UserEntity user = createUser();
+        JsonNode node = objectMapper.readTree("""
+                {
+                  "meta": {
+                    "event_name": "subscription_updated",
+                    "custom_data": {"waypoint_user_id": "%s"}
+                  },
+                  "data": {
+                    "type": "subscriptions",
+                    "id": "sub_invalid_date",
+                    "attributes": {
+                      "store_id": 123,
+                      "customer_id": 123,
+                      "product_id": 456,
+                      "variant_id": 111,
+                      "status": "active",
+                      "renews_at": "not-a-date",
+                      "ends_at": null
+                    }
+                  }
+                }
+                """.formatted(user.getId()));
+        String payload = objectMapper.writeValueAsString(node);
+
+        mockMvc.perform(post("/api/v1/webhooks/lemonsqueezy")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Signature", hmac(payload))
+                        .content(payload))
+                .andExpect(status().isBadRequest());
+
+        assertThat(subscriptionRepository.findByExternalSubscriptionId("sub_invalid_date")).isEmpty();
+        assertThat(webhookEventRepository.findAll()).singleElement()
+                .satisfies(event -> {
+                    assertThat(event.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED);
+                    assertThat(event.getErrorMessage()).contains("invalid renews_at");
+                });
+    }
+
+    @Test
     void rejectsWebhookFromUnexpectedStoreAndPersistsFailure() throws Exception {
         UserEntity user = createUser();
         String payload = subscriptionWebhook(user.getId(), "sub_wrong_store", "active", "999");

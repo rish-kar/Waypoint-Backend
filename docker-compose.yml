@@ -5,9 +5,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-waypoint}
       POSTGRES_USER: ${POSTGRES_USER:-waypoint}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-waypoint}
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - waypoint-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -16,6 +14,17 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: waypoint-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   backend:
@@ -27,7 +36,12 @@ services:
       PORT: 8080
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-waypoint}
       DATABASE_USERNAME: ${POSTGRES_USER:-waypoint}
-      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-waypoint}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      ADMIN_ID: ${ADMIN_ID:-local-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-local-admin-password-change-me}
+      ADMIN_TOTP_SECRET: ${ADMIN_TOTP_SECRET:-}
+      ADMIN_TOTP_ENCRYPTION_KEY: ${ADMIN_TOTP_ENCRYPTION_KEY:-waypoint-local-admin-totp-encryption-key-change-before-production}
       JWT_SECRET: ${JWT_SECRET:-waypoint-local-development-secret-change-before-production}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       LEMON_SQUEEZY_API_KEY: ${LEMON_SQUEEZY_API_KEY:-local-lemon-squeezy-api-key}
@@ -41,6 +55,8 @@ services:
       - "8080:8080"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 

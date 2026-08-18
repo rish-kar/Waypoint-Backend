@@ -11,13 +11,23 @@ import com.waypoint.backend.security.jwt.JwtProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.util.TimeZone;
 
 @SpringBootApplication
-@EnableConfigurationProperties({AdminProperties.class, AppProperties.class, CorsProperties.class,
-        GoogleProperties.class, MicrosoftOAuthProperties.class, JwtProperties.class, LemonSqueezyProperties.class})
+@EnableScheduling
+@EnableConfigurationProperties({
+        AdminProperties.class,
+        AppProperties.class,
+        CorsProperties.class,
+        GoogleProperties.class,
+        MicrosoftOAuthProperties.class,
+        JwtProperties.class,
+        LemonSqueezyProperties.class
+})
 public class WaypointBackendApplication {
+
     public static void main(String[] args) {
         System.setProperty("user.timezone", "UTC");
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"));

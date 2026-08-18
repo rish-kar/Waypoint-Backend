@@ -6,20 +6,25 @@ import com.waypoint.backend.model.auth.MicrosoftAuthStartRequest;
 import com.waypoint.backend.model.auth.MicrosoftAuthStartResponse;
 import com.waypoint.backend.model.auth.SessionExchangeRequest;
 import com.waypoint.backend.model.auth.SessionResponse;
+import com.waypoint.backend.security.jwt.JwtClaims;
+import com.waypoint.backend.security.jwt.JwtRevocationService;
 import com.waypoint.backend.service.auth.GoogleAuthService;
 import com.waypoint.backend.service.auth.MicrosoftOAuthService;
 import com.waypoint.backend.service.auth.WaypointSessionService;
+import com.waypoint.backend.utilities.exception.UnauthorizedException;
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
@@ -31,12 +36,18 @@ public class AuthController {
     private final GoogleAuthService googleAuthService;
     private final MicrosoftOAuthService microsoftOAuthService;
     private final WaypointSessionService sessionService;
+    private final JwtRevocationService jwtRevocationService;
 
-    public AuthController(GoogleAuthService googleAuthService, MicrosoftOAuthService microsoftOAuthService,
-                          WaypointSessionService sessionService) {
+    public AuthController(
+            GoogleAuthService googleAuthService,
+            MicrosoftOAuthService microsoftOAuthService,
+            WaypointSessionService sessionService,
+            JwtRevocationService jwtRevocationService
+    ) {
         this.googleAuthService = googleAuthService;
         this.microsoftOAuthService = microsoftOAuthService;
         this.sessionService = sessionService;
+        this.jwtRevocationService = jwtRevocationService;
     }
 
     @PostMapping("/google")
@@ -50,11 +61,15 @@ public class AuthController {
     }
 
     @GetMapping("/microsoft/callback")
-    public ResponseEntity<Void> microsoftCallback(@RequestParam(required = false) String code,
-                                                   @RequestParam(required = false) String state,
-                                                   @RequestParam(required = false) String error) {
+    public ResponseEntity<Void> microsoftCallback(
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) String error
+    ) {
         URI redirect = microsoftOAuthService.callback(code, state, error);
-        return ResponseEntity.status(HttpStatus.FOUND).header(HttpHeaders.LOCATION, redirect.toASCIIString()).build();
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, redirect.toASCIIString())
+                .build();
     }
 
     @PostMapping("/session/exchange")
@@ -70,5 +85,14 @@ public class AuthController {
     @PostMapping("/session/refresh")
     public AuthResponse refresh(@AuthenticationPrincipal UUID userId) {
         return sessionService.issue(userId);
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(Authentication authentication) {
+        if (authentication == null || !(authentication.getDetails() instanceof JwtClaims claims)) {
+            throw new UnauthorizedException("Authentication required");
+        }
+        jwtRevocationService.revoke(claims);
     }
 }

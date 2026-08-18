@@ -508,7 +508,9 @@ class WaypointBackendApplicationTests {
         assertThat(webhookEventRepository.findAll()).singleElement()
                 .satisfies(event -> {
                     assertThat(event.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED);
-                    assertThat(event.getPayloadJson()).contains("sub_missing_custom");
+                    assertThat(event.getPayloadJson())
+                            .contains("\"redacted\":true")
+                            .doesNotContain("sub_missing_custom");
                     assertThat(event.getErrorMessage()).contains("waypoint_user_id");
                 });
     }

@@ -7,15 +7,16 @@ import com.waypoint.backend.utilities.exception.UnauthorizedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Set;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -53,6 +54,7 @@ public class WebhookService {
         this.webhookSubscriptionProcessor = webhookSubscriptionProcessor;
     }
 
+    @Transactional
     public void process(byte[] rawBody, String signature) {
         if (rawBody == null || rawBody.length == 0) {
             throw new InvalidRequestException("Webhook payload is empty");
@@ -60,8 +62,25 @@ public class WebhookService {
 
         verifySignature(rawBody, signature);
         String eventHash = sha256Hex(rawBody);
-        String payloadJson = new String(rawBody, StandardCharsets.UTF_8);
-        WebhookEventStore.WebhookReception reception = webhookEventStore.recordReceived(eventHash, payloadJson);
+        String storedPayload = "{\"redacted\":true,\"size\":" + rawBody.length + "}";
+
+        JsonNode payload;
+        try {
+            payload = objectMapper.readTree(rawBody);
+        } catch (JacksonException exception) {
+            webhookEventStore.recordReceived(eventHash, storedPayload, "UNKNOWN", null);
+            markFailed(eventHash, "UNKNOWN", null, exception);
+            throw new InvalidRequestException("Unable to parse webhook payload");
+        }
+
+        String eventName = normalizeEventName(text(payload.path("meta"), "event_name"));
+        String externalObjectId = text(payload.path("data"), "id");
+        WebhookEventStore.WebhookReception reception = webhookEventStore.recordReceived(
+                eventHash,
+                storedPayload,
+                eventName,
+                externalObjectId
+        );
         if (!reception.shouldProcess()) {
             LOGGER.atInfo()
                     .addKeyValue("event", "webhook_duplicate_ignored")
@@ -71,13 +90,7 @@ public class WebhookService {
             return;
         }
 
-        String eventName = "UNKNOWN";
-        String externalObjectId = null;
         try {
-            JsonNode payload = objectMapper.readTree(rawBody);
-            eventName = normalizeEventName(text(payload.path("meta"), "event_name"));
-            externalObjectId = text(payload.path("data"), "id");
-
             if (!StringUtils.hasText(eventName) || "UNKNOWN".equals(eventName)) {
                 throw new InvalidRequestException("Webhook payload is missing meta.event_name");
             }
@@ -101,20 +114,25 @@ public class WebhookService {
                     .addKeyValue("event_name", eventName)
                     .addKeyValue("external_object_id", externalObjectId)
                     .log("Webhook processed");
+        } catch (InvalidRequestException exception) {
+            markFailed(eventHash, eventName, externalObjectId, exception);
+            throw exception;
         } catch (Exception exception) {
-            webhookEventStore.markFailed(eventHash, eventName, externalObjectId, safeMessage(exception));
-            LOGGER.atWarn()
-                    .addKeyValue("event", "webhook_processing_failed")
-                    .addKeyValue("provider", "lemon_squeezy")
-                    .addKeyValue("event_name", eventName)
-                    .addKeyValue("external_object_id", externalObjectId)
-                    .addKeyValue("reason", exception.getClass().getSimpleName())
-                    .log("Webhook processing failed");
-            if (exception instanceof InvalidRequestException invalidRequestException) {
-                throw invalidRequestException;
-            }
-            throw new InvalidRequestException("Unable to process webhook payload");
+            markFailed(eventHash, eventName, externalObjectId, exception);
+            throw new IllegalStateException("Unable to process webhook payload", exception);
         }
+    }
+
+    private void markFailed(String eventHash, String eventName, String externalObjectId, Exception exception) {
+        webhookEventStore.markFailed(eventHash, eventName, externalObjectId, safeMessage(exception));
+        LOGGER.atWarn()
+                .setCause(exception)
+                .addKeyValue("event", "webhook_processing_failed")
+                .addKeyValue("provider", "lemon_squeezy")
+                .addKeyValue("event_name", eventName)
+                .addKeyValue("external_object_id", externalObjectId)
+                .addKeyValue("reason", exception.getClass().getSimpleName())
+                .log("Webhook processing failed");
     }
 
     private void verifySignature(byte[] rawBody, String signature) {
@@ -147,7 +165,7 @@ public class WebhookService {
     private byte[] hmac(byte[] rawBody, String secret) {
         try {
             Mac mac = Mac.getInstance(HMAC_ALGORITHM);
-            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), HMAC_ALGORITHM));
+            mac.init(new SecretKeySpec(secret.getBytes(java.nio.charset.StandardCharsets.UTF_8), HMAC_ALGORITHM));
             return mac.doFinal(rawBody);
         } catch (Exception exception) {
             throw new IllegalStateException("Unable to verify webhook signature");

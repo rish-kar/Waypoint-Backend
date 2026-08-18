@@ -15,6 +15,7 @@ import com.waypoint.backend.model.admin.PremiumSpecialSummaryResponse;
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.subscription.SubscriptionStatus;
 import com.waypoint.backend.model.webhook.ProcessingStatus;
+import com.waypoint.backend.service.admin.AdminOverviewService;
 import com.waypoint.backend.service.admin.AdminService;
 
 import jakarta.validation.Valid;
@@ -38,14 +39,16 @@ import java.util.UUID;
 @RequestMapping("/api/v1/admin")
 public class AdminController {
     private final AdminService adminService;
+    private final AdminOverviewService adminOverviewService;
 
-    public AdminController(AdminService adminService) {
+    public AdminController(AdminService adminService, AdminOverviewService adminOverviewService) {
         this.adminService = adminService;
+        this.adminOverviewService = adminOverviewService;
     }
 
     @GetMapping("/overview")
     public AdminOverviewResponse overview() {
-        return adminService.overview();
+        return adminOverviewService.overview();
     }
 
     @GetMapping(value = "/users", params = "!email")
