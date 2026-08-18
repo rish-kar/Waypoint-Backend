@@ -1,0 +1,34 @@
+name: Verify Cloud AI access once
+
+on:
+  push:
+    branches:
+      - AI-Integration
+    paths:
+      - .github/workflows/verify-ai-access-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: AI-Integration
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - run: mvn -B clean verify
+      - run: rm .github/workflows/verify-ai-access-once.yml
+      - run: |
+          git config user.name "Rishabh Kar"
+          git config user.email "46086520+rish-kar@users.noreply.github.com"
+          git add -A
+          git commit -m "Verify Cloud AI access changes"
+          git push origin HEAD:AI-Integration
