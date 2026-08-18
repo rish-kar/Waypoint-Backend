@@ -86,7 +86,7 @@ class AiIntentServiceTests {
         assertThat(service.models().defaultModel()).isEqualTo("self-hosted");
         assertThat(service.models().models()).hasSize(1);
         assertThat(service.models().models().getFirst().enabled()).isTrue();
-        assertThat(service.models().models().getFirst().label()).isEqualTo("Cloud AI");
+        assertThat(service.models().models().getFirst().displayName()).isEqualTo("Cloud AI");
     }
 
     private AiIntentRequest request(String model) {
