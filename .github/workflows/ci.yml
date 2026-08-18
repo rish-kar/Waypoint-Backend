@@ -59,7 +59,20 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Check dependency graph availability
+        id: dependency-graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "/repos/${GITHUB_REPOSITORY}/dependency-graph/sbom" >/dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Dependency graph is disabled; skipping dependency review."
+          fi
+
       - name: Reject newly introduced vulnerable dependencies
+        if: steps.dependency-graph.outputs.available == 'true'
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: moderate
