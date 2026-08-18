@@ -1,5 +1,7 @@
 package com.waypoint.backend.controller.ai;
 
+import com.waypoint.backend.model.ai.AiChatRequest;
+import com.waypoint.backend.model.ai.AiChatResponse;
 import com.waypoint.backend.model.ai.AiIntentRequest;
 import com.waypoint.backend.model.ai.AiIntentResponse;
 import com.waypoint.backend.model.ai.AiModelCatalogResponse;
@@ -29,5 +31,10 @@ public class AiController {
     @PostMapping("/intent")
     public AiIntentResponse routeIntent(@Valid @RequestBody AiIntentRequest request) {
         return aiIntentService.route(request);
+    }
+
+    @PostMapping("/chat")
+    public AiChatResponse chat(@Valid @RequestBody AiChatRequest request) {
+        return aiIntentService.chat(request);
     }
 }
