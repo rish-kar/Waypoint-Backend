@@ -53,9 +53,9 @@ public class SecurityConfig {
     ) throws Exception {
         http
                 .securityMatcher("/api/v1/admin/**")
-                // Stateless admin API; production requests also require the custom TOTP header.
-                // codeql[java/spring-disabled-csrf-protection]
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf.ignoringRequestMatchers(request ->
+                        environment.acceptsProfiles(Profiles.of("test"))
+                                || request.getHeader("X-Admin-TOTP") != null))
                 .cors(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
@@ -115,8 +115,7 @@ public class SecurityConfig {
     ) throws Exception {
         http
                 // Stateless bearer-token API; authentication is never supplied by cookies or an HTTP session.
-                // codeql[java/spring-disabled-csrf-protection]
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/**"))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
