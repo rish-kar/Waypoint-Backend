@@ -28,10 +28,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final Logger LOGGER = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final JwtService jwtService;
+    private final JwtRevocationService jwtRevocationService;
     private final ObjectMapper objectMapper;
 
-    public JwtAuthenticationFilter(JwtService jwtService, ObjectMapper objectMapper) {
+    public JwtAuthenticationFilter(
+            JwtService jwtService,
+            JwtRevocationService jwtRevocationService,
+            ObjectMapper objectMapper
+    ) {
         this.jwtService = jwtService;
+        this.jwtRevocationService = jwtRevocationService;
         this.objectMapper = objectMapper;
     }
 
@@ -67,11 +73,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             JwtClaims claims = jwtService.parseToken(token);
+            if (jwtRevocationService.isRevoked(claims.tokenId())) {
+                throw new UnauthorizedException("Invalid or expired token");
+            }
+
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                     claims.userId(),
                     null,
                     List.of()
             );
+            authentication.setDetails(claims);
             SecurityContext context = SecurityContextHolder.createEmptyContext();
             context.setAuthentication(authentication);
             SecurityContextHolder.setContext(context);
