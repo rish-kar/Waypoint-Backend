@@ -28,8 +28,18 @@ class MicrosoftTokenCipherTests {
     }
 
     private MicrosoftOAuthProperties properties(String key) {
-        return new MicrosoftOAuthProperties("client", "secret", "common",
-                "http://localhost:8080/api/v1/auth/microsoft/callback", "https://graph.microsoft.com/v1.0/me",
-                key, List.of("https://test-extension.chromiumapp.org/microsoft"), 600, 180);
+        return new MicrosoftOAuthProperties(
+                "client",
+                "secret",
+                "common",
+                "http://localhost:8080/api/v1/auth/microsoft/callback",
+                "https://graph.microsoft.com/v1.0/me",
+                key,
+                null,
+                List.of("https://test-extension.chromiumapp.org/microsoft"),
+                600,
+                180,
+                3600000
+        );
     }
 }
