@@ -25,7 +25,9 @@ public class SubscriptionAccessPolicy {
             return new SubscriptionAccessDecision(false, status, null);
         }
         return switch (status) {
-            case ACTIVE -> new SubscriptionAccessDecision(true, status, subscription.getRenewsAt());
+            case ACTIVE, PAUSED, PAST_DUE -> hasFutureRenewal(subscription, now)
+                    ? new SubscriptionAccessDecision(true, status, subscription.getRenewsAt())
+                    : new SubscriptionAccessDecision(false, status, null);
             case ON_TRIAL -> subscription.getTrialEndsAt() != null && subscription.getTrialEndsAt().isAfter(now)
                     ? new SubscriptionAccessDecision(true, status, subscription.getTrialEndsAt())
                     : new SubscriptionAccessDecision(false, status, null);
@@ -49,5 +51,9 @@ public class SubscriptionAccessPolicy {
     private boolean hasRecognizedPremiumPlanAndVariant(SubscriptionEntity subscription) {
         String expectedPlan = planForVariant(subscription.getExternalVariantId());
         return !"UNKNOWN".equals(expectedPlan) && expectedPlan.equals(subscription.getPlan());
+    }
+
+    private boolean hasFutureRenewal(SubscriptionEntity subscription, Instant now) {
+        return subscription.getRenewsAt() != null && subscription.getRenewsAt().isAfter(now);
     }
 }

@@ -10,16 +10,34 @@ import com.waypoint.backend.model.subscription.SubscriptionStatus;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
 import com.waypoint.backend.repository.subscription.SubscriptionRepository;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class SubscriptionService {
+    private static final Set<SubscriptionStatus> RENEWING_STATUSES = Set.of(
+            SubscriptionStatus.ACTIVE,
+            SubscriptionStatus.PAUSED,
+            SubscriptionStatus.PAST_DUE
+    );
+    private static final Set<SubscriptionStatus> CHECKOUT_BLOCKING_STATUSES = Set.of(
+            SubscriptionStatus.ACTIVE,
+            SubscriptionStatus.ON_TRIAL,
+            SubscriptionStatus.PAUSED,
+            SubscriptionStatus.PAST_DUE,
+            SubscriptionStatus.UNPAID,
+            SubscriptionStatus.UNKNOWN
+    );
+
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionAccessPolicy subscriptionAccessPolicy;
     private final SpecialPremiumGrantRepository specialPremiumGrantRepository;
@@ -45,20 +63,70 @@ public class SubscriptionService {
                 .filter(grant -> isActiveSpecialGrant(grant, now))
                 .orElse(null);
         if (specialGrant != null) {
-            return new SubscriptionSnapshot(
-                    PlanCode.PREMIUM_SPECIAL,
-                    SubscriptionStatus.PREMIUM_SPECIAL,
-                    true,
-                    null,
-                    null,
-                    null,
-                    null,
-                    specialGrant.getValidUntil(),
-                    now
-            );
+            return specialGrantSnapshot(specialGrant, now);
+        }
+        return currentBilling(userId, now);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<UUID, SubscriptionSnapshot> currentForUsers(Set<UUID> userIds, Instant now) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
         }
 
-        return currentBilling(userId, now);
+        Map<UUID, SubscriptionSnapshot> result = new HashMap<>();
+        specialPremiumGrantRepository.findActiveForUsers(userIds, now).forEach(grant ->
+                result.put(grant.getUser().getId(), specialGrantSnapshot(grant, now)));
+
+        Set<UUID> billingUserIds = userIds.stream()
+                .filter(userId -> !result.containsKey(userId))
+                .collect(java.util.stream.Collectors.toSet());
+        if (billingUserIds.isEmpty()) {
+            return result;
+        }
+
+        Map<UUID, Candidate> bestPremium = new HashMap<>();
+        subscriptionRepository.findCurrentPremiumCandidatesForUsers(
+                billingUserIds,
+                now,
+                SubscriptionStatus.ON_TRIAL,
+                RENEWING_STATUSES,
+                SubscriptionStatus.CANCELLED
+        ).forEach(subscription -> {
+            SubscriptionAccessDecision decision = subscriptionAccessPolicy.evaluate(subscription, now);
+            if (!decision.premium()) {
+                return;
+            }
+            UUID userId = subscription.getUser().getId();
+            Candidate candidate = new Candidate(subscription, decision);
+            bestPremium.merge(userId, candidate, this::betterCandidate);
+        });
+        bestPremium.forEach((userId, candidate) -> result.put(userId, premiumSnapshot(
+                candidate.subscription(),
+                candidate.decision(),
+                now
+        )));
+
+        Set<UUID> freeUserIds = billingUserIds.stream()
+                .filter(userId -> !result.containsKey(userId))
+                .collect(java.util.stream.Collectors.toSet());
+        Map<UUID, SubscriptionEntity> latestByUser = new HashMap<>();
+        if (!freeUserIds.isEmpty()) {
+            subscriptionRepository.findLatestForUsers(freeUserIds).forEach(subscription ->
+                    latestByUser.merge(
+                            subscription.getUser().getId(),
+                            subscription,
+                            (left, right) -> comparableUpdatedAt(left).isAfter(comparableUpdatedAt(right)) ? left : right
+                    ));
+        }
+        freeUserIds.forEach(userId -> {
+            SubscriptionEntity latest = latestByUser.get(userId);
+            SubscriptionStatus status = latest == null || latest.getStatus() == null
+                    ? SubscriptionStatus.INACTIVE
+                    : latest.getStatus();
+            result.put(userId, freeSnapshot(status, latest, now));
+        });
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -67,37 +135,76 @@ public class SubscriptionService {
     }
 
     SubscriptionSnapshot currentBilling(UUID userId, Instant now) {
-        List<SubscriptionEntity> subscriptions = subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId);
-        if (subscriptions.isEmpty()) {
-            return freeSnapshot(SubscriptionStatus.INACTIVE, null, now);
+        List<SubscriptionEntity> premiumCandidates = subscriptionRepository.findCurrentPremiumCandidates(
+                userId,
+                now,
+                SubscriptionStatus.ON_TRIAL,
+                RENEWING_STATUSES,
+                SubscriptionStatus.CANCELLED,
+                PageRequest.of(0, 1)
+        );
+        if (!premiumCandidates.isEmpty()) {
+            SubscriptionEntity subscription = premiumCandidates.getFirst();
+            SubscriptionAccessDecision decision = subscriptionAccessPolicy.evaluate(subscription, now);
+            if (decision.premium()) {
+                return premiumSnapshot(subscription, decision, now);
+            }
         }
 
-        return subscriptions.stream()
-                .map(subscription -> new Candidate(
-                        subscription,
-                        subscriptionAccessPolicy.evaluate(subscription, now)
-                ))
-                .filter(candidate -> candidate.decision().premium())
-                .max(Comparator
-                        .comparing((Candidate candidate) -> comparableValidUntil(candidate.decision()))
-                        .thenComparing(candidate -> comparableUpdatedAt(candidate.subscription())))
-                .map(candidate -> premiumSnapshot(candidate, now))
-                .orElseGet(() -> {
-                    SubscriptionEntity latest = subscriptions.getFirst();
-                    SubscriptionStatus status = latest.getStatus() == null
-                            ? SubscriptionStatus.INACTIVE
-                            : latest.getStatus();
-                    return freeSnapshot(status, latest, now);
-                });
+        SubscriptionEntity latest = subscriptionRepository.findFirstByUserIdOrderByUpdatedAtDesc(userId).orElse(null);
+        if (latest == null) {
+            return freeSnapshot(SubscriptionStatus.INACTIVE, null, now);
+        }
+        SubscriptionStatus status = latest.getStatus() == null
+                ? SubscriptionStatus.INACTIVE
+                : latest.getStatus();
+        return freeSnapshot(status, latest, now);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasCheckoutBlockingSubscription(UUID userId) {
+        return hasCheckoutBlockingSubscription(userId, Instant.now());
+    }
+
+    boolean hasCheckoutBlockingSubscription(UUID userId, Instant now) {
+        return subscriptionRepository.existsCheckoutBlockingSubscription(
+                userId,
+                now,
+                CHECKOUT_BLOCKING_STATUSES,
+                SubscriptionStatus.CANCELLED
+        );
+    }
+
+    private Candidate betterCandidate(Candidate left, Candidate right) {
+        Comparator<Candidate> comparator = Comparator
+                .comparing((Candidate candidate) -> comparableValidUntil(candidate.decision()))
+                .thenComparing(candidate -> comparableUpdatedAt(candidate.subscription()));
+        return comparator.compare(left, right) >= 0 ? left : right;
+    }
+
+    private SubscriptionSnapshot specialGrantSnapshot(SpecialPremiumGrantEntity grant, Instant checkedAt) {
+        return new SubscriptionSnapshot(
+                PlanCode.PREMIUM_SPECIAL,
+                SubscriptionStatus.PREMIUM_SPECIAL,
+                true,
+                null,
+                null,
+                null,
+                null,
+                grant.getValidUntil(),
+                checkedAt
+        );
     }
 
     private boolean isActiveSpecialGrant(SpecialPremiumGrantEntity grant, Instant now) {
         return grant.isActive() && (grant.getValidUntil() == null || grant.getValidUntil().isAfter(now));
     }
 
-    private SubscriptionSnapshot premiumSnapshot(Candidate candidate, Instant checkedAt) {
-        SubscriptionEntity subscription = candidate.subscription();
-        SubscriptionAccessDecision decision = candidate.decision();
+    private SubscriptionSnapshot premiumSnapshot(
+            SubscriptionEntity subscription,
+            SubscriptionAccessDecision decision,
+            Instant checkedAt
+    ) {
         return new SubscriptionSnapshot(
                 planCodeFor(subscription),
                 decision.status(),
@@ -147,9 +254,6 @@ public class SubscriptionService {
         return subscription.getUpdatedAt() == null ? Instant.EPOCH : subscription.getUpdatedAt();
     }
 
-    private record Candidate(
-            SubscriptionEntity subscription,
-            SubscriptionAccessDecision decision
-    ) {
+    private record Candidate(SubscriptionEntity subscription, SubscriptionAccessDecision decision) {
     }
 }

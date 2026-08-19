@@ -4,22 +4,25 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -30,5 +33,46 @@ jobs:
           python scripts/sync_postman_collection.py
           git diff --exit-code -- postman/Waypoint-Backend.postman_collection.json
 
-      - name: Verify
+      - name: Unit and application integration tests
         run: mvn -B clean verify
+
+  postgres-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Verify Flyway migrations against PostgreSQL
+        run: mvn -B -Ppostgres-it verify
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Check dependency graph availability
+        id: dependency-graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "/repos/${GITHUB_REPOSITORY}/dependency-graph/sbom" >/dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Dependency graph is disabled; skipping dependency review."
+          fi
+
+      - name: Reject newly introduced vulnerable dependencies
+        if: steps.dependency-graph.outputs.available == 'true'
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: moderate
