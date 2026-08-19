@@ -115,6 +115,38 @@ class MicrosoftOAuthIntegrationTests {
     }
 
     @Test
+    void rejectsExpiredOAuthState() throws Exception {
+        String authorizationUrl = startMicrosoft(false, null);
+        String state = query(authorizationUrl, "state");
+        var transaction = transactionRepository.findAll().getFirst();
+        transaction.setExpiresAt(Instant.now().minusSeconds(1));
+        transactionRepository.saveAndFlush(transaction);
+
+        mockMvc.perform(get("/api/v1/auth/microsoft/callback")
+                        .param("code", "expired-state-code")
+                        .param("state", state))
+                .andExpect(status().isBadRequest());
+
+        assertThat(userRepository.findAll()).isEmpty();
+        assertThat(credentialRepository.findAll()).isEmpty();
+    }
+
+    @Test
+    void rejectsExpiredExchangeCode() throws Exception {
+        String state = query(startMicrosoft(false, null), "state");
+        MvcResult callback = callback("expired-exchange-code", state);
+        String exchangeCode = query(callback.getResponse().getHeader("Location"), "exchange_code");
+        var storedCode = exchangeCodeRepository.findAll().getFirst();
+        storedCode.setExpiresAt(Instant.now().minusSeconds(1));
+        exchangeCodeRepository.saveAndFlush(storedCode);
+
+        mockMvc.perform(post("/api/v1/auth/session/exchange")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"exchangeCode\":\"" + exchangeCode + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void rotatesWaypointRefreshSessionWithoutRequiringAnAccessToken() throws Exception {
         LoginResult login = loginMicrosoft();
 
