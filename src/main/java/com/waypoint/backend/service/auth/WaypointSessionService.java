@@ -54,19 +54,18 @@ public class WaypointSessionService {
     }
 
     @Transactional
-    public AuthResponse refresh(UUID userId, String rawRefreshToken) {
+    public AuthResponse refresh(String rawRefreshToken) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) throw invalidRefreshToken();
         WaypointRefreshSessionEntity session = refreshSessionRepository
                 .findByRefreshTokenHash(tokenGenerator.sha256(rawRefreshToken))
                 .orElseThrow(this::invalidRefreshToken);
         Instant now = Instant.now();
-        if (!session.getUserId().equals(userId)
-                || session.getRevokedAt() != null
-                || !session.getExpiresAt().isAfter(now)) {
+        if (session.getRevokedAt() != null || !session.getExpiresAt().isAfter(now)) {
             throw invalidRefreshToken();
         }
+        UUID userId = session.getUserId();
         session.setRevokedAt(now);
-        refreshSessionRepository.save(session);
+        refreshSessionRepository.saveAndFlush(session);
         return issueInternal(userId);
     }
 

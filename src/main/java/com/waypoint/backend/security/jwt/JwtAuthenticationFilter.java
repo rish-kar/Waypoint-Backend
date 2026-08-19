@@ -31,11 +31,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtRevocationService jwtRevocationService;
     private final ObjectMapper objectMapper;
 
-    public JwtAuthenticationFilter(
-            JwtService jwtService,
-            JwtRevocationService jwtRevocationService,
-            ObjectMapper objectMapper
-    ) {
+    public JwtAuthenticationFilter(JwtService jwtService,
+                                   JwtRevocationService jwtRevocationService,
+                                   ObjectMapper objectMapper) {
         this.jwtService = jwtService;
         this.jwtRevocationService = jwtRevocationService;
         this.objectMapper = objectMapper;
@@ -49,6 +47,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || path.equals("/api/v1/auth/microsoft/start")
                 || path.equals("/api/v1/auth/microsoft/callback")
                 || path.equals("/api/v1/auth/session/exchange")
+                || path.equals("/api/v1/auth/session/refresh")
                 || path.equals("/api/v1/webhooks/lemonsqueezy")
                 || path.equals("/api/v1/admin")
                 || path.startsWith("/api/v1/admin/")
@@ -108,9 +107,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String token = authorization.substring(separator + 1);
-        if (token.isBlank()
-                || !token.equals(token.trim())
-                || token.chars().anyMatch(Character::isWhitespace)) {
+        if (token.isBlank() || !token.equals(token.trim()) || token.chars().anyMatch(Character::isWhitespace)) {
             return null;
         }
         return token;

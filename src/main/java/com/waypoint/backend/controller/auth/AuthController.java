@@ -91,11 +91,8 @@ public class AuthController {
     }
 
     @PostMapping("/session/refresh")
-    public AuthResponse refresh(@Valid @RequestBody SessionRefreshRequest request, Authentication authentication) {
-        JwtClaims claims = requireClaims(authentication);
-        AuthResponse response = sessionService.refresh(claims.userId(), request.refreshToken());
-        jwtRevocationService.revoke(claims);
-        return response;
+    public AuthResponse refresh(@Valid @RequestBody SessionRefreshRequest request) {
+        return sessionService.refresh(request.refreshToken());
     }
 
     @DeleteMapping("/microsoft")

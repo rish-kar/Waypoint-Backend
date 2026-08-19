@@ -37,8 +37,14 @@ public class MicrosoftCredentialService {
     public UserEntity create(UUID userId, String providerUserId, MicrosoftTokenSet tokens) {
         UserEntity user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new UnauthorizedException("Waypoint account is unavailable"));
-        if (credentialRepository.findByUserId(userId).isPresent()) {
-            throw new UnauthorizedException("A Microsoft account is already linked to this Waypoint account");
+        MicrosoftProviderCredentialEntity existing = credentialRepository.findByUserIdForUpdate(userId).orElse(null);
+        if (existing != null) {
+            if (!providerUserId.equals(existing.getProviderUserId())) {
+                throw new UnauthorizedException("A different Microsoft account is already linked to this Waypoint account");
+            }
+            applyTokens(existing, tokens);
+            credentialRepository.saveAndFlush(existing);
+            return user;
         }
         MicrosoftProviderCredentialEntity credential = new MicrosoftProviderCredentialEntity();
         credential.setUser(user);

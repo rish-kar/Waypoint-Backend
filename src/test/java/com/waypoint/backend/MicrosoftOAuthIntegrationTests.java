@@ -45,7 +45,6 @@ import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -116,11 +115,10 @@ class MicrosoftOAuthIntegrationTests {
     }
 
     @Test
-    void rotatesWaypointSessionAndImmediatelyRevokesOldAccessToken() throws Exception {
+    void rotatesWaypointRefreshSessionWithoutRequiringAnAccessToken() throws Exception {
         LoginResult login = loginMicrosoft();
 
         MvcResult refresh = mockMvc.perform(post("/api/v1/auth/session/refresh")
-                        .header("Authorization", "Bearer " + login.accessToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refreshToken\":\"" + login.refreshToken() + "\"}"))
                 .andExpect(status().isOk())
@@ -131,11 +129,10 @@ class MicrosoftOAuthIntegrationTests {
         assertThat(newAccess).isNotEqualTo(login.accessToken());
         assertThat(newRefresh).isNotEqualTo(login.refreshToken());
 
-        mockMvc.perform(get("/api/v1/account").header("Authorization", "Bearer " + login.accessToken()))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/account").header("Authorization", "Bearer " + newAccess))
+                .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/v1/auth/session/refresh")
-                        .header("Authorization", "Bearer " + newAccess)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refreshToken\":\"" + login.refreshToken() + "\"}"))
                 .andExpect(status().isUnauthorized());
