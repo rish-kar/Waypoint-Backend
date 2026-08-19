@@ -3,11 +3,14 @@ package com.waypoint.backend.security.oauth;
 import com.waypoint.backend.config.auth.MicrosoftOAuthProperties;
 
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.Base64;
 
@@ -24,15 +27,7 @@ public class MicrosoftTokenCipher {
     private final SecureRandom secureRandom = new SecureRandom();
 
     public MicrosoftTokenCipher(MicrosoftOAuthProperties properties) {
-        byte[] decoded;
-        try {
-            decoded = Base64.getDecoder().decode(properties.tokenEncryptionKey());
-        } catch (IllegalArgumentException exception) {
-            throw new IllegalStateException("MICROSOFT_TOKEN_ENCRYPTION_KEY must be Base64 encoded", exception);
-        }
-        if (decoded.length != 32) {
-            throw new IllegalStateException("MICROSOFT_TOKEN_ENCRYPTION_KEY must decode to exactly 32 bytes");
-        }
+        byte[] decoded = decodeKey(loadEncodedKey(properties));
         this.key = new SecretKeySpec(decoded, "AES");
     }
 
@@ -72,5 +67,32 @@ public class MicrosoftTokenCipher {
         } catch (Exception exception) {
             throw new IllegalStateException("Unable to decrypt Microsoft credential", exception);
         }
+    }
+
+    private String loadEncodedKey(MicrosoftOAuthProperties properties) {
+        if (StringUtils.hasText(properties.tokenEncryptionKeyFile())) {
+            try {
+                return Files.readString(Path.of(properties.tokenEncryptionKeyFile()), StandardCharsets.UTF_8).trim();
+            } catch (Exception exception) {
+                throw new IllegalStateException("Unable to read MICROSOFT_TOKEN_ENCRYPTION_KEY_FILE", exception);
+            }
+        }
+        if (StringUtils.hasText(properties.tokenEncryptionKey())) {
+            return properties.tokenEncryptionKey();
+        }
+        throw new IllegalStateException("A Microsoft token encryption key or managed key file is required");
+    }
+
+    private byte[] decodeKey(String encodedKey) {
+        byte[] decoded;
+        try {
+            decoded = Base64.getDecoder().decode(encodedKey);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("Microsoft token encryption key must be Base64 encoded", exception);
+        }
+        if (decoded.length != 32) {
+            throw new IllegalStateException("Microsoft token encryption key must decode to exactly 32 bytes");
+        }
+        return decoded;
     }
 }

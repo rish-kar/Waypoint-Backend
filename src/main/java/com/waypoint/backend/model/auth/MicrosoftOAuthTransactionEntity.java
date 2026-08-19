@@ -24,6 +24,8 @@ public class MicrosoftOAuthTransactionEntity {
     @Column(nullable = false, length = 2048)
     private String extensionRedirectUri;
 
+    private UUID linkUserId;
+
     @Column(nullable = false)
     private Instant expiresAt;
 
@@ -34,12 +36,8 @@ public class MicrosoftOAuthTransactionEntity {
 
     @PrePersist
     void prePersist() {
-        if (id == null) {
-            id = UUID.randomUUID();
-        }
-        if (createdAt == null) {
-            createdAt = Instant.now();
-        }
+        if (id == null) id = UUID.randomUUID();
+        if (createdAt == null) createdAt = Instant.now();
     }
 
     public UUID getId() { return id; }
@@ -50,6 +48,8 @@ public class MicrosoftOAuthTransactionEntity {
     public void setCodeVerifierCiphertext(String codeVerifierCiphertext) { this.codeVerifierCiphertext = codeVerifierCiphertext; }
     public String getExtensionRedirectUri() { return extensionRedirectUri; }
     public void setExtensionRedirectUri(String extensionRedirectUri) { this.extensionRedirectUri = extensionRedirectUri; }
+    public UUID getLinkUserId() { return linkUserId; }
+    public void setLinkUserId(UUID linkUserId) { this.linkUserId = linkUserId; }
     public Instant getExpiresAt() { return expiresAt; }
     public void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
     public Instant getConsumedAt() { return consumedAt; }

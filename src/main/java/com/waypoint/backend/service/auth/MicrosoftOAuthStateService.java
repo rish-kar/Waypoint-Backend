@@ -32,6 +32,11 @@ public class MicrosoftOAuthStateService {
 
     @Transactional
     public PendingAuthorization create(String extensionRedirectUri) {
+        return create(extensionRedirectUri, null);
+    }
+
+    @Transactional
+    public PendingAuthorization create(String extensionRedirectUri, UUID linkUserId) {
         String state = tokenGenerator.randomToken(32);
         String verifier = tokenGenerator.randomToken(64);
         Instant expiresAt = Instant.now().plusSeconds(properties.transactionTtlSeconds());
@@ -39,6 +44,7 @@ public class MicrosoftOAuthStateService {
         entity.setStateHash(tokenGenerator.sha256(state));
         entity.setCodeVerifierCiphertext(tokenCipher.encrypt(verifier));
         entity.setExtensionRedirectUri(extensionRedirectUri);
+        entity.setLinkUserId(linkUserId);
         entity.setExpiresAt(expiresAt);
         repository.save(entity);
         return new PendingAuthorization(entity.getId(), state, tokenGenerator.pkceChallenge(verifier), extensionRedirectUri, expiresAt);
@@ -52,7 +58,12 @@ public class MicrosoftOAuthStateService {
         if (entity.getConsumedAt() != null || !entity.getExpiresAt().isAfter(now)) throw invalidState();
         entity.setConsumedAt(now);
         repository.save(entity);
-        return new ConsumedAuthorization(entity.getId(), tokenCipher.decrypt(entity.getCodeVerifierCiphertext()), entity.getExtensionRedirectUri());
+        return new ConsumedAuthorization(
+                entity.getId(),
+                tokenCipher.decrypt(entity.getCodeVerifierCiphertext()),
+                entity.getExtensionRedirectUri(),
+                entity.getLinkUserId()
+        );
     }
 
     private InvalidRequestException invalidState() {
@@ -62,5 +73,6 @@ public class MicrosoftOAuthStateService {
     public record PendingAuthorization(UUID transactionId, String state, String codeChallenge,
                                        String extensionRedirectUri, Instant expiresAt) { }
 
-    public record ConsumedAuthorization(UUID transactionId, String codeVerifier, String extensionRedirectUri) { }
+    public record ConsumedAuthorization(UUID transactionId, String codeVerifier, String extensionRedirectUri,
+                                        UUID linkUserId) { }
 }

@@ -26,22 +26,22 @@ public class UserService {
     private final UserRepository userRepository;
     private final PlanService planService;
     private final GoogleUserProvisioningService googleUserProvisioningService;
+    private final MicrosoftUserProvisioningService microsoftUserProvisioningService;
 
-    public UserService(
-            UserRepository userRepository,
-            PlanService planService,
-            GoogleUserProvisioningService googleUserProvisioningService
-    ) {
+    public UserService(UserRepository userRepository,
+                       PlanService planService,
+                       GoogleUserProvisioningService googleUserProvisioningService,
+                       MicrosoftUserProvisioningService microsoftUserProvisioningService) {
         this.userRepository = userRepository;
         this.planService = planService;
         this.googleUserProvisioningService = googleUserProvisioningService;
+        this.microsoftUserProvisioningService = microsoftUserProvisioningService;
     }
 
     public UserEntity findOrCreateGoogleUser(GoogleProfile profile) {
         String normalizedEmail = normalizeEmail(profile.email());
         PlanEntity freePlan = planService.require(PlanCode.FREE);
-        UserEntity user = userRepository.findByProviderAndProviderUserId(GOOGLE_PROVIDER, profile.providerUserId())
-                .orElse(null);
+        UserEntity user = userRepository.findByProviderAndProviderUserId(GOOGLE_PROVIDER, profile.providerUserId()).orElse(null);
 
         if (user == null) {
             try {
@@ -57,22 +57,46 @@ public class UserService {
         return saved;
     }
 
-    @Transactional
     public UserEntity findOrCreateMicrosoftUser(MicrosoftProfile profile) {
         String normalizedEmail = normalizeEmail(profile.email());
-        UserEntity user = userRepository.findByProviderAndProviderUserId(MICROSOFT_PROVIDER, profile.providerUserId())
-                .orElseGet(() -> userRepository.findByEmail(normalizedEmail)
-                        .orElseGet(() -> newMicrosoftUser(profile.providerUserId())));
-        return updateMicrosoftUser(user, profile);
+        PlanEntity freePlan = planService.require(PlanCode.FREE);
+        UserEntity user = userRepository.findByProviderAndProviderUserId(MICROSOFT_PROVIDER, profile.providerUserId()).orElse(null);
+
+        if (user == null) {
+            if (userRepository.findByEmail(normalizedEmail).isPresent()) {
+                throw new UnauthorizedException("Existing Waypoint account must explicitly link Microsoft after signing in");
+            }
+            try {
+                user = microsoftUserProvisioningService.create(profile, normalizedEmail, freePlan);
+            } catch (DataIntegrityViolationException exception) {
+                user = userRepository.findByProviderAndProviderUserId(MICROSOFT_PROVIDER, profile.providerUserId())
+                        .orElseThrow(() -> new UnauthorizedException("Microsoft account identity conflict"));
+            }
+        }
+
+        UserEntity saved = microsoftUserProvisioningService.updateLogin(user, profile, normalizedEmail, freePlan);
+        planService.synchronizeUserPlan(saved);
+        return saved;
     }
 
     @Transactional
     public UserEntity updateMicrosoftUser(UserEntity user, MicrosoftProfile profile) {
-        if (user.getPlan() == null) {
-            user.setPlan(planService.require(PlanCode.FREE));
-        }
-        user.setEmail(normalizeEmail(profile.email()));
-        user.setDisplayName(profile.displayName());
+        UserEntity managed = userRepository.findByIdForUpdate(user.getId())
+                .orElseThrow(() -> new UnauthorizedException("Waypoint account is unavailable"));
+        UserEntity saved = microsoftUserProvisioningService.updateLogin(
+                managed,
+                profile,
+                normalizeEmail(profile.email()),
+                planService.require(PlanCode.FREE)
+        );
+        planService.synchronizeUserPlan(saved);
+        return saved;
+    }
+
+    @Transactional
+    public UserEntity markMicrosoftLinkedLogin(UUID userId) {
+        UserEntity user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new UnauthorizedException("Waypoint account is unavailable"));
         user.setLastLoginAt(Instant.now());
         UserEntity saved = userRepository.save(user);
         planService.synchronizeUserPlan(saved);
@@ -83,15 +107,6 @@ public class UserService {
     public UserEntity requireById(UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("User not found"));
-    }
-
-    private UserEntity newMicrosoftUser(String providerUserId) {
-        UserEntity created = new UserEntity();
-        created.setProvider(MICROSOFT_PROVIDER);
-        created.setProviderUserId(providerUserId);
-        created.setCreatedAt(Instant.now());
-        created.setPlan(planService.require(PlanCode.FREE));
-        return created;
     }
 
     private String normalizeEmail(String email) {

@@ -37,24 +37,21 @@ public class MicrosoftWebClientOAuthClient implements MicrosoftOAuthClient {
         if (!StringUtils.hasText(authorizationCode) || !StringUtils.hasText(codeVerifier)) {
             throw new UnauthorizedException("Microsoft authentication failed");
         }
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("client_id", properties.clientId());
-        form.add("client_secret", properties.clientSecret());
+        MultiValueMap<String, String> form = baseTokenForm();
         form.add("code", authorizationCode.trim());
         form.add("redirect_uri", properties.callbackUrl());
         form.add("grant_type", "authorization_code");
         form.add("code_verifier", codeVerifier);
-        form.add("scope", String.join(" ", properties.scopes()));
+        return parseTokenSet(postToken(form));
+    }
 
-        JsonNode payload = postToken(form);
-        String accessToken = text(payload, "access_token");
-        String refreshToken = text(payload, "refresh_token");
-        long expiresIn = longValue(payload, "expires_in");
-        String scopes = text(payload, "scope");
-        if (!StringUtils.hasText(accessToken) || !StringUtils.hasText(refreshToken) || expiresIn <= 0) {
-            throw new UnauthorizedException("Microsoft authentication failed");
-        }
-        return new MicrosoftTokenSet(accessToken, refreshToken, expiresIn, scopes);
+    @Override
+    public MicrosoftTokenSet refreshAccessToken(String refreshToken) {
+        if (!StringUtils.hasText(refreshToken)) throw new UnauthorizedException("Microsoft credential is unavailable");
+        MultiValueMap<String, String> form = baseTokenForm();
+        form.add("grant_type", "refresh_token");
+        form.add("refresh_token", refreshToken);
+        return parseTokenSet(postToken(form));
     }
 
     @Override
@@ -88,6 +85,25 @@ public class MicrosoftWebClientOAuthClient implements MicrosoftOAuthClient {
         }
     }
 
+    private MultiValueMap<String, String> baseTokenForm() {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("client_id", properties.clientId());
+        form.add("client_secret", properties.clientSecret());
+        form.add("scope", String.join(" ", properties.scopes()));
+        return form;
+    }
+
+    private MicrosoftTokenSet parseTokenSet(JsonNode payload) {
+        String accessToken = text(payload, "access_token");
+        String refreshToken = text(payload, "refresh_token");
+        long expiresIn = longValue(payload, "expires_in");
+        String scopes = text(payload, "scope");
+        if (!StringUtils.hasText(accessToken) || !StringUtils.hasText(refreshToken) || expiresIn <= 0) {
+            throw new UnauthorizedException("Microsoft authentication failed");
+        }
+        return new MicrosoftTokenSet(accessToken, refreshToken, expiresIn, scopes);
+    }
+
     private JsonNode postToken(MultiValueMap<String, String> form) {
         try {
             return webClient.post()
@@ -99,6 +115,8 @@ public class MicrosoftWebClientOAuthClient implements MicrosoftOAuthClient {
                     .bodyToMono(JsonNode.class)
                     .timeout(REQUEST_TIMEOUT)
                     .block();
+        } catch (UnauthorizedException exception) {
+            throw exception;
         } catch (WebClientResponseException exception) {
             if (exception.getStatusCode().is4xxClientError()) throw new UnauthorizedException("Microsoft authentication failed");
             throw new UpstreamServiceException("Microsoft authentication service is unavailable");

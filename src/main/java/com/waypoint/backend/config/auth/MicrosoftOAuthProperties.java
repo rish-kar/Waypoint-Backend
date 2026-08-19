@@ -17,15 +17,14 @@ public record MicrosoftOAuthProperties(
         @NotBlank @Pattern(regexp = "[A-Za-z0-9._-]+", message = "contains unsupported characters") String tenant,
         @NotBlank @Pattern(regexp = "https?://.+", message = "must be an absolute HTTP or HTTPS URL") String callbackUrl,
         @NotBlank @Pattern(regexp = "https://.+", message = "must be an absolute HTTPS URL") String graphUserUrl,
-        @NotBlank String tokenEncryptionKey,
+        String tokenEncryptionKey,
+        String tokenEncryptionKeyFile,
         @NotEmpty List<@NotBlank String> allowedExtensionRedirectUris,
         @Min(60) long transactionTtlSeconds,
-        @Min(30) long exchangeCodeTtlSeconds
+        @Min(30) long exchangeCodeTtlSeconds,
+        @Min(60000) long cleanupMs
 ) {
     private static final List<String> SCOPES = List.of(
-            "openid",
-            "profile",
-            "email",
             "offline_access",
             "User.Read"
     );
@@ -37,6 +36,7 @@ public record MicrosoftOAuthProperties(
         callbackUrl = trim(callbackUrl);
         graphUserUrl = trim(graphUserUrl);
         tokenEncryptionKey = trim(tokenEncryptionKey);
+        tokenEncryptionKeyFile = trim(tokenEncryptionKeyFile);
         allowedExtensionRedirectUris = allowedExtensionRedirectUris == null
                 ? List.of()
                 : allowedExtensionRedirectUris.stream().map(MicrosoftOAuthProperties::trim).toList();

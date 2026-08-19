@@ -8,6 +8,7 @@ import com.waypoint.backend.model.auth.MicrosoftTokenSet;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.utilities.client.microsoft.MicrosoftOAuthClient;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
+import com.waypoint.backend.utilities.exception.UnauthorizedException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,8 +50,17 @@ public class MicrosoftOAuthService {
     }
 
     public MicrosoftAuthStartResponse start(String redirectUri) {
+        return startInternal(redirectUri, null);
+    }
+
+    public MicrosoftAuthStartResponse startLink(String redirectUri, UUID userId) {
+        if (userId == null) throw new UnauthorizedException("Authentication required");
+        return startInternal(redirectUri, userId);
+    }
+
+    private MicrosoftAuthStartResponse startInternal(String redirectUri, UUID linkUserId) {
         String normalizedRedirectUri = normalizeAllowedRedirectUri(redirectUri);
-        MicrosoftOAuthStateService.PendingAuthorization pending = stateService.create(normalizedRedirectUri);
+        MicrosoftOAuthStateService.PendingAuthorization pending = stateService.create(normalizedRedirectUri, linkUserId);
         String authorizationUrl = UriComponentsBuilder.fromUriString(properties.authorizationUrl())
                 .queryParam("client_id", properties.clientId())
                 .queryParam("response_type", "code")
@@ -62,7 +72,7 @@ public class MicrosoftOAuthService {
                 .queryParam("code_challenge_method", "S256")
                 .build().encode().toUriString();
         long expiresIn = Math.max(1, Duration.between(Instant.now(), pending.expiresAt()).toSeconds());
-        LOGGER.atInfo().addKeyValue("event", "microsoft_oauth_started")
+        LOGGER.atInfo().addKeyValue("event", linkUserId == null ? "microsoft_oauth_started" : "microsoft_link_started")
                 .addKeyValue("transaction_id", pending.transactionId()).log("Microsoft OAuth transaction started");
         return new MicrosoftAuthStartResponse(authorizationUrl, pending.transactionId(), expiresIn);
     }
@@ -79,7 +89,7 @@ public class MicrosoftOAuthService {
         try {
             MicrosoftTokenSet tokens = microsoftOAuthClient.exchangeAuthorizationCode(code, pending.codeVerifier());
             MicrosoftProfile profile = microsoftOAuthClient.fetchProfile(tokens.accessToken());
-            UserEntity user = accountService.link(profile, tokens);
+            UserEntity user = accountService.link(profile, tokens, pending.linkUserId());
             String exchangeCode = exchangeCodeService.issue(user.getId());
             LOGGER.atInfo().addKeyValue("event", "authentication_succeeded").addKeyValue("provider", "microsoft")
                     .addKeyValue("user_id", user.getId()).addKeyValue("transaction_id", pending.transactionId())
