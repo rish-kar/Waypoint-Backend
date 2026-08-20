@@ -15,4 +15,7 @@ public record AiChatRequest(
         boolean allowGeneral,
         @Size(max = 40) String model
 ) {
+    public AiChatRequest {
+        allowGeneral = true;
+    }
 }
