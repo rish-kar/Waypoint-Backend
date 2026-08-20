@@ -9,6 +9,8 @@ import com.waypoint.backend.utilities.exception.InvalidRequestException;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,6 +35,77 @@ class AiIntentServiceTests {
         assertThat(result.scope()).isEqualTo("matching-tabs");
         assertThat(result.explicitCurrent()).isFalse();
         assertThat(result.matchTerms()).containsExactly("repository", "repositories");
+    }
+
+    @Test
+    void rejectsPreviousSelectionWhenNoPreviousSelectionExists() {
+        AiIntentService service = service(response(
+                "browser-action",
+                "close-tabs",
+                "previous-selection",
+                "those tabs",
+                List.of(),
+                false,
+                false
+        ));
+
+        AiIntentResponse result = service.route(request("self-hosted"));
+
+        assertThat(result.kind()).isEqualTo("clarification");
+        assertThat(result.scope()).isEqualTo("none");
+        assertThat(result.clarification()).contains("no previous tab selection");
+    }
+
+    @Test
+    void rejectsPastSnoozeTime() {
+        String pastTime = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1).toString();
+        AiIntentService service = service(new AiIntentResponse(
+                "browser-action",
+                "snooze-tabs",
+                "matching-tabs",
+                "repository tabs",
+                List.of("repository"),
+                List.of(),
+                false,
+                false,
+                "",
+                "",
+                pastTime,
+                "",
+                "self-hosted"
+        ));
+
+        AiIntentResponse result = service.route(request("self-hosted"));
+
+        assertThat(result.kind()).isEqualTo("clarification");
+        assertThat(result.action()).isEqualTo("none");
+        assertThat(result.clarification()).contains("When should those tabs come back");
+    }
+
+    @Test
+    void acceptsFutureSnoozeTime() {
+        String futureTime = OffsetDateTime.now(ZoneOffset.UTC).plusHours(1).toString();
+        AiIntentService service = service(new AiIntentResponse(
+                "browser-action",
+                "snooze-tabs",
+                "matching-tabs",
+                "repository tabs",
+                List.of("repository"),
+                List.of(),
+                false,
+                false,
+                "",
+                "",
+                futureTime,
+                "",
+                "self-hosted"
+        ));
+
+        AiIntentResponse result = service.route(request("self-hosted"));
+
+        assertThat(result.kind()).isEqualTo("browser-action");
+        assertThat(result.action()).isEqualTo("snooze-tabs");
+        assertThat(result.wakeAt()).isEqualTo(futureTime);
     }
 
     @Test
