@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -54,7 +55,7 @@ public class AiIntentService {
     public AiIntentResponse route(AiIntentRequest request) {
         String requestedModel = normalizeModel(request.model());
         validateModel(requestedModel);
-        return normalize(selfHostedClient.route(request));
+        return normalize(selfHostedClient.route(request), request);
     }
 
     public AiChatResponse chat(AiChatRequest request) {
@@ -86,7 +87,7 @@ public class AiIntentService {
         }
     }
 
-    private AiIntentResponse normalize(AiIntentResponse raw) {
+    private AiIntentResponse normalize(AiIntentResponse raw, AiIntentRequest request) {
         String kind = lower(raw.kind());
         if (!KINDS.contains(kind)) {
             throw invalidModelOutput();
@@ -122,6 +123,9 @@ public class AiIntentService {
         if ("current-tab".equals(scope) && !explicitCurrent) {
             scope = "matching-tabs";
         }
+        if ("previous-selection".equals(scope) && !request.lastSelectionAvailable()) {
+            return clarification(target, "There is no previous tab selection to use. Which open tabs should I use?", modelId);
+        }
         if ("all-tabs".equals(scope) && !explicitAll) {
             return clarification(target, "I won't apply that action to every open tab unless you explicitly ask for all tabs.", modelId);
         }
@@ -141,7 +145,7 @@ public class AiIntentService {
         if ("save-workspace".equals(action) && workspaceName.isBlank()) {
             return clarification(target, "What should I call the workspace?", modelId);
         }
-        if ("snooze-tabs".equals(action) && !validDateTime(wakeAt)) {
+        if ("snooze-tabs".equals(action) && !validFutureDateTime(wakeAt)) {
             return clarification(target, "When should those tabs come back?", modelId);
         }
 
@@ -237,13 +241,12 @@ public class AiIntentService {
         return List.copyOf(unique);
     }
 
-    private boolean validDateTime(String value) {
+    private boolean validFutureDateTime(String value) {
         if (!StringUtils.hasText(value)) {
             return false;
         }
         try {
-            OffsetDateTime.parse(value);
-            return true;
+            return OffsetDateTime.parse(value).isAfter(OffsetDateTime.now(ZoneOffset.UTC));
         } catch (DateTimeParseException exception) {
             return false;
         }
