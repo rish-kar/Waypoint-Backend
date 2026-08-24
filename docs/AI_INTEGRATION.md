@@ -26,12 +26,12 @@ Set these environment variables on the backend:
 ```text
 AI_OPENAI_ENABLED=true
 AI_OPENAI_BASE_URL=https://api.openai.com/v1
-AI_OPENAI_API_KEY=<your OpenAI API key>
+OPENAI_API_KEY=<your OpenAI API key>
 AI_OPENAI_MODEL=gpt-5-nano
 AI_OPENAI_REQUEST_TIMEOUT=30s
 ```
 
-Keep `AI_OPENAI_API_KEY` server-side only. Do not include it in the Chrome extension, source control, logs, or client responses.
+Keep `OPENAI_API_KEY` server-side only. Do not include it in the Chrome extension, source control, logs, or client responses.
 
 The backend uses GPT-5 nano through `POST /v1/chat/completions`, uses `reasoning_effort=minimal` for low latency/cost, and uses Structured Outputs with `response_format=json_schema` for browser-action intent routing.
 
