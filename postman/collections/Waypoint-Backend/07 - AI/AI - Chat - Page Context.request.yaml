@@ -2,6 +2,7 @@ $kind: http-request
 url: "{{baseUrl}}/api/v1/ai/chat"
 method: POST
 headers:
+  Authorization: "Bearer {{jwt}}"
   Content-Type: application/json
   X-Request-ID: postman-ai-chat
 body:
@@ -28,5 +29,5 @@ scripts:
       pm.test('Answer is grounded in page context', () => pm.expect(body.source).to.eql('page'));
       pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-ai-chat'));
     language: text/javascript
-description: "Tests GPT-5 nano page-context chat through the Waypoint backend. Requires AI_OPENAI_ENABLED=true and OPENAI_API_KEY."
+description: "Tests authenticated GPT-5 nano page-context chat through the Waypoint backend. Requires a Waypoint JWT, AI_OPENAI_ENABLED=true and OPENAI_API_KEY. Trial users consume one of their 20 Cloud AI requests."
 order: 8300
