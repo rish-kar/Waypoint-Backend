@@ -2,6 +2,7 @@ $kind: http-request
 url: "{{baseUrl}}/api/v1/ai/intent"
 method: POST
 headers:
+  Authorization: "Bearer {{jwt}}"
   Content-Type: application/json
   X-Request-ID: postman-ai-intent
 body:
@@ -33,5 +34,5 @@ scripts:
       });
       pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-ai-intent'));
     language: text/javascript
-description: "Calls the Waypoint backend, which sends the intent to OpenAI GPT-5 nano and validates the structured response before returning it. Requires AI_OPENAI_ENABLED=true and OPENAI_API_KEY."
+description: "Calls the authenticated Waypoint backend, which sends the intent to OpenAI GPT-5 nano and validates the structured response before returning it. Requires a Waypoint JWT, AI_OPENAI_ENABLED=true and OPENAI_API_KEY. Trial users consume one of their 20 Cloud AI requests."
 order: 8200
