@@ -127,7 +127,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/google").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/ai/models").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/ai/intent", "/api/v1/ai/chat").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/lemonsqueezy").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                         .anyRequest().authenticated()
