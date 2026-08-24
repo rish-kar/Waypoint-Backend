@@ -1,0 +1,37 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/ai/intent"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Request-ID: postman-ai-intent
+body:
+  type: json
+  content: |-
+    {
+      "request": "Group my GitHub tabs",
+      "lastSelectionAvailable": false,
+      "lastSelectionTarget": "",
+      "currentTime": "2026-08-24T12:00:00+05:30",
+      "timeZone": "Asia/Kolkata",
+      "locale": "en-IN",
+      "model": "openai-gpt-5-nano"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test('GPT-5 nano routes a browser action', () => {
+          pm.expect(body.kind).to.eql('browser-action');
+          pm.expect(body.action).to.eql('group-tabs');
+          pm.expect(body.scope).to.eql('matching-tabs');
+          pm.expect(body.modelId).to.eql('openai-gpt-5-nano');
+      });
+      pm.test('GitHub target is preserved for deterministic matching', () => {
+          pm.expect(body.target).to.be.a('string').and.not.empty;
+          pm.expect(body.matchTerms).to.be.an('array').and.not.empty;
+      });
+      pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-ai-intent'));
+    language: text/javascript
+description: "Calls the Waypoint backend, which sends the intent to OpenAI GPT-5 nano and validates the structured response before returning it. Requires AI_OPENAI_ENABLED=true and OPENAI_API_KEY."
+order: 8200
