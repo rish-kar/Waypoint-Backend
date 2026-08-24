@@ -83,6 +83,21 @@ Content-Type: application/json
 
 The backend sends the page text to OpenAI as untrusted data and verifies quoted page evidence before returning a page-grounded answer. If the page does not contain the answer and the request allows general answers, the backend performs the existing general-knowledge fallback.
 
+## Privacy-safe telemetry
+
+OpenAI telemetry is deliberately restricted to operational metadata only:
+
+- OpenAI-generated request ID;
+- configured model name;
+- HTTP status;
+- input, output and total token counts;
+- request latency;
+- normalized failure category and retry operation.
+
+The telemetry does **not** log or persist prompts, page text, page titles, questions, conversation history, model answers, browser URLs, Chrome tab IDs, user IDs, email addresses, JWTs, OpenAI API keys, authorization headers, or raw exception bodies.
+
+AI telemetry is not written to Waypoint database tables. It is emitted only through the normal operational logger. OpenAI request IDs are whitelist-sanitized before logging so arbitrary header content cannot be injected into logs.
+
 ## Failure handling
 
 The OpenAI client:
