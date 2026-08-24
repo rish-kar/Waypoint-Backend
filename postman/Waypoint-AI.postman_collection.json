@@ -1,0 +1,149 @@
+{
+  "info": {
+    "_postman_id": "b0a77c2d-e122-4ea8-b431-4f5d9c6f0027",
+    "name": "Waypoint Backend - AI (GPT-5 nano)",
+    "description": "Smoke tests for the Waypoint backend OpenAI GPT-5 nano integration. Start the backend with AI_OPENAI_ENABLED=true and OPENAI_API_KEY configured. The OpenAI key remains backend-only.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "AI - Models",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('GPT-5 nano is the default model', () => pm.expect(body.defaultModel).to.eql('openai-gpt-5-nano'));",
+              "pm.test('OpenAI model is exposed', () => {",
+              "    pm.expect(body.models).to.be.an('array').and.not.empty;",
+              "    pm.expect(body.models[0].id).to.eql('openai-gpt-5-nano');",
+              "});",
+              "pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-ai-models'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Request-ID",
+            "value": "postman-ai-models"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/ai/models"
+      }
+    },
+    {
+      "name": "AI - Intent - Group Tabs",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('GPT-5 nano routes a browser action', () => {",
+              "    pm.expect(body.kind).to.eql('browser-action');",
+              "    pm.expect(body.action).to.eql('group-tabs');",
+              "    pm.expect(body.scope).to.eql('matching-tabs');",
+              "    pm.expect(body.modelId).to.eql('openai-gpt-5-nano');",
+              "});",
+              "pm.test('GitHub target is preserved for deterministic matching', () => {",
+              "    pm.expect(body.target).to.be.a('string').and.not.empty;",
+              "    pm.expect(body.matchTerms).to.be.an('array').and.not.empty;",
+              "});",
+              "pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-ai-intent'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Request-ID",
+            "value": "postman-ai-intent"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/ai/intent",
+        "description": "Calls the Waypoint backend, which sends the intent to OpenAI GPT-5 nano and validates the structured response before returning it.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"request\": \"Group my GitHub tabs\",\n  \"lastSelectionAvailable\": false,\n  \"lastSelectionTarget\": \"\",\n  \"currentTime\": \"2026-08-24T12:00:00+05:30\",\n  \"timeZone\": \"Asia/Kolkata\",\n  \"locale\": \"en-IN\",\n  \"model\": \"openai-gpt-5-nano\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "AI - Chat - Page Context",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('GPT-5 nano returns an answer', () => {",
+              "    pm.expect(body.answer).to.be.a('string').and.not.empty;",
+              "    pm.expect(body.modelId).to.eql('openai-gpt-5-nano');",
+              "});",
+              "pm.test('Answer is grounded in page context', () => pm.expect(body.source).to.eql('page'));",
+              "pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-ai-chat'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Request-ID",
+            "value": "postman-ai-chat"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/ai/chat",
+        "description": "Tests GPT-5 nano page-context chat through the Waypoint backend.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"question\": \"What is Waypoint?\",\n  \"pageTitle\": \"Waypoint\",\n  \"pageDescription\": \"Browser productivity extension\",\n  \"pageText\": \"Waypoint is a Chrome extension that helps users organize tabs and interact with browser workflows.\",\n  \"history\": [],\n  \"allowGeneral\": false,\n  \"model\": \"openai-gpt-5-nano\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.environment.get('baseUrl')) {",
+          "    throw new Error('Select the Waypoint Local environment.');",
+          "}"
+        ]
+      }
+    }
+  ]
+}
