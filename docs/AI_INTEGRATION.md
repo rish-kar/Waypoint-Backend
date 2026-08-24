@@ -1,108 +1,94 @@
-# Waypoint self-hosted AI integration
+# Waypoint OpenAI integration
 
-The backend exposes an authenticated AI routing API for the Chrome extension. The extension never receives the model server URL or API key and cannot choose an arbitrary upstream server.
+Waypoint Backend uses OpenAI GPT-5 nano for Cloud AI. The Chrome extension never receives the OpenAI API key and never calls OpenAI directly.
 
 ## Architecture
 
 ```text
 Waypoint extension
-    -> POST /api/v1/ai/intent
+    -> POST /api/v1/ai/intent or /api/v1/ai/chat
 Waypoint backend
-    -> configured OpenAI-compatible model server
-Self-hosted model
-    -> strict structured intent JSON
+    -> POST https://api.openai.com/v1/chat/completions
+OpenAI GPT-5 nano
+    -> structured intent JSON or chat response
 Waypoint backend
     -> validates/fails closed
 Waypoint extension
     -> deterministic tab matching + safety checks + Chrome API action
 ```
 
-The model is an intent router only. It never receives or returns Chrome tab IDs.
+The model is never given Chrome tab IDs for browser-action routing.
 
-## Supported model servers
+## Configuration
 
-The integration uses the OpenAI-compatible `POST /v1/chat/completions` contract with `response_format=json_schema`. This allows the same backend integration to target local Ollama or a production vLLM deployment by changing environment variables.
-
-## Local development with Ollama
-
-1. Install Ollama on the machine running the model.
-2. Pull a suitable instruction model, for example:
-
-```bash
-ollama pull qwen3:4b
-```
-
-3. Enable the provider:
+Set these environment variables on the backend:
 
 ```text
-AI_SELF_HOSTED_ENABLED=true
-AI_SELF_HOSTED_BASE_URL=http://localhost:11434/v1
-AI_SELF_HOSTED_MODEL=qwen3:4b
-AI_SELF_HOSTED_API_KEY=
-AI_SELF_HOSTED_REQUEST_TIMEOUT=30s
+AI_OPENAI_ENABLED=true
+AI_OPENAI_BASE_URL=https://api.openai.com/v1
+AI_OPENAI_API_KEY=<your OpenAI API key>
+AI_OPENAI_MODEL=gpt-5-nano
+AI_OPENAI_REQUEST_TIMEOUT=30s
 ```
 
-When the backend itself runs in Docker and Ollama runs on the host, use:
+Keep `AI_OPENAI_API_KEY` server-side only. Do not include it in the Chrome extension, source control, logs, or client responses.
+
+The backend uses GPT-5 nano through `POST /v1/chat/completions`, uses `reasoning_effort=minimal` for low latency/cost, and uses Structured Outputs with `response_format=json_schema` for browser-action intent routing.
+
+## Backend model ID
+
+The logical model ID exposed by Waypoint Backend is:
 
 ```text
-AI_SELF_HOSTED_BASE_URL=http://host.docker.internal:11434/v1
+openai-gpt-5-nano
 ```
 
-## Production with vLLM
-
-Run an OpenAI-compatible vLLM server on private infrastructure and point `AI_SELF_HOSTED_BASE_URL` to its `/v1` endpoint. Keep that server private; only Waypoint Backend should be able to reach it. If the model server requires authentication, set `AI_SELF_HOSTED_API_KEY`.
+The upstream OpenAI model is configured separately through `AI_OPENAI_MODEL` and defaults to `gpt-5-nano`.
 
 ## API
 
-All AI endpoints require the normal Waypoint JWT.
-
-### List available backend models
+### List models
 
 ```http
 GET /api/v1/ai/models
-Authorization: Bearer <waypoint-jwt>
 ```
 
-### Route a command
+### Route a browser command
 
 ```http
 POST /api/v1/ai/intent
-Authorization: Bearer <waypoint-jwt>
 Content-Type: application/json
 ```
 
-Example request:
+Example:
 
 ```json
 {
   "request": "Group my repository tabs",
   "lastSelectionAvailable": false,
   "lastSelectionTarget": "",
-  "currentTime": "2026-08-18T18:00:00+05:30",
+  "currentTime": "2026-08-24T12:00:00+05:30",
   "timeZone": "Asia/Kolkata",
   "locale": "en-IN",
-  "model": "self-hosted"
+  "model": "openai-gpt-5-nano"
 }
 ```
 
-The response uses the Waypoint intent contract:
+### Ask Page AI
 
-```json
-{
-  "kind": "browser-action",
-  "action": "group-tabs",
-  "scope": "matching-tabs",
-  "target": "repository tabs",
-  "matchTerms": ["repository", "repositories"],
-  "sites": [],
-  "explicitCurrent": false,
-  "explicitAll": false,
-  "groupTitle": "Repositories",
-  "workspaceName": "",
-  "wakeAt": "",
-  "clarification": "",
-  "modelId": "self-hosted"
-}
+```http
+POST /api/v1/ai/chat
+Content-Type: application/json
 ```
 
-The backend deliberately does not accept a model URL from clients. `model` is an allow-listed logical model ID, which creates a safe foundation for adding other providers later.
+The backend sends the page text to OpenAI as untrusted data and verifies quoted page evidence before returning a page-grounded answer. If the page does not contain the answer and the request allows general answers, the backend performs the existing general-knowledge fallback.
+
+## Failure handling
+
+The OpenAI client:
+
+- retries one failed request once;
+- enforces the configured request timeout;
+- fails closed on malformed structured intent output;
+- reports OpenAI rate-limit responses separately;
+- refuses to run when the API key is missing.
