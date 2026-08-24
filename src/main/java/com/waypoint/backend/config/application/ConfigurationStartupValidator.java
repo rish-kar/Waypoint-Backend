@@ -77,7 +77,7 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
         requireHttps("LEMON_SQUEEZY_API_BASE_URL", lemonSqueezyProperties.apiBaseUrl());
         if (openAiProperties.enabled()) {
             requireHttps("AI_OPENAI_BASE_URL", openAiProperties.baseUrl());
-            rejectPlaceholder("AI_OPENAI_API_KEY", openAiProperties.apiKey());
+            rejectPlaceholder("OPENAI_API_KEY", openAiProperties.apiKey());
         }
         requireRedisUrl(environment.getProperty("spring.data.redis.url"));
         if (!environment.getProperty("security.distributed-state-enabled", Boolean.class, false)) {
