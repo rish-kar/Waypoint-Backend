@@ -5,6 +5,7 @@ import com.waypoint.backend.model.ai.AiChatResponse;
 import com.waypoint.backend.model.ai.AiIntentRequest;
 import com.waypoint.backend.model.ai.AiIntentResponse;
 import com.waypoint.backend.utilities.client.ai.AiModelClient;
+import com.waypoint.backend.utilities.client.ai.OpenAiClient;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
 
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,7 @@ class AiIntentServiceTests {
                 false
         ));
 
-        AiIntentResponse result = service.route(request("self-hosted"));
+        AiIntentResponse result = service.route(request(OpenAiClient.MODEL_ID));
 
         assertThat(result.scope()).isEqualTo("matching-tabs");
         assertThat(result.explicitCurrent()).isFalse();
@@ -49,7 +50,7 @@ class AiIntentServiceTests {
                 false
         ));
 
-        AiIntentResponse result = service.route(request("self-hosted"));
+        AiIntentResponse result = service.route(request(OpenAiClient.MODEL_ID));
 
         assertThat(result.kind()).isEqualTo("clarification");
         assertThat(result.scope()).isEqualTo("none");
@@ -72,10 +73,10 @@ class AiIntentServiceTests {
                 "",
                 pastTime,
                 "",
-                "self-hosted"
+                OpenAiClient.MODEL_ID
         ));
 
-        AiIntentResponse result = service.route(request("self-hosted"));
+        AiIntentResponse result = service.route(request(OpenAiClient.MODEL_ID));
 
         assertThat(result.kind()).isEqualTo("clarification");
         assertThat(result.action()).isEqualTo("none");
@@ -98,10 +99,10 @@ class AiIntentServiceTests {
                 "",
                 futureTime,
                 "",
-                "self-hosted"
+                OpenAiClient.MODEL_ID
         ));
 
-        AiIntentResponse result = service.route(request("self-hosted"));
+        AiIntentResponse result = service.route(request(OpenAiClient.MODEL_ID));
 
         assertThat(result.kind()).isEqualTo("browser-action");
         assertThat(result.action()).isEqualTo("snooze-tabs");
@@ -120,7 +121,7 @@ class AiIntentServiceTests {
                 false
         ));
 
-        AiIntentResponse result = service.route(request("self-hosted"));
+        AiIntentResponse result = service.route(request(OpenAiClient.MODEL_ID));
 
         assertThat(result.kind()).isEqualTo("clarification");
         assertThat(result.action()).isEqualTo("none");
@@ -156,7 +157,7 @@ class AiIntentServiceTests {
                 false
         ));
 
-        assertThat(service.models().defaultModel()).isEqualTo("self-hosted");
+        assertThat(service.models().defaultModel()).isEqualTo(OpenAiClient.MODEL_ID);
         assertThat(service.models().models()).hasSize(1);
         assertThat(service.models().models().getFirst().enabled()).isTrue();
         assertThat(service.models().models().getFirst().displayName()).isEqualTo("Cloud AI");
@@ -167,7 +168,7 @@ class AiIntentServiceTests {
                 "Group my repository tabs",
                 false,
                 "",
-                "2026-08-18T18:00:00+05:30",
+                "2026-08-24T12:00:00+05:30",
                 "Asia/Kolkata",
                 "en-IN",
                 model
@@ -200,7 +201,7 @@ class AiIntentServiceTests {
                 "",
                 "",
                 "",
-                "self-hosted"
+                OpenAiClient.MODEL_ID
         );
     }
 
@@ -218,12 +219,12 @@ class AiIntentServiceTests {
 
         @Override
         public AiChatResponse chat(AiChatRequest request) {
-            return new AiChatResponse("Test answer", "page", "self-hosted");
+            return new AiChatResponse("Test answer", "page", OpenAiClient.MODEL_ID);
         }
 
         @Override
         public String modelId() {
-            return "self-hosted";
+            return OpenAiClient.MODEL_ID;
         }
 
         @Override
