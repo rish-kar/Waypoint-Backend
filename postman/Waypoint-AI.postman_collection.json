@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b0a77c2d-e122-4ea8-b431-4f5d9c6f0027",
     "name": "Waypoint Backend - AI (GPT-5 nano)",
-    "description": "Smoke tests for the Waypoint backend OpenAI GPT-5 nano integration. Start the backend with AI_OPENAI_ENABLED=true and OPENAI_API_KEY configured. The OpenAI key remains backend-only.",
+    "description": "Smoke tests for the authenticated Waypoint backend OpenAI GPT-5 nano integration and the 20-request Cloud AI trial quota. Start the backend with AI_OPENAI_ENABLED=true and OPENAI_API_KEY configured. The OpenAI key remains backend-only.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -38,6 +38,47 @@
       }
     },
     {
+      "name": "AI - Usage",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Cloud AI usage is exposed', () => {",
+              "    pm.expect(body.cloudAiAllowed).to.be.a('boolean');",
+              "    pm.expect(body.trialLimited).to.be.a('boolean');",
+              "    pm.expect(body.trialLimit).to.eql(20);",
+              "    pm.expect(body.trialUsed).to.be.a('number');",
+              "    pm.expect(body.trialRemaining).to.be.a('number');",
+              "});",
+              "pm.test('Trial count is internally consistent', () => {",
+              "    if (body.trialLimited) pm.expect(body.trialUsed + body.trialRemaining).to.eql(body.trialLimit);",
+              "});",
+              "pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-ai-usage'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwt}}"
+          },
+          {
+            "key": "X-Request-ID",
+            "value": "postman-ai-usage"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/ai/usage",
+        "description": "Returns the authenticated user's Cloud AI trial usage. Trial accounts receive 20 total Cloud AI requests."
+      }
+    },
+    {
       "name": "AI - Intent - Group Tabs",
       "event": [
         {
@@ -66,6 +107,10 @@
         "method": "POST",
         "header": [
           {
+            "key": "Authorization",
+            "value": "Bearer {{jwt}}"
+          },
+          {
             "key": "Content-Type",
             "value": "application/json"
           },
@@ -75,7 +120,7 @@
           }
         ],
         "url": "{{baseUrl}}/api/v1/ai/intent",
-        "description": "Calls the Waypoint backend, which sends the intent to OpenAI GPT-5 nano and validates the structured response before returning it.",
+        "description": "Calls the authenticated Waypoint backend, which sends the intent to OpenAI GPT-5 nano and consumes one trial Cloud AI request when the account is on trial.",
         "body": {
           "mode": "raw",
           "raw": "{\n  \"request\": \"Group my GitHub tabs\",\n  \"lastSelectionAvailable\": false,\n  \"lastSelectionTarget\": \"\",\n  \"currentTime\": \"2026-08-24T12:00:00+05:30\",\n  \"timeZone\": \"Asia/Kolkata\",\n  \"locale\": \"en-IN\",\n  \"model\": \"openai-gpt-5-nano\"\n}",
@@ -111,6 +156,10 @@
         "method": "POST",
         "header": [
           {
+            "key": "Authorization",
+            "value": "Bearer {{jwt}}"
+          },
+          {
             "key": "Content-Type",
             "value": "application/json"
           },
@@ -120,7 +169,7 @@
           }
         ],
         "url": "{{baseUrl}}/api/v1/ai/chat",
-        "description": "Tests GPT-5 nano page-context chat through the Waypoint backend.",
+        "description": "Tests authenticated GPT-5 nano page-context chat through the Waypoint backend and consumes one trial Cloud AI request when the account is on trial.",
         "body": {
           "mode": "raw",
           "raw": "{\n  \"question\": \"What is Waypoint?\",\n  \"pageTitle\": \"Waypoint\",\n  \"pageDescription\": \"Browser productivity extension\",\n  \"pageText\": \"Waypoint is a Chrome extension that helps users organize tabs and interact with browser workflows.\",\n  \"history\": [],\n  \"allowGeneral\": false,\n  \"model\": \"openai-gpt-5-nano\"\n}",
