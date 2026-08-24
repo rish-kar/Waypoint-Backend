@@ -1,7 +1,7 @@
 package com.waypoint.backend;
 
 import com.waypoint.backend.config.admin.AdminProperties;
-import com.waypoint.backend.config.ai.AiProperties;
+import com.waypoint.backend.config.ai.OpenAiProperties;
 import com.waypoint.backend.config.application.AppProperties;
 import com.waypoint.backend.config.application.CorsProperties;
 import com.waypoint.backend.config.auth.GoogleProperties;
@@ -19,7 +19,7 @@ import java.util.TimeZone;
 @EnableScheduling
 @EnableConfigurationProperties({
         AdminProperties.class,
-        AiProperties.class,
+        OpenAiProperties.class,
         AppProperties.class,
         CorsProperties.class,
         GoogleProperties.class,
