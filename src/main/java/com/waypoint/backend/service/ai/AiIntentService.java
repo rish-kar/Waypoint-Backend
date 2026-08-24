@@ -46,22 +46,22 @@ public class AiIntentService {
             "duplicates"
     );
 
-    private final AiModelClient selfHostedClient;
+    private final AiModelClient aiClient;
 
-    public AiIntentService(AiModelClient selfHostedClient) {
-        this.selfHostedClient = selfHostedClient;
+    public AiIntentService(AiModelClient aiClient) {
+        this.aiClient = aiClient;
     }
 
     public AiIntentResponse route(AiIntentRequest request) {
         String requestedModel = normalizeModel(request.model());
         validateModel(requestedModel);
-        return normalize(selfHostedClient.route(request), request);
+        return normalize(aiClient.route(request), request);
     }
 
     public AiChatResponse chat(AiChatRequest request) {
         String requestedModel = normalizeModel(request.model());
         validateModel(requestedModel);
-        AiChatResponse response = selfHostedClient.chat(request);
+        AiChatResponse response = aiClient.chat(request);
         if (response == null || !StringUtils.hasText(response.answer())) {
             throw new ExternalServiceException("Cloud AI returned an empty answer");
         }
@@ -69,20 +69,20 @@ public class AiIntentService {
     }
 
     public AiModelCatalogResponse models() {
-        AiModelDescriptorResponse selfHosted = new AiModelDescriptorResponse(
-                selfHostedClient.modelId(),
+        AiModelDescriptorResponse configuredModel = new AiModelDescriptorResponse(
+                aiClient.modelId(),
                 "Cloud AI",
-                selfHostedClient.enabled(),
+                aiClient.enabled(),
                 "server"
         );
-        return new AiModelCatalogResponse(selfHostedClient.modelId(), List.of(selfHosted));
+        return new AiModelCatalogResponse(aiClient.modelId(), List.of(configuredModel));
     }
 
     private void validateModel(String requestedModel) {
-        if (!selfHostedClient.modelId().equals(requestedModel)) {
+        if (!aiClient.modelId().equals(requestedModel)) {
             throw new InvalidRequestException("Unsupported AI model: " + requestedModel);
         }
-        if (!selfHostedClient.enabled()) {
+        if (!aiClient.enabled()) {
             throw new AiUnavailableException("The selected AI model is not enabled");
         }
     }
@@ -93,7 +93,7 @@ public class AiIntentService {
             throw invalidModelOutput();
         }
 
-        String modelId = StringUtils.hasText(raw.modelId()) ? raw.modelId().trim() : selfHostedClient.modelId();
+        String modelId = StringUtils.hasText(raw.modelId()) ? raw.modelId().trim() : aiClient.modelId();
         String target = clean(raw.target());
         List<String> matchTerms = cleanList(raw.matchTerms());
         List<String> sites = cleanList(raw.sites());
@@ -217,7 +217,7 @@ public class AiIntentService {
     }
 
     private String normalizeModel(String model) {
-        return StringUtils.hasText(model) ? model.trim().toLowerCase(Locale.ROOT) : selfHostedClient.modelId();
+        return StringUtils.hasText(model) ? model.trim().toLowerCase(Locale.ROOT) : aiClient.modelId();
     }
 
     private String lower(String value) {
