@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -29,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
+import java.util.regex.Pattern;
 
 @Component
 public class OpenAiClient implements AiModelClient {
@@ -38,6 +40,8 @@ public class OpenAiClient implements AiModelClient {
     private static final int MAX_TERMS = 16;
     private static final int MAX_TERM_LENGTH = 80;
     private static final int MAX_ATTEMPTS = 2;
+    private static final String OPENAI_REQUEST_ID_HEADER = "x-request-id";
+    private static final Pattern SAFE_TELEMETRY_ID = Pattern.compile("[A-Za-z0-9._:-]{1,200}");
     private static final String NOT_FOUND_MARKER = "[[WAYPOINT_NOT_FOUND]]";
     private static final String EVIDENCE_START = "[[WAYPOINT_EVIDENCE]]";
     private static final String EVIDENCE_END = "[[/WAYPOINT_EVIDENCE]]";
@@ -64,7 +68,7 @@ public class OpenAiClient implements AiModelClient {
             } catch (ExternalServiceException | AiUnavailableException exception) {
                 last = exception;
                 if (attempt < MAX_ATTEMPTS) {
-                    LOGGER.warn("OpenAI intent attempt failed; retrying once: {}", exception.getMessage());
+                    logRetry("intent", attempt);
                     continue;
                 }
                 throw exception;
@@ -90,7 +94,7 @@ public class OpenAiClient implements AiModelClient {
             } catch (ExternalServiceException | AiUnavailableException exception) {
                 last = exception;
                 if (attempt < MAX_ATTEMPTS) {
-                    LOGGER.warn("OpenAI chat attempt failed; retrying once: {}", exception.getMessage());
+                    logRetry("chat", attempt);
                     continue;
                 }
                 throw exception;
@@ -119,34 +123,116 @@ public class OpenAiClient implements AiModelClient {
     }
 
     private JsonNode send(Map<String, Object> body) {
+        long startedAt = System.nanoTime();
         try {
-            return webClient.post()
+            ResponseEntity<JsonNode> response = webClient.post()
                     .uri(chatCompletionsUri)
                     .accept(MediaType.APPLICATION_JSON)
                     .contentType(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey().trim())
                     .bodyValue(body)
                     .retrieve()
-                    .bodyToMono(JsonNode.class)
+                    .toEntity(JsonNode.class)
                     .timeout(properties.requestTimeout())
                     .block();
+            if (response == null) {
+                logFailure(null, 0, "empty_response", startedAt);
+                return null;
+            }
+            logSuccess(response, startedAt);
+            return response.getBody();
         } catch (WebClientResponseException exception) {
-            LOGGER.warn("OpenAI returned HTTP status {}", exception.getStatusCode().value());
-            if (exception.getStatusCode().value() == 429) {
+            int status = exception.getStatusCode().value();
+            logFailure(
+                    exception.getHeaders().getFirst(OPENAI_REQUEST_ID_HEADER),
+                    status,
+                    status == 429 ? "rate_limit" : "http_error",
+                    startedAt
+            );
+            if (status == 429) {
                 throw new ExternalServiceException("OpenAI rate limit reached");
             }
             throw new ExternalServiceException("OpenAI rejected the request");
         } catch (WebClientRequestException exception) {
-            LOGGER.warn("Unable to reach OpenAI", exception);
+            logFailure(null, 0, "connection_error", startedAt);
             throw new AiUnavailableException("OpenAI is unavailable");
         } catch (ExternalServiceException | AiUnavailableException exception) {
             throw exception;
         } catch (RuntimeException exception) {
             if (containsTimeout(exception)) {
+                logFailure(null, 0, "timeout", startedAt);
                 throw new ExternalServiceException("OpenAI took too long to respond");
             }
+            logFailure(null, 0, "unexpected_error", startedAt);
             throw exception;
         }
+    }
+
+    private void logSuccess(ResponseEntity<JsonNode> response, long startedAt) {
+        JsonNode body = response.getBody();
+        long inputTokens = usageToken(body, "prompt_tokens", "input_tokens");
+        long outputTokens = usageToken(body, "completion_tokens", "output_tokens");
+        long totalTokens = usageToken(body, "total_tokens", null);
+        if (totalTokens < 0 && inputTokens >= 0 && outputTokens >= 0) {
+            totalTokens = inputTokens + outputTokens;
+        }
+
+        LOGGER.atInfo()
+                .addKeyValue("event", "openai_request_completed")
+                .addKeyValue("openai_request_id", safeTelemetryId(response.getHeaders().getFirst(OPENAI_REQUEST_ID_HEADER)))
+                .addKeyValue("model", properties.model())
+                .addKeyValue("status", response.getStatusCode().value())
+                .addKeyValue("input_tokens", inputTokens)
+                .addKeyValue("output_tokens", outputTokens)
+                .addKeyValue("total_tokens", totalTokens)
+                .addKeyValue("latency_ms", elapsedMilliseconds(startedAt))
+                .log("OpenAI request completed");
+    }
+
+    private void logFailure(String requestId, int status, String failureType, long startedAt) {
+        LOGGER.atWarn()
+                .addKeyValue("event", "openai_request_failed")
+                .addKeyValue("openai_request_id", safeTelemetryId(requestId))
+                .addKeyValue("model", properties.model())
+                .addKeyValue("status", status)
+                .addKeyValue("failure_type", failureType)
+                .addKeyValue("latency_ms", elapsedMilliseconds(startedAt))
+                .log("OpenAI request failed");
+    }
+
+    private void logRetry(String operation, int completedAttempt) {
+        LOGGER.atWarn()
+                .addKeyValue("event", "openai_request_retry")
+                .addKeyValue("operation", operation)
+                .addKeyValue("model", properties.model())
+                .addKeyValue("completed_attempt", completedAttempt)
+                .log("Retrying OpenAI request");
+    }
+
+    private long usageToken(JsonNode response, String primaryField, String fallbackField) {
+        if (response == null) {
+            return -1;
+        }
+        JsonNode usage = response.path("usage");
+        JsonNode value = usage.path(primaryField);
+        if (value.isIntegralNumber()) {
+            return value.asLong();
+        }
+        if (fallbackField != null) {
+            value = usage.path(fallbackField);
+            if (value.isIntegralNumber()) {
+                return value.asLong();
+            }
+        }
+        return -1;
+    }
+
+    private String safeTelemetryId(String value) {
+        return value != null && SAFE_TELEMETRY_ID.matcher(value).matches() ? value : "unavailable";
+    }
+
+    private long elapsedMilliseconds(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000;
     }
 
     private String completion(Map<String, Object> body) {
