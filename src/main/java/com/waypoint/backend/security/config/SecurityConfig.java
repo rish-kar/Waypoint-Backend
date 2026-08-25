@@ -159,9 +159,12 @@ public class SecurityConfig {
     }
 
     @Bean
-    CorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
+    CorsConfigurationSource corsConfigurationSource(CorsProperties properties, Environment environment) {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(properties.allowedOrigins());
+        if (environment.acceptsProfiles(Profiles.of("dev", "test"))) {
+            configuration.setAllowedOriginPatterns(List.of("chrome-extension://*"));
+        }
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of(
                 "Authorization", "Content-Type", "X-Signature", "X-Request-ID", "X-Admin-TOTP"
