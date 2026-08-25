@@ -41,20 +41,12 @@ public class AiController {
     }
 
     @PostMapping("/intent")
-    public AiIntentResponse routeIntent(
-            @AuthenticationPrincipal UUID userId,
-            @Valid @RequestBody AiIntentRequest request
-    ) {
-        aiUsageService.consume(userId);
+    public AiIntentResponse routeIntent(@Valid @RequestBody AiIntentRequest request) {
         return aiIntentService.route(request);
     }
 
     @PostMapping("/chat")
-    public AiChatResponse chat(
-            @AuthenticationPrincipal UUID userId,
-            @Valid @RequestBody AiChatRequest request
-    ) {
-        aiUsageService.consume(userId);
+    public AiChatResponse chat(@Valid @RequestBody AiChatRequest request) {
         return aiIntentService.chat(request);
     }
 }
