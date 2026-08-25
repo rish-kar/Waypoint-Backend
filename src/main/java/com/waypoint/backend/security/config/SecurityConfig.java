@@ -163,7 +163,9 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(properties.allowedOrigins());
         if (environment.acceptsProfiles(Profiles.of("dev", "test"))) {
-            configuration.setAllowedOriginPatterns(List.of("chrome-extension://*"));
+            // Temporary test mode: Cloud AI is intentionally callable from any local/unpacked frontend origin.
+            // Production remains restricted to configured origins.
+            configuration.setAllowedOriginPatterns(List.of("*"));
         }
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of(
