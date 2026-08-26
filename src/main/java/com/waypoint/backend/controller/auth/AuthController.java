@@ -108,7 +108,6 @@ public class AuthController {
         JwtClaims claims = requireClaims(authentication);
         jwtRevocationService.revoke(claims);
         sessionService.revokeAll(claims.userId());
-        microsoftCredentialService.disconnect(claims.userId());
     }
 
     private JwtClaims requireClaims(Authentication authentication) {
