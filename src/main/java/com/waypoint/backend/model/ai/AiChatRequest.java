@@ -8,7 +8,6 @@ public record AiChatRequest(
         String pageDescription,
         String pageText,
         List<AiChatMessage> history,
-        boolean allowGeneral,
         String model
 ) {
     public AiChatRequest {
@@ -23,7 +22,6 @@ public record AiChatRequest(
         // Cloud AI testing currently has no frontend plan/auth enforcement.
         // The backend owns the provider/model choice, so ignore any client model value.
         model = null;
-        allowGeneral = true;
     }
 
     private static String truncate(String value, int maxLength) {
