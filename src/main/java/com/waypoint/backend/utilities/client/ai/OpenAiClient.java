@@ -87,9 +87,6 @@ public class OpenAiClient implements AiModelClient {
                 if (pageAnswer != null) {
                     return new AiChatResponse(pageAnswer.answer(), "page", MODEL_ID);
                 }
-                if (!request.allowGeneral()) {
-                    return new AiChatResponse("I couldn't find that information on this page.", "page", MODEL_ID);
-                }
                 return new AiChatResponse(completion(generalChatBody(request)), "general", MODEL_ID);
             } catch (ExternalServiceException | AiUnavailableException exception) {
                 last = exception;
