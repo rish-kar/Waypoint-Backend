@@ -115,7 +115,6 @@ class OpenAiClientTests {
                         new AiChatMessage("user", "Who is John?"),
                         new AiChatMessage("assistant", "John is the engineer described on this page.")
                 ),
-                false,
                 OpenAiClient.MODEL_ID
         ));
 
