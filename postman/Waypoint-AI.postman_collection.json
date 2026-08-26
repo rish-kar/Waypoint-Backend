@@ -146,7 +146,7 @@
               "    pm.expect(body.answer).to.be.a('string').and.not.empty;",
               "    pm.expect(body.modelId).to.eql('openai-gpt-5-nano');",
               "});",
-              "pm.test('Answer is grounded in page context', () => pm.expect(body.source).to.eql('page'));",
+              "pm.test('Answer source is reported', () => pm.expect(['page', 'general']).to.include(body.source));",
               "pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-ai-chat'));"
             ]
           }
@@ -169,10 +169,10 @@
           }
         ],
         "url": "{{baseUrl}}/api/v1/ai/chat",
-        "description": "Tests authenticated GPT-5 nano page-context chat through the Waypoint backend and consumes one trial Cloud AI request when the account is on trial.",
+        "description": "Tests GPT-5 nano page-context chat through the Waypoint backend. Page context is always checked first; general knowledge is used automatically when the page does not contain the answer.",
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"question\": \"What is Waypoint?\",\n  \"pageTitle\": \"Waypoint\",\n  \"pageDescription\": \"Browser productivity extension\",\n  \"pageText\": \"Waypoint is a Chrome extension that helps users organize tabs and interact with browser workflows.\",\n  \"history\": [],\n  \"allowGeneral\": false,\n  \"model\": \"openai-gpt-5-nano\"\n}",
+          "raw": "{\n  \"question\": \"What is Waypoint?\",\n  \"pageTitle\": \"Waypoint\",\n  \"pageDescription\": \"Browser productivity extension\",\n  \"pageText\": \"Waypoint is a Chrome extension that helps users organize tabs and interact with browser workflows.\",\n  \"history\": [],\n  \"model\": \"openai-gpt-5-nano\"\n}",
           "options": {
             "raw": {
               "language": "json"
