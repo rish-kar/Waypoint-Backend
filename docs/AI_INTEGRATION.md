@@ -81,7 +81,7 @@ POST /api/v1/ai/chat
 Content-Type: application/json
 ```
 
-The backend sends the page text to OpenAI as untrusted data and verifies quoted page evidence before returning a page-grounded answer. If the page does not contain the answer and the request allows general answers, the backend performs the existing general-knowledge fallback.
+The backend always receives the current page context first. It sends that page text to OpenAI as untrusted data and verifies quoted page evidence before returning a page-grounded answer. If the page does not contain the answer, the backend automatically falls back to general knowledge. The response reports `source: "page"` or `source: "general"` so the frontend can label where the answer came from. There is no `allowGeneral` request parameter.
 
 ## Privacy-safe telemetry
 
