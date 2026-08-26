@@ -45,6 +45,7 @@ import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -171,7 +172,7 @@ class MicrosoftOAuthIntegrationTests {
     }
 
     @Test
-    void logoutRevokesWaypointSessionAndDeletesMicrosoftCredential() throws Exception {
+    void logoutRevokesWaypointSessionButPreservesMicrosoftCredential() throws Exception {
         LoginResult login = loginMicrosoft();
         UUID userId = userRepository.findByEmail("microsoft@example.com").orElseThrow().getId();
         assertThat(credentialRepository.findByUserId(userId)).isPresent();
@@ -179,9 +180,27 @@ class MicrosoftOAuthIntegrationTests {
         mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + login.accessToken()))
                 .andExpect(status().isNoContent());
 
-        assertThat(credentialRepository.findByUserId(userId)).isEmpty();
+        assertThat(credentialRepository.findByUserId(userId)).isPresent();
         mockMvc.perform(get("/api/v1/account").header("Authorization", "Bearer " + login.accessToken()))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/v1/auth/session/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + login.refreshToken() + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void explicitDisconnectDeletesMicrosoftCredential() throws Exception {
+        LoginResult login = loginMicrosoft();
+        UUID userId = userRepository.findByEmail("microsoft@example.com").orElseThrow().getId();
+        assertThat(credentialRepository.findByUserId(userId)).isPresent();
+
+        mockMvc.perform(delete("/api/v1/auth/microsoft").header("Authorization", "Bearer " + login.accessToken()))
+                .andExpect(status().isNoContent());
+
+        assertThat(credentialRepository.findByUserId(userId)).isEmpty();
+        mockMvc.perform(get("/api/v1/account").header("Authorization", "Bearer " + login.accessToken()))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -211,6 +230,23 @@ class MicrosoftOAuthIntegrationTests {
         assertThat(after.getEmail()).isEqualTo("google@example.com");
         assertThat(after.getDisplayName()).isEqualTo("Google User");
         assertThat(credentialRepository.findByUserId(googleUser.getId())).isPresent();
+    }
+
+    @Test
+    void logoutPreservesExplicitMicrosoftLink() throws Exception {
+        UserEntity googleUser = createGoogleUser("google@example.com");
+        microsoftClient.profile = new MicrosoftProfile("ms-linked", "different-microsoft@example.com", "Microsoft Name");
+        String bearer = jwtService.issueToken(googleUser.getId(), googleUser.getEmail());
+        String state = query(startMicrosoft(true, bearer), "state");
+        callback("code-link", state);
+
+        assertThat(credentialRepository.findByUserId(googleUser.getId())).isPresent();
+
+        mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + bearer))
+                .andExpect(status().isNoContent());
+
+        var credential = credentialRepository.findByProviderUserId("ms-linked").orElseThrow();
+        assertThat(credential.getUser().getId()).isEqualTo(googleUser.getId());
     }
 
     @Test
