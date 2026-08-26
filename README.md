@@ -1,115 +1,46 @@
 # Waypoint-Backend
 
-Waypoint-Backend is a Spring Boot modular monolith for monetising the Waypoint browser extension. It handles Google sign-in, Waypoint JWT issuance, Lemon Squeezy checkout creation, signed payment webhooks, subscription storage, Premium Special grants, and premium entitlement responses.
+Waypoint-Backend is the server-side account, billing and entitlement service for Waypoint. It is implemented as a Spring Boot modular monolith with PostgreSQL as the durable business-data store and Redis as production distributed security/coordination state.
 
-## Architecture
+## Current stack
 
-- Spring Boot 4.1, Java 21, Maven
-- Spring Web, Spring Security, Spring Data JPA, Bean Validation and Actuator
-- PostgreSQL with Flyway migrations
-- HMAC-signed Waypoint JWTs
-- WebClient for Google and Lemon Squeezy HTTP calls
-- SLF4J with Logback structured key-value console output
-- Package root: `com.waypoint.backend`
+- Java source/target level: 21
+- Spring Boot: 4.1.0
+- Maven
+- Spring Web + WebFlux `WebClient`
+- Spring Security
+- Spring Data JPA
+- Spring Data Redis
+- PostgreSQL + Flyway
+- H2 for the default isolated test profile
+- Testcontainers PostgreSQL integration tests
+- Actuator health probes
+- Lemon Squeezy billing integration
+- Google OAuth token validation
+- HMAC-signed Waypoint JWTs with persisted revocation
+- Admin Basic authentication, roles and production TOTP
+- Redis-backed production rate limits
 
-The database is the source of truth for entitlements. The entitlement endpoint never calls Lemon Squeezy.
+## Documentation
 
-## Configuration Profiles
+The complete engineering reference is in [`doc/README.md`](doc/README.md). It covers architecture, API contracts, Google OAuth/JWTs, admin security/TOTP, rate limiting, webhook processing/recovery, database migrations, Redis, billing, entitlements, testing, Docker/production deployment, operations and troubleshooting.
 
-Waypoint uses four configuration layers:
+## Local development
 
-| File | Purpose |
-| --- | --- |
-| `application.yml` | Shared server, JPA, Flyway, health and logging configuration |
-| `application-dev.yml` | Local development defaults; this is the default profile |
-| `application-test.yml` | H2-backed isolated test configuration |
-| `application-prod.yml` | Production configuration with no secret fallbacks |
+Prerequisites: Java 21+, Maven 3.9+, Docker/Compose for the container stack.
 
-Production startup fails when required values are missing, malformed or still contain obvious development placeholders. Production also requires HTTPS backend URLs and explicit HTTPS or `chrome-extension://` CORS origins.
-
-## Prerequisites
-
-- Java 21
-- Maven 3.9+
-- Docker and Docker Compose for local PostgreSQL
-- A Google OAuth client ID for real authentication testing
-- Lemon Squeezy test-mode credentials for real checkout and webhook testing
-
-## Environment Variables
-
-Never commit real secrets. For local IntelliJ development, set runtime values in the **Run Configuration → Environment variables** field.
-
-| Variable | Purpose |
-| --- | --- |
-| `SPRING_PROFILES_ACTIVE` | `dev`, `test` or `prod`; defaults to `dev` outside the container |
-| `PORT` | HTTP port; defaults to `8080` |
-| `DATABASE_URL` | JDBC PostgreSQL URL |
-| `DATABASE_USERNAME` | PostgreSQL username |
-| `DATABASE_PASSWORD` | PostgreSQL password |
-| `DATABASE_POOL_MAX_SIZE` | Hikari maximum pool size |
-| `DATABASE_POOL_MIN_IDLE` | Hikari minimum idle connections |
-| `DATABASE_CONNECTION_TIMEOUT_MS` | Hikari connection timeout |
-| `DATABASE_VALIDATION_TIMEOUT_MS` | Hikari validation timeout |
-| `ADMIN_ID` | Admin ID used only for `/api/v1/admin/**` HTTP Basic authentication |
-| `ADMIN_PASSWORD` | Admin password used only for `/api/v1/admin/**`; must be non-empty |
-| `JWT_SECRET` | HMAC secret; minimum 32 characters and 32 bytes |
-| `JWT_EXPIRATION_SECONDS` | JWT validity; defaults to `86400` |
-| `GOOGLE_CLIENT_ID` | Expected Google OAuth client ID |
-| `GOOGLE_TOKEN_INFO_URL` | Google token validation endpoint |
-| `GOOGLE_USER_INFO_URL` | Google profile endpoint |
-| `LEMON_SQUEEZY_API_KEY` | Server-side Lemon Squeezy API key |
-| `LEMON_SQUEEZY_STORE_ID` | Lemon Squeezy store ID |
-| `LEMON_SQUEEZY_MONTHLY_VARIANT_ID` | Monthly Premium variant ID |
-| `LEMON_SQUEEZY_ANNUAL_VARIANT_ID` | Annual Premium variant ID |
-| `LEMON_SQUEEZY_WEBHOOK_SECRET` | Webhook HMAC secret |
-| `LEMON_SQUEEZY_API_BASE_URL` | Lemon Squeezy API base URL |
-| `CORS_ALLOWED_ORIGINS` | Comma-separated explicit frontend origins |
-| `APP_BASE_URL` | Public backend base URL |
-| `LOG_LEVEL_ROOT` | Root logging level |
-| `LOG_LEVEL_WAYPOINT` | `com.waypoint.backend` logging level |
-
-## Local Startup
-
-Start PostgreSQL only:
+Start infrastructure and application using Compose:
 
 ```bash
-docker compose up -d postgres
-mvn spring-boot:run
-```
-
-The admin API has no default credentials. Add these to the same IntelliJ Run Configuration used for the backend before starting it:
-
-```text
-ADMIN_ID=<your-admin-id>
-ADMIN_PASSWORD=<your-admin-password>
-```
-
-The development profile supplies safe local placeholders for Google and Lemon Squeezy, so the application can start before real provider credentials are added. Authentication, checkout and webhook calls still require valid provider configuration to work.
-
-Start the complete local stack:
-
-```bash
+export POSTGRES_PASSWORD=waypoint-local-password
 docker compose up --build
 ```
 
-The API is available at `http://localhost:8080` and PostgreSQL at `localhost:5432`.
+Or run PostgreSQL/Redis separately and start Spring Boot with the required development environment values.
 
-## Production Startup
+Default HTTP port: `8080`.
 
-The production image defaults to the `prod` profile. Supply every required secret and connection variable through the deployment platform.
-
-For production:
-
-- `APP_BASE_URL` must be a valid HTTPS URL.
-- `CORS_ALLOWED_ORIGINS` must contain only explicit HTTPS or Chrome-extension origins.
-- `ADMIN_ID` and `ADMIN_PASSWORD` must be non-placeholder production credentials.
-- Admin credentials must only be transmitted over HTTPS.
-- Development placeholders are rejected.
-- Flyway validates migrations and Hibernate validates the mapped schema.
-
-## Health Checks
-
-Actuator exposes only health endpoints:
+Health endpoints:
 
 ```text
 GET /actuator/health
@@ -117,130 +48,37 @@ GET /actuator/health/liveness
 GET /actuator/health/readiness
 ```
 
-Readiness includes database connectivity. Detailed health information is visible in development and hidden in production.
-
-## Logging
-
-Application code uses SLF4J. Console logs use one-line key-value fields including application name, logger, thread and request ID.
-
-Every HTTP request:
-
-- accepts a safe incoming `X-Request-ID` or creates a UUID;
-- returns the ID through `X-Request-ID`;
-- stores it in SLF4J MDC;
-- logs method, path, response status and duration without logging query strings, bodies, tokens or secrets.
-
-## Google OAuth Configuration
-
-Create a Google OAuth client for the browser extension and set `GOOGLE_CLIENT_ID` to that client ID. The extension sends only the Google access token to `POST /api/v1/auth/google`; the backend validates the token server-side, verifies the expected audience, fetches the Google profile, requires a provider user ID and verified email, and never trusts an email supplied directly by the extension.
-
-## Lemon Squeezy Test Mode
-
-Create monthly and annual Premium variants and configure their IDs. Checkout custom data contains:
-
-```json
-{
-  "waypoint_user_id": "internal-user-uuid",
-  "waypoint_plan": "MONTHLY"
-}
-```
-
-## Webhook Configuration
-
-Configure subscription lifecycle events and `subscription_payment_refunded` at:
-
-```text
-POST https://your-backend.example/api/v1/webhooks/lemonsqueezy
-```
-
-The backend verifies `X-Signature` using HMAC-SHA256, stores a raw payload hash for idempotency and links subscriptions through `meta.custom_data.waypoint_user_id`. Do not subscribe to `order_refunded` until order-to-subscription mapping is implemented.
-
-## Premium Special
-
-`PREMIUM_SPECIAL` is complimentary premium access managed by Waypoint administrators. It is stored separately from Lemon Squeezy subscriptions so complimentary accounts can be counted and audited without creating fake billing records.
-
-A Premium Special grant can be lifetime (`validUntil` omitted) or time-limited. While active it has precedence in effective entitlement resolution and unlocks the same features as paid Premium. Revoking or expiring the grant falls back to any valid paid subscription; otherwise the user becomes Free.
-
-Admin endpoints use a separate stateless HTTP Basic security chain. A normal Waypoint JWT cannot authorize `/api/v1/admin/**`.
-
-The admin surface is a typed management API rather than a raw database/SQL endpoint. It exposes paginated, filterable reads across users, subscriptions, Premium Special grants, webhook events, plans and admin audit history. Controlled mutations are available for subscription lifecycle fields, Premium Special access and webhook processing metadata. All admin mutations are audited.
-
-## API Endpoints
-
-| Method | Path | Auth | Purpose |
-| --- | --- | --- | --- |
-| `POST` | `/api/v1/auth/google` | Public | Validate Google access token and issue a Waypoint JWT |
-| `GET` | `/api/v1/account` | JWT | Return user profile and entitlement |
-| `GET` | `/api/v1/subscriptions/current` | JWT | Return effective subscription state |
-| `GET` | `/api/v1/entitlements` | JWT | Return current feature entitlement |
-| `GET` | `/api/v1/entitlements/features/{feature}` | JWT | Check access to one feature |
-| `POST` | `/api/v1/billing/checkout` | JWT | Create Lemon Squeezy hosted checkout |
-| `GET` | `/api/v1/billing/status` | JWT | Return stored subscription status |
-| `POST` | `/api/v1/webhooks/lemonsqueezy` | Signed webhook | Process subscription and refund events |
-| `GET` | `/api/v1/admin/overview` | Admin Basic | Aggregate admin data counts |
-| `GET` | `/api/v1/admin/users` | Admin Basic | Page/filter all users |
-| `GET` | `/api/v1/admin/users/{userId}` | Admin Basic | Inspect one user and effective plan |
-| `GET` | `/api/v1/admin/users/by-email?email=...` | Admin Basic | Find a user by exact email |
-| `GET` | `/api/v1/admin/subscriptions` | Admin Basic | Page/filter subscription records |
-| `GET` | `/api/v1/admin/subscriptions/{subscriptionId}` | Admin Basic | Inspect a subscription |
-| `PATCH` | `/api/v1/admin/subscriptions/{subscriptionId}` | Admin Basic | Correct subscription status/timestamps |
-| `GET` | `/api/v1/admin/premium-special` | Admin Basic | Count/list active Premium Special users |
-| `PUT` | `/api/v1/admin/users/{userId}/premium-special` | Admin Basic | Grant/replace Premium Special access |
-| `DELETE` | `/api/v1/admin/users/{userId}/premium-special` | Admin Basic | Revoke Premium Special access |
-| `GET` | `/api/v1/admin/special-grants` | Admin Basic | Page/filter all special grants |
-| `GET` | `/api/v1/admin/special-grants/{grantId}` | Admin Basic | Inspect one special grant |
-| `GET` | `/api/v1/admin/webhook-events` | Admin Basic | Page/filter webhook event records |
-| `GET` | `/api/v1/admin/webhook-events/{eventId}` | Admin Basic | Inspect webhook event including payload |
-| `PATCH` | `/api/v1/admin/webhook-events/{eventId}` | Admin Basic | Correct webhook processing metadata |
-| `GET` | `/api/v1/admin/plans` | Admin Basic | View complete local plan catalogue |
-| `GET` | `/api/v1/admin/audit-events` | Admin Basic | Page/filter admin mutation audit trail |
-| `GET` | `/actuator/health/**` | Public | Health, liveness and readiness checks |
-
-## Subscription Rules
-
-- `PREMIUM_SPECIAL`: Premium while the special grant is active and not expired
-- `ACTIVE`: Premium
-- `ON_TRIAL`: Premium
-- `CANCELLED` with a future `ends_at`: Premium until `ends_at`
-- `EXPIRED`: Free
-- `REFUNDED`: Free
-- No subscription: Free
-- Unknown or malformed status: Free
-
-Free users receive only `instant-tab-search`. Premium Monthly, Premium Annual and Premium Special users receive all Waypoint premium features.
-
 ## Tests
 
 ```bash
-mvn test
-mvn verify
+mvn clean verify
+mvn -Ppostgres-it verify
 ```
 
-To explicitly load the isolated test profile:
+The first command runs the standard unit/application integration suite. The `postgres-it` profile runs PostgreSQL/Testcontainers migration and database integration coverage.
 
-```bash
-mvn verify -Dspring.profiles.active=test
+## Core API groups
+
+```text
+/api/v1/auth/**             Google sign-in / JWT lifecycle
+/api/v1/account             authenticated account view
+/api/v1/billing/**          plans, checkout and billing state
+/api/v1/subscriptions/**    current subscription
+/api/v1/entitlements/**     effective feature access
+/api/v1/webhooks/**         signed Lemon Squeezy events
+/api/v1/admin/**            protected administrative operations
 ```
 
-The main integration suite uses H2 in PostgreSQL compatibility mode and mocks Google and Lemon Squeezy clients. Admin integration tests verify credential rejection, Premium Special flows, paged/filterable data reads, controlled mutations, audit history and effective entitlement changes.
+See [`doc/API/01-HTTP-API-Reference.md`](doc/API/01-HTTP-API-Reference.md) for the maintained endpoint list.
 
-## Docker Image
+## Production security summary
 
-```bash
-docker build -t waypoint-backend .
-```
+The `prod` profile requires PostgreSQL, Redis, JWT, Google, Lemon Squeezy, CORS and public base URL configuration. It enables distributed security state. HTTPS is required by the Spring Security chains. Admin operations use a separate stateless Basic-auth chain; production additionally requires the admin TOTP filter. Request bodies for API POST/PUT/PATCH operations are capped at 1 MiB. Distributed rate limits use Redis and fail closed when the limiter cannot safely decide.
 
-The runtime image:
+## Docker image
 
-- uses Java 21;
-- runs as the non-root `waypoint` user;
-- defaults to the production profile;
-- expects runtime configuration through environment variables.
+The current Dockerfile builds with `maven:3.9.15-eclipse-temurin-26`, compiles the project for Java 21, and runs the resulting jar on `eclipse-temurin:25-jre-alpine` as the non-root `waypoint` user.
 
-## Current Limitations
+## Frontend integration status
 
-- No refresh tokens or JWT revocation.
-- No rate limiting.
-- No customer billing portal or graphical admin dashboard.
-- No background Lemon Squeezy reconciliation job.
-- Webhook idempotency uses the raw body hash, so differently formatted equivalent payloads are treated as separate events.
+The backend API is implemented, but the current `rish-kar/Waypoint` frontend `main` branch does not yet call `/api/v1/**`. Treat frontend/backend wiring as an integration boundary until the extension contains a tested API client.
