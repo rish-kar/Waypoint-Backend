@@ -1,0 +1,3 @@
+$kind: collection
+order: 8000
+description: "GPT-5 nano integration tests. Start the backend with AI_OPENAI_ENABLED=true and OPENAI_API_KEY configured before running the intent and chat requests."

@@ -1,6 +1,7 @@
 package com.waypoint.backend.config.application;
 
 import com.waypoint.backend.config.admin.AdminProperties;
+import com.waypoint.backend.config.ai.OpenAiProperties;
 import com.waypoint.backend.config.auth.GoogleProperties;
 import com.waypoint.backend.config.billing.LemonSqueezyProperties;
 import com.waypoint.backend.security.jwt.JwtProperties;
@@ -24,6 +25,7 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
 
     private final Environment environment;
     private final AdminProperties adminProperties;
+    private final OpenAiProperties openAiProperties;
     private final AppProperties appProperties;
     private final CorsProperties corsProperties;
     private final GoogleProperties googleProperties;
@@ -33,6 +35,7 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
     public ConfigurationStartupValidator(
             Environment environment,
             AdminProperties adminProperties,
+            OpenAiProperties openAiProperties,
             AppProperties appProperties,
             CorsProperties corsProperties,
             GoogleProperties googleProperties,
@@ -41,6 +44,7 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
     ) {
         this.environment = environment;
         this.adminProperties = adminProperties;
+        this.openAiProperties = openAiProperties;
         this.appProperties = appProperties;
         this.corsProperties = corsProperties;
         this.googleProperties = googleProperties;
@@ -61,6 +65,8 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
                 .addKeyValue("cors_origin_count", corsProperties.allowedOrigins().size())
                 .addKeyValue("jwt_expiration_seconds", jwtProperties.expirationSeconds())
                 .addKeyValue("google_client_id", googleProperties.clientId())
+                .addKeyValue("openai_enabled", openAiProperties.enabled())
+                .addKeyValue("openai_model", openAiProperties.model())
                 .log("Application configuration validated");
     }
 
@@ -69,12 +75,19 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
         requireHttps("GOOGLE_TOKEN_INFO_URL", googleProperties.tokenInfoUrl());
         requireHttps("GOOGLE_USER_INFO_URL", googleProperties.userInfoUrl());
         requireHttps("LEMON_SQUEEZY_API_BASE_URL", lemonSqueezyProperties.apiBaseUrl());
+        if (openAiProperties.enabled()) {
+            requireHttps("AI_OPENAI_BASE_URL", openAiProperties.baseUrl());
+            rejectPlaceholder("OPENAI_API_KEY", openAiProperties.apiKey());
+        }
         requireRedisUrl(environment.getProperty("spring.data.redis.url"));
         if (!environment.getProperty("security.distributed-state-enabled", Boolean.class, false)) {
             throw new IllegalStateException("Distributed security state must be enabled in production");
         }
         rejectPlaceholder("ADMIN_ID", adminProperties.id());
         rejectPlaceholder("ADMIN_PASSWORD", adminProperties.password());
+        if (adminProperties.password().length() < 16) {
+            throw new IllegalStateException("ADMIN_PASSWORD must be at least 16 characters in production");
+        }
         rejectPlaceholder("ADMIN_TOTP_SECRET", adminProperties.totpSecret());
         rejectPlaceholder("ADMIN_TOTP_ENCRYPTION_KEY", adminProperties.totpEncryptionKey());
         rejectPlaceholder("JWT_SECRET", jwtProperties.secret());
