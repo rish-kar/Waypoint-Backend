@@ -40,14 +40,13 @@ public class GoogleOAuthWebService {
             GoogleProperties googleProperties,
             GoogleOAuthProperties oauthProperties,
             AppProperties appProperties,
-            GoogleAuthService googleAuthService,
-            RestClient.Builder restClientBuilder
+            GoogleAuthService googleAuthService
     ) {
         this.googleProperties = googleProperties;
         this.oauthProperties = oauthProperties;
         this.appProperties = appProperties;
         this.googleAuthService = googleAuthService;
-        this.restClient = restClientBuilder.build();
+        this.restClient = RestClient.builder().build();
     }
 
     public URI authorizationUri(String returnUrl) {
