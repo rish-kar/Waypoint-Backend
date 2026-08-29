@@ -2,6 +2,8 @@ package com.waypoint.backend.controller.auth;
 
 import com.waypoint.backend.model.auth.AuthResponse;
 import com.waypoint.backend.model.auth.GoogleAuthRequest;
+import com.waypoint.backend.model.auth.GoogleOAuthStartResponse;
+import com.waypoint.backend.model.auth.GoogleOAuthStatusResponse;
 import com.waypoint.backend.security.jwt.JwtClaims;
 import com.waypoint.backend.security.jwt.JwtRevocationService;
 import com.waypoint.backend.service.auth.GoogleAuthService;
@@ -9,7 +11,9 @@ import com.waypoint.backend.service.auth.GoogleOAuthWebService;
 import com.waypoint.backend.utilities.exception.UnauthorizedException;
 
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,8 +23,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.net.URI;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -44,20 +46,40 @@ public class AuthController {
         return googleAuthService.login(request.accessToken());
     }
 
-    @GetMapping("/google/start")
-    public ResponseEntity<Void> googleStart(@RequestParam String returnUrl) {
-        URI location = googleOAuthWebService.authorizationUri(returnUrl);
-        return ResponseEntity.status(HttpStatus.FOUND).location(location).build();
+    @PostMapping("/google/start")
+    public GoogleOAuthStartResponse googleStart() {
+        return googleOAuthWebService.start();
     }
 
-    @GetMapping("/google/callback")
-    public ResponseEntity<Void> googleCallback(
+    @GetMapping("/google/status")
+    public GoogleOAuthStatusResponse googleStatus(@RequestParam String transactionId) {
+        return googleOAuthWebService.status(transactionId);
+    }
+
+    @PostMapping("/google/exchange")
+    public AuthResponse googleExchange(@RequestParam String transactionId) {
+        return googleOAuthWebService.exchange(transactionId);
+    }
+
+    @GetMapping(value = "/google/callback", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> googleCallback(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String state,
             @RequestParam(required = false) String error
     ) {
-        URI location = googleOAuthWebService.callbackUri(code, state, error);
-        return ResponseEntity.status(HttpStatus.FOUND).location(location).build();
+        GoogleOAuthWebService.CallbackPage page = googleOAuthWebService.callbackPage(code, state, error);
+        String title = page.success() ? "Waypoint sign-in complete" : "Waypoint sign-in failed";
+        String message = page.success()
+                ? "Sign-in complete. You can close this tab and return to Waypoint."
+                : "Sign-in failed. Return to Waypoint and try again.";
+        String body = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                + "<title>" + title + "</title></head>"
+                + "<body><main><h1>" + title + "</h1><p>" + message + "</p></main></body></html>";
+        return ResponseEntity.status(page.success() ? HttpStatus.OK : HttpStatus.BAD_REQUEST)
+                .cacheControl(CacheControl.noStore())
+                .contentType(MediaType.TEXT_HTML)
+                .body(body);
     }
 
     @PostMapping("/logout")
