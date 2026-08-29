@@ -46,7 +46,10 @@ public class AccountController {
             @AuthenticationPrincipal UUID userId,
             @Valid @RequestBody AccountUpdateRequest request
     ) {
-        return response(userId, userService.updatePhoneNumber(userId, request.phoneNumber()));
+        return response(
+                userId,
+                userService.updatePhoneNumber(userId, request.phoneNumber(), request.phoneCountryCode())
+        );
     }
 
     private AccountResponse response(UUID userId, UserEntity user) {
@@ -57,6 +60,7 @@ public class AccountController {
                 user.getDisplayName(),
                 user.getPictureUrl(),
                 user.getPhoneNumber(),
+                user.getPhoneCountryCode(),
                 PlanResponse.from(planService.effectivePlan(userId)),
                 entitlement
         );
