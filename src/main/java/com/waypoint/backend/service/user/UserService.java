@@ -60,6 +60,15 @@ public class UserService {
                 .orElseThrow(() -> new NotFoundException("User not found"));
     }
 
+    @Transactional
+    public UserEntity updatePhoneNumber(UUID userId, String phoneNumber) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        String normalized = phoneNumber == null ? null : phoneNumber.trim();
+        user.setPhoneNumber(normalized == null || normalized.isBlank() ? null : normalized);
+        return userRepository.save(user);
+    }
+
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase(Locale.ROOT);
     }
