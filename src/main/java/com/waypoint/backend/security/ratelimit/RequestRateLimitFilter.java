@@ -48,7 +48,7 @@ public class RequestRateLimitFilter extends OncePerRequestFilter {
         if (path.startsWith("/api/v1/admin/")) {
             return "admin";
         }
-        if ("/api/v1/auth/google".equals(path)) {
+        if (path.startsWith("/api/v1/auth/")) {
             return "auth";
         }
         if ("/api/v1/webhooks/lemonsqueezy".equals(path)) {
