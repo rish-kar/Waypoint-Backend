@@ -61,11 +61,14 @@ public class UserService {
     }
 
     @Transactional
-    public UserEntity updatePhoneNumber(UUID userId, String phoneNumber) {
+    public UserEntity updatePhoneNumber(UUID userId, String phoneNumber, String phoneCountryCode) {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("User not found"));
-        String normalized = phoneNumber == null ? null : phoneNumber.trim();
-        user.setPhoneNumber(normalized == null || normalized.isBlank() ? null : normalized);
+        String normalizedPhone = phoneNumber == null ? null : phoneNumber.trim();
+        String normalizedCountry = phoneCountryCode == null ? null : phoneCountryCode.trim().toUpperCase(Locale.ROOT);
+        boolean hasPhone = normalizedPhone != null && !normalizedPhone.isBlank();
+        user.setPhoneNumber(hasPhone ? normalizedPhone : null);
+        user.setPhoneCountryCode(hasPhone && normalizedCountry != null && !normalizedCountry.isBlank() ? normalizedCountry : null);
         return userRepository.save(user);
     }
 
