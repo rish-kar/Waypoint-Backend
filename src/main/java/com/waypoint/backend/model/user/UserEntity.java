@@ -32,6 +32,9 @@ public class UserEntity {
     @Column(length = 2048)
     private String pictureUrl;
 
+    @Column(length = 32)
+    private String phoneNumber;
+
     @Column(nullable = false, length = 50)
     private String provider;
 
@@ -106,6 +109,14 @@ public class UserEntity {
 
     public void setPictureUrl(String pictureUrl) {
         this.pictureUrl = pictureUrl;
+    }
+
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
     }
 
     public String getProvider() {
