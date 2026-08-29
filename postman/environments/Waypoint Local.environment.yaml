@@ -4,16 +4,6 @@ values:
     value: 'http://localhost:8080'
   - key: googleAccessToken
     value: ''
-  - key: microsoftRedirectUri
-    value: 'https://your-extension-id.chromiumapp.org/microsoft'
-  - key: microsoftAuthorizationUrl
-    value: ''
-  - key: microsoftExchangeCode
-    value: ''
-  - key: waypointRefreshToken
-    value: ''
-  - key: previousWaypointRefreshToken
-    value: ''
   - key: jwt
     value: ''
   - key: userId

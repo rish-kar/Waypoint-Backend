@@ -8,6 +8,9 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    redis:
+      enabled: false
 
 jwt:
   secret: ${JWT_SECRET:waypoint-local-development-secret-change-before-production}

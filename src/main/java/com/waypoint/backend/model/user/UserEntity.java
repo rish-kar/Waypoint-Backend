@@ -43,6 +43,9 @@ public class UserEntity {
     private PlanEntity plan;
 
     @Column(nullable = false)
+    private int aiTrialRequestsUsed;
+
+    @Column(nullable = false)
     private Instant createdAt;
 
     @Column(nullable = false)
@@ -127,6 +130,14 @@ public class UserEntity {
 
     public void setPlan(PlanEntity plan) {
         this.plan = plan;
+    }
+
+    public int getAiTrialRequestsUsed() {
+        return aiTrialRequestsUsed;
+    }
+
+    public void setAiTrialRequestsUsed(int aiTrialRequestsUsed) {
+        this.aiTrialRequestsUsed = aiTrialRequestsUsed;
     }
 
     public Instant getCreatedAt() {

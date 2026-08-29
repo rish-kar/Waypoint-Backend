@@ -1,3 +1,3 @@
 $kind: collection
-description: Run the validation cases as needed. Google Login and Microsoft Session Exchange both populate the shared jwt/userId environment. For Microsoft E2E, run Microsoft Start, complete the real Chrome web-auth consent/redirect, copy exchange_code into microsoftExchangeCode, then run Microsoft Session Exchange, Current Session, refresh rotation/replay checks, logout/link/disconnect checks as needed.
+description: Run validation and rejection cases first. Set googleAccessToken before Google Login. The successful login stores jwt and userId for later folders.
 order: 2000

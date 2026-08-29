@@ -2,6 +2,8 @@ package com.waypoint.backend.service.auth;
 
 import com.waypoint.backend.config.auth.GoogleProperties;
 import com.waypoint.backend.model.auth.GoogleProfile;
+import com.waypoint.backend.security.jwt.JwtService;
+import com.waypoint.backend.service.entitlement.EntitlementService;
 import com.waypoint.backend.service.user.UserService;
 import com.waypoint.backend.utilities.client.google.GoogleProfileClient;
 import com.waypoint.backend.utilities.exception.UnauthorizedException;
@@ -17,18 +19,21 @@ import static org.mockito.Mockito.when;
 class GoogleAuthServiceTests {
     private GoogleProfileClient googleProfileClient;
     private UserService userService;
-    private WaypointSessionService sessionService;
+    private JwtService jwtService;
+    private EntitlementService entitlementService;
     private GoogleAuthService googleAuthService;
 
     @BeforeEach
     void setUp() {
         googleProfileClient = mock(GoogleProfileClient.class);
         userService = mock(UserService.class);
-        sessionService = mock(WaypointSessionService.class);
+        jwtService = mock(JwtService.class);
+        entitlementService = mock(EntitlementService.class);
         googleAuthService = new GoogleAuthService(
                 googleProfileClient,
                 userService,
-                sessionService,
+                jwtService,
+                entitlementService,
                 new GoogleProperties(
                         "expected-google-client",
                         "https://oauth2.googleapis.com/tokeninfo",
@@ -45,38 +50,67 @@ class GoogleAuthServiceTests {
         assertThatThrownBy(() -> googleAuthService.login("bad-token"))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("Google authentication failed");
-        verifyNoInteractions(userService, sessionService);
+        verifyNoInteractions(userService, jwtService, entitlementService);
     }
 
     @Test
     void rejectsMissingProviderUserId() {
-        assertRejected(new GoogleProfile(null, "user@example.com", true, "User", null,
-                "expected-google-client", 300));
+        assertRejected(new GoogleProfile(
+                null,
+                "user@example.com",
+                true,
+                "User",
+                null,
+                "expected-google-client",
+                300
+        ));
     }
 
     @Test
     void rejectsUnverifiedEmail() {
-        assertRejected(new GoogleProfile("google-user", "user@example.com", false, "User", null,
-                "expected-google-client", 300));
+        assertRejected(new GoogleProfile(
+                "google-user",
+                "user@example.com",
+                false,
+                "User",
+                null,
+                "expected-google-client",
+                300
+        ));
     }
 
     @Test
     void rejectsMismatchedAudience() {
-        assertRejected(new GoogleProfile("google-user", "user@example.com", true, "User", null,
-                "different-google-client", 300));
+        assertRejected(new GoogleProfile(
+                "google-user",
+                "user@example.com",
+                true,
+                "User",
+                null,
+                "different-google-client",
+                300
+        ));
     }
 
     @Test
     void rejectsExpiredGoogleToken() {
-        assertRejected(new GoogleProfile("google-user", "user@example.com", true, "User", null,
-                "expected-google-client", 0));
+        assertRejected(new GoogleProfile(
+                "google-user",
+                "user@example.com",
+                true,
+                "User",
+                null,
+                "expected-google-client",
+                0
+        ));
     }
 
     private void assertRejected(GoogleProfile profile) {
         when(googleProfileClient.fetchProfile("google-token")).thenReturn(profile);
+
         assertThatThrownBy(() -> googleAuthService.login("google-token"))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("Google authentication failed");
-        verifyNoInteractions(userService, sessionService);
+        verifyNoInteractions(userService, jwtService, entitlementService);
     }
 }

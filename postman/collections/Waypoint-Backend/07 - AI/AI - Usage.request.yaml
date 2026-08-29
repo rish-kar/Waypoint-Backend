@@ -1,0 +1,25 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/ai/usage"
+method: GET
+headers:
+  Authorization: "Bearer {{jwt}}"
+  X-Request-ID: postman-ai-usage
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test('Cloud AI usage is exposed', () => {
+          pm.expect(body.cloudAiAllowed).to.be.a('boolean');
+          pm.expect(body.trialLimited).to.be.a('boolean');
+          pm.expect(body.trialLimit).to.eql(20);
+          pm.expect(body.trialUsed).to.be.a('number');
+          pm.expect(body.trialRemaining).to.be.a('number');
+      });
+      pm.test('Trial count is internally consistent', () => {
+          if (body.trialLimited) pm.expect(body.trialUsed + body.trialRemaining).to.eql(body.trialLimit);
+      });
+      pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-ai-usage'));
+    language: text/javascript
+description: "Returns the authenticated user's Cloud AI trial usage. Trial accounts receive 20 total Cloud AI requests."
+order: 8150

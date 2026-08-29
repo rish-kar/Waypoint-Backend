@@ -3,6 +3,7 @@
 ## Files
 
 - `Waypoint-Backend.postman_collection.json` — importable main collection
+- `Waypoint-AI.postman_collection.json` — focused importable GPT-5 nano AI smoke collection
 - `Waypoint-Local.postman_environment.json` — importable local environment
 - `collections/Waypoint-Backend/` — Git-synced Postman source
 - `environments/Waypoint Local.environment.yaml` — Git-synced environment source
@@ -14,8 +15,29 @@
 - `04 - Webhooks` contains Waypoint webhook endpoint and hardening tests.
 - `05 - Admin` contains only Waypoint admin API operations.
 - `06 - Lemon Squeezy Test Mode` contains the direct Lemon Squeezy provider lifecycle tests and the small E2E helpers needed to compare provider state with Waypoint.
+- `07 - AI` contains GPT-5 nano model discovery, browser-intent routing and page-context chat tests.
 
 Lemon Squeezy test variables are owned by `06 - Lemon Squeezy Test Mode`; normal Waypoint folders must not overwrite the selected provider-test subscription.
+
+## GPT-5 nano AI tests
+
+Start the backend with:
+
+```text
+AI_OPENAI_ENABLED=true
+OPENAI_API_KEY=<your-openai-api-key>
+AI_OPENAI_MODEL=gpt-5-nano
+```
+
+The OpenAI API key stays on the backend and is never stored in the Postman environment or sent by the extension.
+
+For a focused AI-only test run, import `Waypoint-AI.postman_collection.json` together with `Waypoint-Local.postman_environment.json` and run:
+
+1. `AI - Models`
+2. `AI - Intent - Group Tabs`
+3. `AI - Chat - Page Context`
+
+The Git-synced source for the same requests is under `collections/Waypoint-Backend/07 - AI/`.
 
 ## Local setup
 

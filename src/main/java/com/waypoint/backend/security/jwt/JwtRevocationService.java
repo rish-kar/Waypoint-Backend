@@ -21,9 +21,11 @@ public class JwtRevocationService {
     private final StringRedisTemplate redisTemplate;
     private final boolean distributedStateEnabled;
 
-    public JwtRevocationService(RevokedJwtTokenRepository revokedJwtTokenRepository,
-                                StringRedisTemplate redisTemplate,
-                                @Value("${security.distributed-state-enabled:false}") boolean distributedStateEnabled) {
+    public JwtRevocationService(
+            RevokedJwtTokenRepository revokedJwtTokenRepository,
+            StringRedisTemplate redisTemplate,
+            @Value("${security.distributed-state-enabled:false}") boolean distributedStateEnabled
+    ) {
         this.revokedJwtTokenRepository = revokedJwtTokenRepository;
         this.redisTemplate = redisTemplate;
         this.distributedStateEnabled = distributedStateEnabled;
@@ -31,7 +33,9 @@ public class JwtRevocationService {
 
     @Transactional(readOnly = true)
     public boolean isRevoked(UUID tokenId) {
-        if (tokenId == null) return false;
+        if (tokenId == null) {
+            return false;
+        }
         if (distributedStateEnabled) {
             try {
                 return Boolean.TRUE.equals(redisTemplate.hasKey(redisKey(tokenId)));
@@ -44,20 +48,20 @@ public class JwtRevocationService {
 
     @Transactional
     public void revoke(JwtClaims claims) {
-        if (claims == null || claims.tokenId() == null || claims.userId() == null || claims.expiresAt() == null) return;
-        Instant now = Instant.now();
-        if (!claims.expiresAt().isAfter(now)) return;
-
-        if (distributedStateEnabled) {
-            try {
-                Duration ttl = Duration.between(now, claims.expiresAt());
-                redisTemplate.opsForValue().set(redisKey(claims.tokenId()), "1", ttl);
-            } catch (RuntimeException ignored) {
-                // Database revocation remains the source-of-truth fallback when Redis is unavailable.
-            }
+        if (claims == null || claims.tokenId() == null || claims.userId() == null || claims.expiresAt() == null) {
+            return;
         }
 
-        if (revokedJwtTokenRepository.existsById(claims.tokenId())) return;
+        Instant now = Instant.now();
+        if (!claims.expiresAt().isAfter(now)) {
+            return;
+        }
+
+        if (distributedStateEnabled) {
+            Duration ttl = Duration.between(now, claims.expiresAt());
+            redisTemplate.opsForValue().set(redisKey(claims.tokenId()), "1", ttl);
+        }
+
         RevokedJwtTokenEntity revokedToken = new RevokedJwtTokenEntity();
         revokedToken.setTokenId(claims.tokenId());
         revokedToken.setUserId(claims.userId());

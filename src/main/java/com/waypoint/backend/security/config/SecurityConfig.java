@@ -114,6 +114,7 @@ public class SecurityConfig {
             Environment environment
     ) throws Exception {
         http
+                // Stateless bearer-token API; authentication is never supplied by cookies or an HTTP session.
                 .csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/**"))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
@@ -130,6 +131,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/session/exchange").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/session/refresh").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/session").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/ai/models").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/ai/intent", "/api/v1/ai/chat").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/webhooks/lemonsqueezy").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                         .anyRequest().authenticated()
@@ -161,9 +164,14 @@ public class SecurityConfig {
     }
 
     @Bean
-    CorsConfigurationSource corsConfigurationSource(CorsProperties properties) {
+    CorsConfigurationSource corsConfigurationSource(CorsProperties properties, Environment environment) {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(properties.allowedOrigins());
+        if (environment.acceptsProfiles(Profiles.of("dev", "test"))) {
+            // Temporary test mode: Cloud AI is intentionally callable from any local/unpacked frontend origin.
+            // Production remains restricted to configured origins.
+            configuration.setAllowedOriginPatterns(List.of("*"));
+        }
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of(
                 "Authorization", "Content-Type", "X-Signature", "X-Request-ID", "X-Admin-TOTP"
