@@ -21,6 +21,9 @@ waypoint-session:
 security:
   distributed-state-enabled: true
 
+monitoring:
+  metrics-token: ${MONITORING_METRICS_TOKEN}
+
 google:
   client-id: ${GOOGLE_CLIENT_ID}
 

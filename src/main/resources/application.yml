@@ -41,7 +41,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
   endpoint:
     health:
       show-details: never
@@ -52,6 +52,8 @@ management:
           include: livenessState
         readiness:
           include: readinessState,db
+    prometheus:
+      access: read-only
   health:
     livenessstate:
       enabled: true
@@ -62,6 +64,13 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        waypoint.api.request.duration: true
+
+monitoring:
+  metrics-token: ${MONITORING_METRICS_TOKEN:waypoint-local-metrics-token-change-before-production}
 
 admin:
   id: ${ADMIN_ID:}
