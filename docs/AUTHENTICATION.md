@@ -195,23 +195,17 @@ http://localhost:8080/api/v1/auth/microsoft/callback
 Then:
 
 1. Start PostgreSQL and Redis and run the backend with the `dev` profile.
-2. Call `POST /api/v1/auth/microsoft/start` using the same exact Chromium redirect URI configured above.
-3. Open the returned `authorizationUrl` through the extension's Chrome web-auth flow.
-4. Read `exchange_code` from the final extension redirect URL.
-5. Send that code to `POST /api/v1/auth/session/exchange`.
-6. Verify `GET /api/v1/account` with the returned Waypoint access token.
-7. Verify `POST /api/v1/auth/session/refresh` rotates the Waypoint refresh token and rejects replay of the old one.
-8. Verify `POST /api/v1/auth/logout` revokes the Waypoint session but keeps the Microsoft link.
-9. Sign in with Microsoft again and confirm it returns to the same Waypoint account.
-10. Verify `DELETE /api/v1/auth/microsoft` explicitly removes the Microsoft link.
+2. Import `postman/Waypoint-Backend.postman_collection.json` and `postman/Waypoint-Local.postman_environment.json` and select `Waypoint Local`.
+3. Set `microsoftRedirectUri` to the same Chromium redirect URI configured in `MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS`.
+4. Run `Microsoft Start` in `01 - Authentication`.
+5. Open the returned `microsoftAuthorizationUrl` through the extension's Chrome web-auth flow and complete Microsoft sign-in/consent.
+6. Read `exchange_code` from the final extension redirect URL and set `microsoftExchangeCode` in `Waypoint Local`.
+7. Run `Microsoft Session Exchange`, which stores `jwt`, `waypointRefreshToken`, `userId` and `userEmail`.
+8. Run `Current Session`, `Refresh Waypoint Session` and `Refresh Replay Rejected`.
+9. Verify `Logout` revokes the Waypoint session but keeps the Microsoft link; sign in again with Microsoft and confirm it returns to the same Waypoint account.
+10. Use `Microsoft Link Start` for explicit cross-provider linking and `Microsoft Disconnect` for explicit unlinking.
 
-A dedicated importable local Postman collection is provided at:
-
-```text
-postman/Waypoint-Microsoft-OAuth-Local.postman_collection.json
-```
-
-It covers the backend calls and stores session variables. The browser consent/redirect step remains interactive because Microsoft authentication must happen in the browser/Chrome extension context.
+The Microsoft requests are part of the main `01 - Authentication` Postman folder and use the shared `Waypoint Local` environment. The browser consent/redirect step remains interactive because Microsoft authentication must happen in the browser/Chrome extension context.
 
 ## Production configuration notes
 
