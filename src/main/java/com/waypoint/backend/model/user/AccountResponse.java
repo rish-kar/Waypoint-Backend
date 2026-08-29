@@ -11,6 +11,7 @@ public record AccountResponse(
         String displayName,
         String pictureUrl,
         String phoneNumber,
+        String phoneCountryCode,
         PlanResponse plan,
         EntitlementResponse entitlement
 ) {
