@@ -1,0 +1,18 @@
+$kind: http-request
+url: "{{baseUrl}}/actuator/prometheus"
+method: GET
+headers:
+  Authorization: Bearer definitely-not-the-monitoring-token
+  X-Request-ID: postman-metrics-invalid-token
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 401', () => pm.response.to.have.status(401));
+      const body = pm.response.json();
+      pm.test('Invalid monitoring token is rejected', () => {
+          pm.expect(body.code).to.eql('UNAUTHORIZED');
+          pm.expect(body.message).to.eql('Metrics authentication required');
+      });
+      pm.test('Bearer challenge returned', () => pm.expect(pm.response.headers.get('WWW-Authenticate')).to.eql('Bearer realm="waypoint-metrics"'));
+    language: text/javascript
+order: 1200

@@ -1,0 +1,4 @@
+$kind: collection
+id: 5fa4b539-9d7d-4e87-92e3-11c7286b7247
+name: Waypoint Metrics
+description: Focused Prometheus monitoring smoke tests. Run in order with the Waypoint Local environment and set monitoringMetricsToken to the same value as MONITORING_METRICS_TOKEN.

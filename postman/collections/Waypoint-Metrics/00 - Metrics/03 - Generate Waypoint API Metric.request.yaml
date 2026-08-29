@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/ai/models"
+method: GET
+headers:
+  X-Request-ID: postman-metrics-api-sample
+description: Calls a public, provider-free Waypoint endpoint so the custom API metrics have a deterministic sample before scraping Prometheus.
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      pm.test('Request ID returned', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-metrics-api-sample'));
+    language: text/javascript
+order: 1300

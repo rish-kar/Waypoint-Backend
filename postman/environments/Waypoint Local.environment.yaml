@@ -2,6 +2,8 @@ name: Waypoint Local
 values:
   - key: baseUrl
     value: 'http://localhost:8080'
+  - key: monitoringMetricsToken
+    value: ''
   - key: googleAccessToken
     value: ''
   - key: microsoftRedirectUri
