@@ -2,7 +2,7 @@
 
 ## Files
 
-- `Waypoint-Backend.postman_collection.json` — importable collection
+- `Waypoint-Backend.postman_collection.json` — importable main collection
 - `Waypoint-AI.postman_collection.json` — focused importable GPT-5 nano AI smoke collection
 - `Waypoint-Local.postman_environment.json` — importable local environment
 - `collections/Waypoint-Backend/` — Git-synced Postman source
@@ -10,6 +10,7 @@
 
 ## Collection layout
 
+- `01 - Authentication` contains Google authentication, Microsoft OAuth/session flows, refresh-token rotation/replay checks and bearer-token hardening tests.
 - `03 - Billing` contains only Waypoint backend billing endpoints.
 - `04 - Webhooks` contains Waypoint webhook endpoint and hardening tests.
 - `05 - Admin` contains only Waypoint admin API operations.
@@ -59,11 +60,45 @@ webhookSecret = same value as LEMON_SQUEEZY_WEBHOOK_SECRET
 
 `webhookSecret` is the long-lived signing secret, not a webhook signature. The webhook requests generate `webhookBody` and the matching HMAC-SHA256 `webhookSignature` automatically for each payload.
 
-Run `Google Login` once to populate `jwt`, `userId`, and `userEmail`.
+For Google auth, run `Google Login` once to populate `jwt`, `userId`, and `userEmail`.
+
+## Microsoft OAuth local E2E
+
+Microsoft OAuth is part of the main `01 - Authentication` folder and uses the same `Waypoint Local` environment.
+
+Configure the backend with a real development Microsoft Entra app registration:
+
+```text
+MICROSOFT_CLIENT_ID=<development-client-id>
+MICROSOFT_CLIENT_SECRET=<development-client-secret>
+MICROSOFT_TENANT=common
+MICROSOFT_CALLBACK_URL=http://localhost:8080/api/v1/auth/microsoft/callback
+MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS=https://<extension-id>.chromiumapp.org/microsoft
+```
+
+Set the Postman environment variable:
+
+```text
+microsoftRedirectUri = same HTTPS chromiumapp.org URI as MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS
+```
+
+Then:
+
+1. Run `Microsoft Start`.
+2. Read `microsoftAuthorizationUrl` from the environment or Postman console and open it through the extension's `chrome.identity.launchWebAuthFlow` flow.
+3. Complete Microsoft sign-in/consent.
+4. The backend callback redirects to the extension URI with `waypoint_auth=success&exchange_code=...`. Copy that `exchange_code` value into `microsoftExchangeCode`.
+5. Run `Microsoft Session Exchange`. It stores `jwt`, `waypointRefreshToken`, `userId`, and `userEmail` in `Waypoint Local`.
+6. Run `Current Session`, then `Refresh Waypoint Session`, then `Refresh Replay Rejected`.
+7. `Microsoft Link Start` is the explicit cross-provider linking test for an already authenticated Waypoint account.
+8. `Logout` revokes Waypoint sessions but preserves the Microsoft account link. Sign in again with the same Microsoft identity and verify the same `userId` is returned.
+9. `Microsoft Disconnect` is the explicit unlink operation and requires a currently valid Waypoint JWT.
+
+The Microsoft sign-in/consent screen is intentionally not automated by Postman because the browser/Chrome identity redirect is part of the actual extension OAuth flow. Everything before and after that interactive provider step is covered by the main Postman collection and backend integration tests.
 
 ## Webhook hardening smoke tests
 
-`04 - Webhooks` now includes focused receiver checks in addition to normal subscription-state smoke tests:
+`04 - Webhooks` includes focused receiver checks in addition to normal subscription-state smoke tests:
 
 - `Invalid Signature` -> malformed signature returns `401`.
 - `Verify Invalid Signature Not Stored` -> rejected payload never reaches `webhook_events`.

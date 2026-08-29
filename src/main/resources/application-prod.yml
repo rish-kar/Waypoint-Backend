@@ -12,13 +12,30 @@ spring:
 
 jwt:
   secret: ${JWT_SECRET}
-  expiration-seconds: ${JWT_EXPIRATION_SECONDS:86400}
+  expiration-seconds: ${JWT_EXPIRATION_SECONDS:900}
+
+waypoint-session:
+  refresh-token-ttl-seconds: ${WAYPOINT_SESSION_REFRESH_TOKEN_TTL_SECONDS:2592000}
+  cleanup-ms: ${WAYPOINT_SESSION_CLEANUP_MS:3600000}
 
 security:
   distributed-state-enabled: true
 
 google:
   client-id: ${GOOGLE_CLIENT_ID}
+
+microsoft:
+  client-id: ${MICROSOFT_CLIENT_ID}
+  client-secret: ${MICROSOFT_CLIENT_SECRET}
+  tenant: ${MICROSOFT_TENANT:common}
+  callback-url: ${MICROSOFT_CALLBACK_URL}
+  graph-user-url: ${MICROSOFT_GRAPH_USER_URL:https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName}
+  token-encryption-key: ${MICROSOFT_TOKEN_ENCRYPTION_KEY:}
+  token-encryption-key-file: ${MICROSOFT_TOKEN_ENCRYPTION_KEY_FILE}
+  allowed-extension-redirect-uris: ${MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS}
+  transaction-ttl-seconds: ${MICROSOFT_TRANSACTION_TTL_SECONDS:600}
+  exchange-code-ttl-seconds: ${MICROSOFT_EXCHANGE_CODE_TTL_SECONDS:180}
+  cleanup-ms: ${MICROSOFT_OAUTH_CLEANUP_MS:3600000}
 
 lemon-squeezy:
   api-key: ${LEMON_SQUEEZY_API_KEY}
