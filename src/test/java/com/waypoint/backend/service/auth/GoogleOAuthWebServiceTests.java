@@ -3,11 +3,10 @@ package com.waypoint.backend.service.auth;
 import com.waypoint.backend.config.application.AppProperties;
 import com.waypoint.backend.config.auth.GoogleOAuthProperties;
 import com.waypoint.backend.config.auth.GoogleProperties;
-import com.waypoint.backend.model.auth.GoogleOAuthStartResponse;
-import com.waypoint.backend.utilities.exception.InvalidRequestException;
 
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 
@@ -33,13 +32,14 @@ class GoogleOAuthWebServiceTests {
     }
 
     @Test
-    void startsBackendControlledGoogleLogin() {
+    void buildsBackendControlledGoogleAuthorizationUrl() {
         GoogleOAuthWebService service = service();
 
-        GoogleOAuthStartResponse response = service.start();
-        String authorizationUrl = URLDecoder.decode(response.authorizationUrl(), StandardCharsets.UTF_8);
+        URI authorizationUri = service.authorizationUri(
+                "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/google"
+        );
+        String authorizationUrl = URLDecoder.decode(authorizationUri.toString(), StandardCharsets.UTF_8);
 
-        assertThat(response.transactionId()).matches("[A-Za-z0-9_-]{32,128}");
         assertThat(authorizationUrl)
                 .startsWith("https://accounts.google.com/o/oauth2/v2/auth?")
                 .contains("client_id=test-google-client")
@@ -49,24 +49,22 @@ class GoogleOAuthWebServiceTests {
                 .contains("code_challenge=")
                 .contains("code_challenge_method=S256")
                 .contains("redirect_uri=http://localhost:8080/api/v1/auth/google/callback");
-        assertThat(response.expiresIn()).isPositive();
-        assertThat(service.status(response.transactionId()).status()).isEqualTo("PENDING");
     }
 
     @Test
-    void rejectsExchangeUntilCallbackCompletes() {
+    void createsFreshStateForEachLoginAttempt() {
         GoogleOAuthWebService service = service();
-        GoogleOAuthStartResponse response = service.start();
+        String returnUrl = "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/google";
 
-        assertThatThrownBy(() -> service.exchange(response.transactionId()))
-                .isInstanceOf(InvalidRequestException.class)
-                .hasMessageContaining("still pending");
+        assertThat(service.authorizationUri(returnUrl)).isNotEqualTo(service.authorizationUri(returnUrl));
     }
 
     @Test
-    void treatsUnknownTransactionsAsExpired() {
+    void rejectsNonExtensionReturnUrls() {
         GoogleOAuthWebService service = service();
 
-        assertThat(service.status("not-a-valid-transaction").status()).isEqualTo("EXPIRED");
+        assertThatThrownBy(() -> service.authorizationUri("https://example.com/google"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid extension return URL");
     }
 }
