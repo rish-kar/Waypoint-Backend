@@ -8,6 +8,9 @@ import com.waypoint.backend.utilities.exception.InvalidRequestException;
 
 import org.junit.jupiter.api.Test;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -34,13 +37,14 @@ class GoogleOAuthWebServiceTests {
         GoogleOAuthWebService service = service();
 
         GoogleOAuthStartResponse response = service.start();
+        String authorizationUrl = URLDecoder.decode(response.authorizationUrl(), StandardCharsets.UTF_8);
 
         assertThat(response.transactionId()).matches("[A-Za-z0-9_-]{32,128}");
-        assertThat(response.authorizationUrl())
+        assertThat(authorizationUrl)
                 .startsWith("https://accounts.google.com/o/oauth2/v2/auth?")
                 .contains("client_id=test-google-client")
                 .contains("response_type=code")
-                .contains("scope=openid%20email%20profile")
+                .contains("scope=openid email profile")
                 .contains("state=")
                 .contains("code_challenge=")
                 .contains("code_challenge_method=S256")
