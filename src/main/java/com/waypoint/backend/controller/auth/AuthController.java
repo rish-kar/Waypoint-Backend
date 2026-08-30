@@ -2,10 +2,12 @@ package com.waypoint.backend.controller.auth;
 
 import com.waypoint.backend.model.auth.AuthResponse;
 import com.waypoint.backend.model.auth.GoogleAuthRequest;
+import com.waypoint.backend.model.auth.SessionRefreshRequest;
 import com.waypoint.backend.security.jwt.JwtClaims;
 import com.waypoint.backend.security.jwt.JwtRevocationService;
 import com.waypoint.backend.service.auth.GoogleAuthService;
 import com.waypoint.backend.service.auth.GoogleOAuthWebService;
+import com.waypoint.backend.service.auth.WaypointSessionService;
 import com.waypoint.backend.utilities.exception.UnauthorizedException;
 
 import jakarta.validation.Valid;
@@ -27,15 +29,18 @@ import java.net.URI;
 public class AuthController {
     private final GoogleAuthService googleAuthService;
     private final GoogleOAuthWebService googleOAuthWebService;
+    private final WaypointSessionService sessionService;
     private final JwtRevocationService jwtRevocationService;
 
     public AuthController(
             GoogleAuthService googleAuthService,
             GoogleOAuthWebService googleOAuthWebService,
+            WaypointSessionService sessionService,
             JwtRevocationService jwtRevocationService
     ) {
         this.googleAuthService = googleAuthService;
         this.googleOAuthWebService = googleOAuthWebService;
+        this.sessionService = sessionService;
         this.jwtRevocationService = jwtRevocationService;
     }
 
@@ -60,6 +65,11 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.FOUND).location(location).build();
     }
 
+    @PostMapping("/session/refresh")
+    public AuthResponse refresh(@Valid @RequestBody SessionRefreshRequest request) {
+        return sessionService.refresh(request.refreshToken());
+    }
+
     @PostMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void logout(Authentication authentication) {
@@ -67,5 +77,6 @@ public class AuthController {
             throw new UnauthorizedException("Authentication required");
         }
         jwtRevocationService.revoke(claims);
+        sessionService.revokeAll(claims.userId());
     }
 }
