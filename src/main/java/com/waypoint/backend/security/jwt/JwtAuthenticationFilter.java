@@ -46,6 +46,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         return HttpMethod.OPTIONS.matches(request.getMethod())
                 || path.equals("/api/v1/auth/google")
+                || path.equals("/api/v1/auth/google/start")
+                || path.equals("/api/v1/auth/google/callback")
+                || path.equals("/api/v1/auth/microsoft/start")
+                || path.equals("/api/v1/auth/microsoft/callback")
+                || path.equals("/api/v1/auth/session/exchange")
                 || path.equals("/api/v1/auth/session/refresh")
                 || path.startsWith("/api/v1/ai/")
                 || path.equals("/api/v1/webhooks/lemonsqueezy")
