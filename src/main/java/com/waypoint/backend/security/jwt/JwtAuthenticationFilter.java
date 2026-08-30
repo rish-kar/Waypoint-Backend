@@ -46,6 +46,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         return HttpMethod.OPTIONS.matches(request.getMethod())
                 || path.equals("/api/v1/auth/google")
+                || path.equals("/api/v1/auth/session/refresh")
                 || path.startsWith("/api/v1/ai/")
                 || path.equals("/api/v1/webhooks/lemonsqueezy")
                 || path.equals("/api/v1/admin")
@@ -82,7 +83,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             );
             authentication.setDetails(claims);
             SecurityContext context = SecurityContextHolder.createEmptyContext();
-            context.setAuthentication(authentication);
+            SecurityContextHolder.setAuthentication(authentication);
             SecurityContextHolder.setContext(context);
 
             LOGGER.atDebug()
