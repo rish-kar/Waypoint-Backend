@@ -1,6 +1,7 @@
 package com.waypoint.backend;
 
 import com.waypoint.backend.model.auth.GoogleProfile;
+import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.auth.WaypointRefreshSessionRepository;
 import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.utilities.client.google.GoogleProfileClient;
@@ -85,18 +86,7 @@ class WaypointSessionIntegrationTests {
 
     @Test
     void refreshesExpiredAccessTokenThenPersistsPhoneAndRevokesSessionOnLogout() throws Exception {
-        String loginBody = mockMvc.perform(post("/api/v1/auth/google")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"accessToken\":\"valid-google-token\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").isString())
-                .andExpect(jsonPath("$.refreshToken").isString())
-                .andExpect(jsonPath("$.refreshExpiresIn").value(2592000))
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        JsonNode login = objectMapper.readTree(loginBody);
+        JsonNode login = login();
         String expiredAccessToken = login.get("accessToken").asText();
         String firstRefreshToken = login.get("refreshToken").asText();
         assertThat(refreshSessionRepository.findAll()).hasSize(1);
@@ -107,25 +97,10 @@ class WaypointSessionIntegrationTests {
                         .header("Authorization", "Bearer " + expiredAccessToken))
                 .andExpect(status().isUnauthorized());
 
-        String refreshBody = mockMvc.perform(post("/api/v1/auth/session/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new RefreshRequest(firstRefreshToken))))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").isString())
-                .andExpect(jsonPath("$.refreshToken").isString())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        JsonNode refreshed = objectMapper.readTree(refreshBody);
-        String refreshedAccessToken = refreshed.get("accessToken").asText();
-        String secondRefreshToken = refreshed.get("refreshToken").asText();
+        JsonNode firstRefresh = refresh(firstRefreshToken);
+        String refreshedAccessToken = firstRefresh.get("accessToken").asText();
+        String secondRefreshToken = firstRefresh.get("refreshToken").asText();
         assertThat(secondRefreshToken).isNotEqualTo(firstRefreshToken);
-
-        mockMvc.perform(post("/api/v1/auth/session/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new RefreshRequest(firstRefreshToken))))
-                .andExpect(status().isUnauthorized());
 
         mockMvc.perform(patch("/api/v1/account")
                         .header("Authorization", "Bearer " + refreshedAccessToken)
@@ -135,20 +110,54 @@ class WaypointSessionIntegrationTests {
                 .andExpect(jsonPath("$.phoneNumber").value("+91 9916604905"))
                 .andExpect(jsonPath("$.phoneCountryCode").value("IN"));
 
-        mockMvc.perform(get("/api/v1/account")
-                        .header("Authorization", "Bearer " + refreshedAccessToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.phoneNumber").value("+91 9916604905"))
-                .andExpect(jsonPath("$.phoneCountryCode").value("IN"));
+        UserEntity savedUser = userRepository.findAll().getFirst();
+        assertThat(savedUser.getPhoneNumber()).isEqualTo("+91 9916604905");
+        assertThat(savedUser.getPhoneCountryCode()).isEqualTo("IN");
+
+        mockMvc.perform(post("/api/v1/auth/session/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RefreshRequest(firstRefreshToken))))
+                .andExpect(status().isUnauthorized());
+
+        JsonNode secondRefresh = refresh(secondRefreshToken);
+        String logoutAccessToken = secondRefresh.get("accessToken").asText();
+        String logoutRefreshToken = secondRefresh.get("refreshToken").asText();
 
         mockMvc.perform(post("/api/v1/auth/logout")
-                        .header("Authorization", "Bearer " + refreshedAccessToken))
+                        .header("Authorization", "Bearer " + logoutAccessToken))
                 .andExpect(status().isNoContent());
 
         mockMvc.perform(post("/api/v1/auth/session/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new RefreshRequest(secondRefreshToken))))
+                        .content(objectMapper.writeValueAsString(new RefreshRequest(logoutRefreshToken))))
                 .andExpect(status().isUnauthorized());
+    }
+
+    private JsonNode login() throws Exception {
+        String responseBody = mockMvc.perform(post("/api/v1/auth/google")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"accessToken\":\"valid-google-token\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isString())
+                .andExpect(jsonPath("$.refreshToken").isString())
+                .andExpect(jsonPath("$.refreshExpiresIn").value(2592000))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return objectMapper.readTree(responseBody);
+    }
+
+    private JsonNode refresh(String refreshToken) throws Exception {
+        String responseBody = mockMvc.perform(post("/api/v1/auth/session/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RefreshRequest(refreshToken))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isString())
+                .andExpect(jsonPath("$.refreshToken").isString())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return objectMapper.readTree(responseBody);
     }
 
     private record RefreshRequest(String refreshToken) {
