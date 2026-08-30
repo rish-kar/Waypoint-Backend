@@ -114,7 +114,6 @@ public class SecurityConfig {
             Environment environment
     ) throws Exception {
         http
-                // Stateless bearer-token API; authentication is never supplied by cookies or an HTTP session.
                 .csrf(csrf -> csrf.ignoringRequestMatchers("/api/v1/**"))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
@@ -126,6 +125,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/google").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/session/refresh").permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/auth/google/start",
@@ -168,8 +168,6 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(properties.allowedOrigins());
         if (environment.acceptsProfiles(Profiles.of("dev", "test"))) {
-            // Temporary test mode: Cloud AI is intentionally callable from any local/unpacked frontend origin.
-            // Production remains restricted to configured origins.
             configuration.setAllowedOriginPatterns(List.of("*"));
         }
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
