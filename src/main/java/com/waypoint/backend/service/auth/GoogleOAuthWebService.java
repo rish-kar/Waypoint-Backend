@@ -127,7 +127,9 @@ public class GoogleOAuthWebService {
     private URI successRedirect(String returnUrl, AuthResponse response) {
         return URI.create(returnUrl + "#access_token=" + encode(response.accessToken())
                 + "&token_type=" + encode(response.tokenType())
-                + "&expires_in=" + response.expiresIn());
+                + "&expires_in=" + response.expiresIn()
+                + "&refresh_token=" + encode(response.refreshToken())
+                + "&refresh_expires_in=" + response.refreshExpiresIn());
     }
 
     private URI errorRedirect(String returnUrl, String error) {
