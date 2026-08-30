@@ -24,6 +24,11 @@ security:
 google:
   client-id: ${GOOGLE_CLIENT_ID}
 
+google-oauth:
+  client-secret: ${GOOGLE_CLIENT_SECRET}
+  authorization-url: ${GOOGLE_AUTHORIZATION_URL:https://accounts.google.com/o/oauth2/v2/auth}
+  token-url: ${GOOGLE_TOKEN_URL:https://oauth2.googleapis.com/token}
+
 microsoft:
   client-id: ${MICROSOFT_CLIENT_ID}
   client-secret: ${MICROSOFT_CLIENT_SECRET}

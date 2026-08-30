@@ -117,6 +117,8 @@ public class AdminUserService {
                 user.getEmail(),
                 user.getDisplayName(),
                 user.getPictureUrl(),
+                user.getPhoneNumber(),
+                user.getPhoneCountryCode(),
                 user.getProvider(),
                 user.getProviderUserId(),
                 user.getPlan() == null ? null : user.getPlan().getCode(),

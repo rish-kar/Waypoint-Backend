@@ -10,6 +10,7 @@ import com.waypoint.backend.model.auth.SessionResponse;
 import com.waypoint.backend.security.jwt.JwtClaims;
 import com.waypoint.backend.security.jwt.JwtRevocationService;
 import com.waypoint.backend.service.auth.GoogleAuthService;
+import com.waypoint.backend.service.auth.GoogleOAuthWebService;
 import com.waypoint.backend.service.auth.MicrosoftCredentialService;
 import com.waypoint.backend.service.auth.MicrosoftOAuthService;
 import com.waypoint.backend.service.auth.WaypointSessionService;
@@ -37,17 +38,22 @@ import java.util.UUID;
 @RequestMapping("/api/v1/auth")
 public class AuthController {
     private final GoogleAuthService googleAuthService;
+    private final GoogleOAuthWebService googleOAuthWebService;
     private final MicrosoftOAuthService microsoftOAuthService;
     private final MicrosoftCredentialService microsoftCredentialService;
     private final WaypointSessionService sessionService;
     private final JwtRevocationService jwtRevocationService;
 
-    public AuthController(GoogleAuthService googleAuthService,
-                          MicrosoftOAuthService microsoftOAuthService,
-                          MicrosoftCredentialService microsoftCredentialService,
-                          WaypointSessionService sessionService,
-                          JwtRevocationService jwtRevocationService) {
+    public AuthController(
+            GoogleAuthService googleAuthService,
+            GoogleOAuthWebService googleOAuthWebService,
+            MicrosoftOAuthService microsoftOAuthService,
+            MicrosoftCredentialService microsoftCredentialService,
+            WaypointSessionService sessionService,
+            JwtRevocationService jwtRevocationService
+    ) {
         this.googleAuthService = googleAuthService;
+        this.googleOAuthWebService = googleOAuthWebService;
         this.microsoftOAuthService = microsoftOAuthService;
         this.microsoftCredentialService = microsoftCredentialService;
         this.sessionService = sessionService;
@@ -59,21 +65,41 @@ public class AuthController {
         return googleAuthService.login(request.accessToken());
     }
 
+    @GetMapping("/google/start")
+    public ResponseEntity<Void> googleStart(@RequestParam String returnUrl) {
+        URI location = googleOAuthWebService.authorizationUri(returnUrl);
+        return ResponseEntity.status(HttpStatus.FOUND).location(location).build();
+    }
+
+    @GetMapping("/google/callback")
+    public ResponseEntity<Void> googleCallback(
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) String error
+    ) {
+        URI location = googleOAuthWebService.callbackUri(code, state, error);
+        return ResponseEntity.status(HttpStatus.FOUND).location(location).build();
+    }
+
     @PostMapping("/microsoft/start")
     public MicrosoftAuthStartResponse microsoftStart(@Valid @RequestBody MicrosoftAuthStartRequest request) {
         return microsoftOAuthService.start(request.redirectUri());
     }
 
     @PostMapping("/microsoft/link/start")
-    public MicrosoftAuthStartResponse microsoftLinkStart(@Valid @RequestBody MicrosoftAuthStartRequest request,
-                                                         @AuthenticationPrincipal UUID userId) {
+    public MicrosoftAuthStartResponse microsoftLinkStart(
+            @Valid @RequestBody MicrosoftAuthStartRequest request,
+            @AuthenticationPrincipal UUID userId
+    ) {
         return microsoftOAuthService.startLink(request.redirectUri(), userId);
     }
 
     @GetMapping("/microsoft/callback")
-    public ResponseEntity<Void> microsoftCallback(@RequestParam(required = false) String code,
-                                                  @RequestParam(required = false) String state,
-                                                  @RequestParam(required = false) String error) {
+    public ResponseEntity<Void> microsoftCallback(
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) String error
+    ) {
         URI redirect = microsoftOAuthService.callback(code, state, error);
         return ResponseEntity.status(HttpStatus.FOUND)
                 .header(HttpHeaders.LOCATION, redirect.toASCIIString())

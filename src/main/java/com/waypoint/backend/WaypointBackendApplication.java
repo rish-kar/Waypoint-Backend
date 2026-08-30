@@ -4,6 +4,7 @@ import com.waypoint.backend.config.admin.AdminProperties;
 import com.waypoint.backend.config.ai.OpenAiProperties;
 import com.waypoint.backend.config.application.AppProperties;
 import com.waypoint.backend.config.application.CorsProperties;
+import com.waypoint.backend.config.auth.GoogleOAuthProperties;
 import com.waypoint.backend.config.auth.GoogleProperties;
 import com.waypoint.backend.config.auth.MicrosoftOAuthProperties;
 import com.waypoint.backend.config.auth.WaypointSessionProperties;
@@ -25,6 +26,7 @@ import java.util.TimeZone;
         AppProperties.class,
         CorsProperties.class,
         GoogleProperties.class,
+        GoogleOAuthProperties.class,
         MicrosoftOAuthProperties.class,
         WaypointSessionProperties.class,
         JwtProperties.class,

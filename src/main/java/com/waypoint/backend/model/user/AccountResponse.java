@@ -10,6 +10,8 @@ public record AccountResponse(
         String email,
         String displayName,
         String pictureUrl,
+        String phoneNumber,
+        String phoneCountryCode,
         PlanResponse plan,
         EntitlementResponse entitlement
 ) {

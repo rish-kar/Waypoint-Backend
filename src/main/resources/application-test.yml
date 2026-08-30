@@ -26,6 +26,11 @@ waypoint-session:
 google:
   client-id: test-google-client
 
+google-oauth:
+  client-secret: test-google-secret
+  authorization-url: https://accounts.google.com/o/oauth2/v2/auth
+  token-url: https://oauth2.googleapis.com/token
+
 microsoft:
   client-id: test-microsoft-client
   client-secret: test-microsoft-secret

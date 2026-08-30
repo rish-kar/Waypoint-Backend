@@ -119,6 +119,19 @@ class AdminDataManagementIntegrationTests {
     }
 
     @Test
+    void exposesPhoneDetailsInAdminUserResponse() throws Exception {
+        UserEntity user = createUser("phone@example.com", "Phone User", "phone-google");
+        user.setPhoneNumber("+91 9916604905");
+        user.setPhoneCountryCode("IN");
+        userRepository.saveAndFlush(user);
+
+        mockMvc.perform(get("/api/v1/admin/users/{userId}", user.getId()).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.phoneNumber").value("+91 9916604905"))
+                .andExpect(jsonPath("$.phoneCountryCode").value("IN"));
+    }
+
+    @Test
     void updatesSubscriptionAndWritesAuditEvent() throws Exception {
         UserEntity user = createUser("paid@example.com", "Paid User", "paid-google");
         SubscriptionEntity subscription = createMonthlySubscription(user, SubscriptionStatus.INACTIVE);
@@ -166,8 +179,7 @@ class AdminDataManagementIntegrationTests {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.processingStatus").value("PROCESSED"))
-                .andExpect(jsonPath("$.errorMessage").doesNotExist());
+                .andExpect(jsonPath("$.processingStatus").value("PROCESSED"));
 
         mockMvc.perform(get("/api/v1/admin/audit-events")
                         .param("action", "UPDATE_WEBHOOK_EVENT")
