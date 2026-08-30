@@ -10,6 +10,7 @@
 
 ## Collection layout
 
+- `00 - Health and Configuration` contains health, liveness, readiness and protected Prometheus metrics checks.
 - `01 - Authentication` contains Google authentication, Microsoft OAuth/session flows, refresh-token rotation/replay checks and bearer-token hardening tests.
 - `03 - Billing` contains only Waypoint backend billing endpoints.
 - `04 - Webhooks` contains Waypoint webhook endpoint and hardening tests.
@@ -18,6 +19,27 @@
 - `07 - AI` contains GPT-5 nano model discovery, browser-intent routing and page-context chat tests.
 
 Lemon Squeezy test variables are owned by `06 - Lemon Squeezy Test Mode`; normal Waypoint folders must not overwrite the selected provider-test subscription.
+
+## Metrics tests
+
+Metrics are part of the main `Waypoint Backend API` collection under `00 - Health and Configuration`.
+
+The existing `Waypoint Local` environment contains:
+
+```text
+monitoringMetricsToken = waypoint-local-metrics-token-change-before-production
+```
+
+This matches the backend's local default `MONITORING_METRICS_TOKEN`. If that backend environment variable is overridden, update `monitoringMetricsToken` to the same value.
+
+Run the metrics requests in order:
+
+1. `Metrics - Missing Token`
+2. `Metrics - Invalid Token`
+3. `Generate Waypoint API Metric`
+4. `Metrics - Prometheus`
+
+The final request verifies JVM, Spring HTTP and custom Waypoint metrics from the authenticated `/actuator/prometheus` endpoint.
 
 ## GPT-5 nano AI tests
 
@@ -55,6 +77,7 @@ In Postman, set:
 ```text
 adminId = same value as ADMIN_ID
 adminPassword = same value as ADMIN_PASSWORD
+monitoringMetricsToken = same value as MONITORING_METRICS_TOKEN if you override the local default
 webhookSecret = same value as LEMON_SQUEEZY_WEBHOOK_SECRET
 ```
 

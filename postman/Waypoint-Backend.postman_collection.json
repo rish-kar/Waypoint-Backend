@@ -86,6 +86,123 @@
             ],
             "url": "{{baseUrl}}/actuator/health/readiness"
           }
+        },
+        {
+          "name": "Metrics - Missing Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('Metrics authentication is required', () => {",
+                  "  pm.expect(body.code).to.eql('UNAUTHORIZED');",
+                  "  pm.expect(body.message).to.eql('Metrics authentication required');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/actuator/prometheus",
+            "description": "Verifies that the protected Prometheus endpoint rejects requests without the dedicated monitoring bearer token."
+          }
+        },
+        {
+          "name": "Metrics - Invalid Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('Invalid metrics token is rejected', () => {",
+                  "  pm.expect(body.code).to.eql('UNAUTHORIZED');",
+                  "  pm.expect(body.message).to.eql('Metrics authentication required');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer definitely-wrong-metrics-token"
+              }
+            ],
+            "url": "{{baseUrl}}/actuator/prometheus",
+            "description": "Verifies that the protected Prometheus endpoint rejects an incorrect dedicated monitoring bearer token."
+          }
+        },
+        {
+          "name": "Generate Waypoint API Metric",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Request ID returned', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-metrics-sample'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-ID",
+                "value": "postman-metrics-sample"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/ai/models",
+            "description": "Calls a safe public Waypoint API endpoint so the subsequent Prometheus scrape can verify Waypoint custom request metrics."
+          }
+        },
+        {
+          "name": "Metrics - Prometheus",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const contentType = pm.response.headers.get('Content-Type') || '';",
+                  "const text = pm.response.text();",
+                  "pm.test('Prometheus text response returned', () => pm.expect(contentType).to.include('text/plain'));",
+                  "pm.test('JVM metrics are present', () => pm.expect(text).to.include('jvm_memory_used_bytes'));",
+                  "pm.test('HTTP server metrics are present', () => pm.expect(text).to.include('http_server_requests_seconds_count'));",
+                  "pm.test('Waypoint request counter is present', () => pm.expect(text).to.include('waypoint_api_requests_total'));",
+                  "pm.test('Waypoint request duration is present', () => pm.expect(text).to.include('waypoint_api_request_duration_seconds'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{monitoringMetricsToken}}"
+              },
+              {
+                "key": "Accept",
+                "value": "text/plain"
+              }
+            ],
+            "url": "{{baseUrl}}/actuator/prometheus",
+            "description": "Scrapes Prometheus metrics using the dedicated monitoring token from the existing Waypoint Local environment. This token is separate from Waypoint user JWTs and admin credentials."
+          }
         }
       ]
     },

@@ -1,0 +1,17 @@
+$kind: http-request
+url: "{{baseUrl}}/actuator/prometheus"
+method: GET
+description: Verifies that the protected Prometheus endpoint rejects an incorrect dedicated monitoring bearer token.
+headers:
+  Authorization: Bearer definitely-wrong-metrics-token
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 401', () => pm.response.to.have.status(401));
+      const body = pm.response.json();
+      pm.test('Invalid metrics token is rejected', () => {
+        pm.expect(body.code).to.eql('UNAUTHORIZED');
+        pm.expect(body.message).to.eql('Metrics authentication required');
+      });
+    language: text/javascript
+order: 5000

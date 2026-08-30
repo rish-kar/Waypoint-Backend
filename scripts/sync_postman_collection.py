@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Generate importable Postman v2.1 collections from the Git-synced YAML source."""
+"""Generate the importable Postman v2.1 collection from the Git-synced YAML source."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "postman" / "collections" / "Waypoint-Backend"
+OUTPUT = ROOT / "postman" / "Waypoint-Backend.postman_collection.json"
 SCHEMA = "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 
 
@@ -101,15 +104,15 @@ def folder_item(path: Path) -> tuple[int, str, dict]:
     return int(definition.get("order", 999999)), path.name, folder
 
 
-def generate_collection(source: Path, output: Path, default_id: str, default_name: str) -> None:
-    root_definition = load_yaml(source / ".resources" / "definition.yaml")
-    folders = [folder_item(path) for path in source.iterdir() if path.is_dir() and path.name != ".resources"]
+def main() -> None:
+    root_definition = load_yaml(SOURCE / ".resources" / "definition.yaml")
+    folders = [folder_item(path) for path in SOURCE.iterdir() if path.is_dir() and path.name != ".resources"]
     folders.sort(key=lambda entry: (entry[0], entry[1].lower()))
 
     collection = {
         "info": {
-            "_postman_id": str(root_definition.get("id", default_id)),
-            "name": str(root_definition.get("name", default_name)),
+            "_postman_id": str(root_definition.get("id", "aa93dc55-52d9-4b40-84f0-0d397a7301a8")),
+            "name": str(root_definition.get("name", "Waypoint Backend API")),
             "description": str(root_definition.get("description", "")),
             "schema": SCHEMA,
         },
@@ -124,26 +127,12 @@ def generate_collection(source: Path, output: Path, default_id: str, default_nam
     if root_events:
         collection["event"] = root_events
 
-    output.write_text(json.dumps(collection, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    OUTPUT.write_text(json.dumps(collection, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    parsed = json.loads(output.read_text(encoding="utf-8"))
+    # Validate the generated artifact before returning success.
+    parsed = json.loads(OUTPUT.read_text(encoding="utf-8"))
     assert parsed["info"]["schema"] == SCHEMA
     assert [folder["name"] for folder in parsed["item"]] == [entry[1] for entry in folders]
-
-
-def main() -> None:
-    generate_collection(
-        ROOT / "postman" / "collections" / "Waypoint-Backend",
-        ROOT / "postman" / "Waypoint-Backend.postman_collection.json",
-        "aa93dc55-52d9-4b40-84f0-0d397a7301a8",
-        "Waypoint Backend API",
-    )
-    generate_collection(
-        ROOT / "postman" / "collections" / "Waypoint-Metrics",
-        ROOT / "postman" / "Waypoint-Metrics.postman_collection.json",
-        "5fa4b539-9d7d-4e87-92e3-11c7286b7247",
-        "Waypoint Metrics",
-    )
 
 
 if __name__ == "__main__":

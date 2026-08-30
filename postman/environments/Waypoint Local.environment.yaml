@@ -2,8 +2,6 @@ name: Waypoint Local
 values:
   - key: baseUrl
     value: 'http://localhost:8080'
-  - key: monitoringMetricsToken
-    value: ''
   - key: googleAccessToken
     value: ''
   - key: microsoftRedirectUri
@@ -34,6 +32,8 @@ values:
     value: ''
   - key: jwtSecret
     value: waypoint-local-development-secret-change-before-production
+  - key: monitoringMetricsToken
+    value: waypoint-local-metrics-token-change-before-production
   - key: webhookSecret
     value: local-webhook-secret
   - key: monthlyVariantId

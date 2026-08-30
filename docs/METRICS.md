@@ -41,6 +41,25 @@ waypoint_api_request_duration_seconds_count
 waypoint_api_request_duration_seconds_bucket
 ```
 
+## Postman
+
+Metrics checks are part of the existing `Waypoint Backend API` collection under `00 - Health and Configuration`; no separate metrics collection is required.
+
+The existing `Waypoint Local` environment includes:
+
+```text
+monitoringMetricsToken = waypoint-local-metrics-token-change-before-production
+```
+
+That value matches the backend's local default. If `MONITORING_METRICS_TOKEN` is overridden when starting the backend, set `monitoringMetricsToken` to the same value in the existing Postman environment.
+
+Run these requests in order:
+
+1. `Metrics - Missing Token` — expects `401`.
+2. `Metrics - Invalid Token` — expects `401`.
+3. `Generate Waypoint API Metric` — creates a safe custom Waypoint metric sample.
+4. `Metrics - Prometheus` — expects `200` and verifies JVM, HTTP and Waypoint metrics.
+
 ## Prometheus scrape example
 
 ```yaml
@@ -57,28 +76,6 @@ scrape_configs:
 ```
 
 Do not commit the real monitoring token to Prometheus configuration stored in source control. Inject it from the monitoring platform's secret store.
-
-## Postman verification
-
-Import both:
-
-- `postman/Waypoint-Metrics.postman_collection.json`
-- `postman/Waypoint-Local.postman_environment.json`
-
-Set the Postman environment variable:
-
-```text
-monitoringMetricsToken = same value as MONITORING_METRICS_TOKEN
-```
-
-Run the focused collection in order:
-
-1. `01 - Metrics - Missing Token` verifies the endpoint rejects an unauthenticated scrape with `401`.
-2. `02 - Metrics - Invalid Token` verifies a wrong monitoring bearer token is rejected with `401`.
-3. `03 - Generate Waypoint API Metric` calls the public `/api/v1/ai/models` endpoint to create a deterministic custom metric sample without invoking an external AI provider.
-4. `04 - Metrics - Prometheus` authenticates with `monitoringMetricsToken` and verifies Prometheus output contains JVM, HTTP-server and Waypoint custom metrics.
-
-The Git-synced source is under `postman/collections/Waypoint-Metrics/`. `scripts/sync_postman_collection.py` generates both the main backend collection and the focused metrics collection. CI fails if either generated JSON export is out of sync with its YAML source.
 
 ## Useful queries
 
