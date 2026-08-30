@@ -14,6 +14,10 @@ jwt:
   secret: ${JWT_SECRET}
   expiration-seconds: ${JWT_EXPIRATION_SECONDS:86400}
 
+waypoint-session:
+  refresh-token-ttl-seconds: ${WAYPOINT_SESSION_REFRESH_TOKEN_TTL_SECONDS:2592000}
+  cleanup-ms: ${WAYPOINT_SESSION_CLEANUP_MS:3600000}
+
 security:
   distributed-state-enabled: true
 
