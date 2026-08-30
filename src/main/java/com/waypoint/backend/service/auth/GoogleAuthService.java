@@ -23,12 +23,10 @@ public class GoogleAuthService {
     private final WaypointSessionService sessionService;
     private final GoogleProperties googleProperties;
 
-    public GoogleAuthService(
-            GoogleProfileClient googleProfileClient,
-            UserService userService,
-            WaypointSessionService sessionService,
-            GoogleProperties googleProperties
-    ) {
+    public GoogleAuthService(GoogleProfileClient googleProfileClient,
+                             UserService userService,
+                             WaypointSessionService sessionService,
+                             GoogleProperties googleProperties) {
         this.googleProfileClient = googleProfileClient;
         this.userService = userService;
         this.sessionService = sessionService;
@@ -56,30 +54,18 @@ public class GoogleAuthService {
             logRejected("provider_rejected_token");
             throw new UnauthorizedException("Google authentication failed");
         } catch (UpstreamServiceException exception) {
-            LOGGER.atError()
-                    .addKeyValue("event", "authentication_provider_unavailable")
-                    .addKeyValue("provider", "google")
-                    .log("Google authentication provider is unavailable");
+            LOGGER.atError().addKeyValue("event", "authentication_provider_unavailable")
+                    .addKeyValue("provider", "google").log("Google authentication provider is unavailable");
             throw exception;
         }
     }
 
     private void validateProfile(GoogleProfile profile) {
-        if (profile == null) {
-            reject("missing_profile");
-        }
-        if (!StringUtils.hasText(profile.providerUserId())) {
-            reject("missing_provider_user_id");
-        }
-        if (!StringUtils.hasText(profile.email()) || !profile.emailVerified()) {
-            reject("unverified_email");
-        }
-        if (!StringUtils.hasText(profile.audience()) || !googleProperties.clientId().equals(profile.audience())) {
-            reject("invalid_audience");
-        }
-        if (profile.expiresInSeconds() <= 0) {
-            reject("expired_provider_token");
-        }
+        if (profile == null) reject("missing_profile");
+        if (!StringUtils.hasText(profile.providerUserId())) reject("missing_provider_user_id");
+        if (!StringUtils.hasText(profile.email()) || !profile.emailVerified()) reject("unverified_email");
+        if (!StringUtils.hasText(profile.audience()) || !googleProperties.clientId().equals(profile.audience())) reject("invalid_audience");
+        if (profile.expiresInSeconds() <= 0) reject("expired_provider_token");
     }
 
     private void reject(String reason) {
@@ -88,10 +74,7 @@ public class GoogleAuthService {
     }
 
     private void logRejected(String reason) {
-        LOGGER.atWarn()
-                .addKeyValue("event", "authentication_rejected")
-                .addKeyValue("provider", "google")
-                .addKeyValue("reason", reason)
-                .log("Google authentication rejected");
+        LOGGER.atWarn().addKeyValue("event", "authentication_rejected")
+                .addKeyValue("provider", "google").addKeyValue("reason", reason).log("Google authentication rejected");
     }
 }

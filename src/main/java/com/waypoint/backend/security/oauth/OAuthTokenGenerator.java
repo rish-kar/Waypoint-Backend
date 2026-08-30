@@ -26,6 +26,10 @@ public class OAuthTokenGenerator {
         return HexFormat.of().formatHex(digest(value.getBytes(StandardCharsets.UTF_8)));
     }
 
+    public String pkceChallenge(String verifier) {
+        return URL_ENCODER.encodeToString(digest(verifier.getBytes(StandardCharsets.US_ASCII)));
+    }
+
     private byte[] digest(byte[] value) {
         try {
             return MessageDigest.getInstance("SHA-256").digest(value);

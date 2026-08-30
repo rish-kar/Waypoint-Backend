@@ -1,0 +1,23 @@
+$kind: http-request
+description: Optional explicit account-link test. Starts Microsoft OAuth while authenticated so the Microsoft identity is linked to the current Waypoint user instead of being matched by email. Open microsoftAuthorizationUrl through the extension web-auth flow and complete the callback normally.
+url: "{{baseUrl}}/api/v1/auth/microsoft/link/start"
+method: POST
+headers:
+  Authorization: "Bearer {{jwt}}"
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "redirectUri": "{{microsoftRedirectUri}}"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test('Authorization URL returned', () => pm.expect(body.authorizationUrl).to.be.a('string').and.not.empty);
+      pm.environment.set('microsoftAuthorizationUrl', body.authorizationUrl);
+      console.log('Open to link Microsoft to the current Waypoint account:', body.authorizationUrl);
+    language: text/javascript
+order: 5700

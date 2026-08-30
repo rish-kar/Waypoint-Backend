@@ -50,59 +50,30 @@ class GoogleAuthServiceTests {
 
     @Test
     void rejectsMissingProviderUserId() {
-        assertRejected(new GoogleProfile(
-                null,
-                "user@example.com",
-                true,
-                "User",
-                null,
-                "expected-google-client",
-                300
-        ));
+        assertRejected(new GoogleProfile(null, "user@example.com", true, "User", null,
+                "expected-google-client", 300));
     }
 
     @Test
     void rejectsUnverifiedEmail() {
-        assertRejected(new GoogleProfile(
-                "google-user",
-                "user@example.com",
-                false,
-                "User",
-                null,
-                "expected-google-client",
-                300
-        ));
+        assertRejected(new GoogleProfile("google-user", "user@example.com", false, "User", null,
+                "expected-google-client", 300));
     }
 
     @Test
     void rejectsMismatchedAudience() {
-        assertRejected(new GoogleProfile(
-                "google-user",
-                "user@example.com",
-                true,
-                "User",
-                null,
-                "different-google-client",
-                300
-        ));
+        assertRejected(new GoogleProfile("google-user", "user@example.com", true, "User", null,
+                "different-google-client", 300));
     }
 
     @Test
     void rejectsExpiredGoogleToken() {
-        assertRejected(new GoogleProfile(
-                "google-user",
-                "user@example.com",
-                true,
-                "User",
-                null,
-                "expected-google-client",
-                0
-        ));
+        assertRejected(new GoogleProfile("google-user", "user@example.com", true, "User", null,
+                "expected-google-client", 0));
     }
 
     private void assertRejected(GoogleProfile profile) {
         when(googleProfileClient.fetchProfile("google-token")).thenReturn(profile);
-
         assertThatThrownBy(() -> googleAuthService.login("google-token"))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("Google authentication failed");

@@ -2,6 +2,7 @@ package com.waypoint.backend.service.auth;
 
 import com.waypoint.backend.config.auth.WaypointSessionProperties;
 import com.waypoint.backend.model.auth.AuthResponse;
+import com.waypoint.backend.model.auth.SessionResponse;
 import com.waypoint.backend.model.auth.WaypointRefreshSessionEntity;
 import com.waypoint.backend.model.entitlement.EntitlementResponse;
 import com.waypoint.backend.model.user.UserEntity;
@@ -31,15 +32,13 @@ public class WaypointSessionService {
     private final OAuthTokenGenerator tokenGenerator;
     private final WaypointSessionProperties properties;
 
-    public WaypointSessionService(
-            UserService userService,
-            PlanService planService,
-            JwtService jwtService,
-            EntitlementService entitlementService,
-            WaypointRefreshSessionRepository refreshSessionRepository,
-            OAuthTokenGenerator tokenGenerator,
-            WaypointSessionProperties properties
-    ) {
+    public WaypointSessionService(UserService userService,
+                                  PlanService planService,
+                                  JwtService jwtService,
+                                  EntitlementService entitlementService,
+                                  WaypointRefreshSessionRepository refreshSessionRepository,
+                                  OAuthTokenGenerator tokenGenerator,
+                                  WaypointSessionProperties properties) {
         this.userService = userService;
         this.planService = planService;
         this.jwtService = jwtService;
@@ -57,20 +56,25 @@ public class WaypointSessionService {
     @Transactional
     public AuthResponse refresh(String rawRefreshToken) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) throw invalidRefreshToken();
-
         WaypointRefreshSessionEntity session = refreshSessionRepository
                 .findByRefreshTokenHash(tokenGenerator.sha256(rawRefreshToken))
                 .orElseThrow(this::invalidRefreshToken);
-
         Instant now = Instant.now();
         if (session.getRevokedAt() != null || !session.getExpiresAt().isAfter(now)) {
             throw invalidRefreshToken();
         }
-
         UUID userId = session.getUserId();
         session.setRevokedAt(now);
         refreshSessionRepository.saveAndFlush(session);
         return issueInternal(userId);
+    }
+
+    public SessionResponse current(UUID userId) {
+        if (userId == null) return SessionResponse.signedOut();
+        UserEntity user = userService.requireById(userId);
+        planService.synchronizeUserPlan(user);
+        EntitlementResponse entitlement = entitlementService.currentEntitlement(userId, false);
+        return new SessionResponse(true, UserResponse.from(user), entitlement);
     }
 
     @Transactional
@@ -92,13 +96,11 @@ public class WaypointSessionService {
         EntitlementResponse entitlement = entitlementService.currentEntitlement(userId, false);
         String accessToken = jwtService.issueToken(user.getId(), user.getEmail());
         String refreshToken = tokenGenerator.randomToken(48);
-
         WaypointRefreshSessionEntity refreshSession = new WaypointRefreshSessionEntity();
         refreshSession.setUserId(user.getId());
         refreshSession.setRefreshTokenHash(tokenGenerator.sha256(refreshToken));
         refreshSession.setExpiresAt(Instant.now().plusSeconds(properties.refreshTokenTtlSeconds()));
         refreshSessionRepository.save(refreshSession);
-
         return new AuthResponse(
                 accessToken,
                 "Bearer",
