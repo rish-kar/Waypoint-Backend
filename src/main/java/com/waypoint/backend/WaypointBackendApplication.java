@@ -6,6 +6,7 @@ import com.waypoint.backend.config.application.AppProperties;
 import com.waypoint.backend.config.application.CorsProperties;
 import com.waypoint.backend.config.auth.GoogleOAuthProperties;
 import com.waypoint.backend.config.auth.GoogleProperties;
+import com.waypoint.backend.config.auth.WaypointSessionProperties;
 import com.waypoint.backend.config.billing.LemonSqueezyProperties;
 import com.waypoint.backend.security.jwt.JwtProperties;
 
@@ -25,6 +26,7 @@ import java.util.TimeZone;
         CorsProperties.class,
         GoogleProperties.class,
         GoogleOAuthProperties.class,
+        WaypointSessionProperties.class,
         JwtProperties.class,
         LemonSqueezyProperties.class
 })
