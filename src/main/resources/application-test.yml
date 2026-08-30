@@ -19,6 +19,10 @@ jwt:
   secret: test-secret-that-is-long-enough-for-hmac
   expiration-seconds: 86400
 
+waypoint-session:
+  refresh-token-ttl-seconds: 2592000
+  cleanup-ms: 3600000
+
 google:
   client-id: test-google-client
 
