@@ -17,7 +17,7 @@ admin:
 
 jwt:
   secret: test-secret-that-is-long-enough-for-hmac
-  expiration-seconds: 86400
+  expiration-seconds: 900
 
 waypoint-session:
   refresh-token-ttl-seconds: 2592000
@@ -25,6 +25,25 @@ waypoint-session:
 
 google:
   client-id: test-google-client
+
+google-oauth:
+  client-secret: test-google-secret
+  authorization-url: https://accounts.google.com/o/oauth2/v2/auth
+  token-url: https://oauth2.googleapis.com/token
+
+microsoft:
+  client-id: test-microsoft-client
+  client-secret: test-microsoft-secret
+  tenant: common
+  callback-url: http://localhost:8080/api/v1/auth/microsoft/callback
+  graph-user-url: https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName
+  token-encryption-key: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+  token-encryption-key-file:
+  allowed-extension-redirect-uris:
+    - https://test-extension.chromiumapp.org/microsoft
+  transaction-ttl-seconds: 600
+  exchange-code-ttl-seconds: 180
+  cleanup-ms: 3600000
 
 lemon-squeezy:
   api-key: test-api-key
