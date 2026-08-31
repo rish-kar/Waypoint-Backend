@@ -12,6 +12,7 @@ import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository
 import com.waypoint.backend.repository.subscription.SubscriptionRepository;
 import com.waypoint.backend.repository.user.UserRepository;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,7 @@ public class SubscriptionService {
     private final UserRepository userRepository;
     private final String adminEmail;
 
+    @Autowired
     public SubscriptionService(
             SubscriptionRepository subscriptionRepository,
             SubscriptionAccessPolicy subscriptionAccessPolicy,
@@ -61,6 +63,14 @@ public class SubscriptionService {
         this.specialPremiumGrantRepository = specialPremiumGrantRepository;
         this.userRepository = userRepository;
         this.adminEmail = normalizeEmail(adminEmail);
+    }
+
+    SubscriptionService(
+            SubscriptionRepository subscriptionRepository,
+            SubscriptionAccessPolicy subscriptionAccessPolicy,
+            SpecialPremiumGrantRepository specialPremiumGrantRepository
+    ) {
+        this(subscriptionRepository, subscriptionAccessPolicy, specialPremiumGrantRepository, null, "");
     }
 
     @Transactional(readOnly = true)
