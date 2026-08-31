@@ -47,13 +47,32 @@ public class UserService {
                 .orElse(null);
 
         if (user == null) {
+            user = compatibleGoogleUserByEmail(normalizedEmail);
+        }
+
+        if (user == null) {
             try {
                 user = googleUserProvisioningService.create(profile, normalizedEmail, freePlan);
             } catch (DataIntegrityViolationException exception) {
+                // Concurrent first-login attempts can race on either the provider identity
+                // or the unique email. Re-read both keys after the failed insert instead of
+                // surfacing the database constraint violation to the OAuth callback.
                 user = userRepository.findByProviderAndProviderUserId(GOOGLE_PROVIDER, profile.providerUserId())
-                        .orElseThrow(() -> new UnauthorizedException("Google account identity conflict"));
+                        .orElseGet(() -> {
+                            UserEntity existingByEmail = compatibleGoogleUserByEmail(normalizedEmail);
+                            if (existingByEmail == null) {
+                                throw new UnauthorizedException("Google account identity conflict");
+                            }
+                            return existingByEmail;
+                        });
             }
         }
+
+        // A verified Google email can safely recover an existing GOOGLE account whose
+        // provider subject changed during an OAuth-client migration. Cross-provider email
+        // collisions are rejected by compatibleGoogleUserByEmail and are never auto-linked.
+        user.setProvider(GOOGLE_PROVIDER);
+        user.setProviderUserId(profile.providerUserId());
 
         UserEntity saved = googleUserProvisioningService.updateLogin(user, profile, normalizedEmail, freePlan);
         planService.synchronizeUserPlan(saved);
@@ -122,6 +141,15 @@ public class UserService {
         user.setPhoneNumber(hasPhone ? normalizedPhone : null);
         user.setPhoneCountryCode(hasPhone && normalizedCountry != null && !normalizedCountry.isBlank() ? normalizedCountry : null);
         return userRepository.save(user);
+    }
+
+    private UserEntity compatibleGoogleUserByEmail(String normalizedEmail) {
+        UserEntity existing = userRepository.findByEmail(normalizedEmail).orElse(null);
+        if (existing == null) return null;
+        if (!GOOGLE_PROVIDER.equals(existing.getProvider())) {
+            throw new UnauthorizedException("Existing Waypoint account uses a different sign-in provider");
+        }
+        return existing;
     }
 
     private String normalizeEmail(String email) {
