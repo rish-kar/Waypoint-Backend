@@ -7,9 +7,12 @@ import com.waypoint.backend.model.subscription.SubscriptionAccessDecision;
 import com.waypoint.backend.model.subscription.SubscriptionEntity;
 import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.model.subscription.SubscriptionStatus;
+import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
 import com.waypoint.backend.repository.subscription.SubscriptionRepository;
+import com.waypoint.backend.repository.user.UserRepository;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -41,15 +46,21 @@ public class SubscriptionService {
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionAccessPolicy subscriptionAccessPolicy;
     private final SpecialPremiumGrantRepository specialPremiumGrantRepository;
+    private final UserRepository userRepository;
+    private final String adminEmail;
 
     public SubscriptionService(
             SubscriptionRepository subscriptionRepository,
             SubscriptionAccessPolicy subscriptionAccessPolicy,
-            SpecialPremiumGrantRepository specialPremiumGrantRepository
+            SpecialPremiumGrantRepository specialPremiumGrantRepository,
+            UserRepository userRepository,
+            @Value("${subscription-access.admin-email:}") String adminEmail
     ) {
         this.subscriptionRepository = subscriptionRepository;
         this.subscriptionAccessPolicy = subscriptionAccessPolicy;
         this.specialPremiumGrantRepository = specialPremiumGrantRepository;
+        this.userRepository = userRepository;
+        this.adminEmail = normalizeEmail(adminEmail);
     }
 
     @Transactional(readOnly = true)
@@ -59,6 +70,9 @@ public class SubscriptionService {
 
     @Transactional(readOnly = true)
     public SubscriptionSnapshot current(UUID userId, Instant now) {
+        if (isAdmin(userId)) {
+            return adminSnapshot(now);
+        }
         SpecialPremiumGrantEntity specialGrant = specialPremiumGrantRepository.findByUserId(userId)
                 .filter(grant -> isActiveSpecialGrant(grant, now))
                 .orElse(null);
@@ -75,10 +89,25 @@ public class SubscriptionService {
         }
 
         Map<UUID, SubscriptionSnapshot> result = new HashMap<>();
-        specialPremiumGrantRepository.findActiveForUsers(userIds, now).forEach(grant ->
+        Set<UUID> remainingUserIds = new HashSet<>(userIds);
+        if (!adminEmail.isBlank()) {
+            userRepository.findAllById(userIds).stream()
+                    .filter(this::isAdminUser)
+                    .forEach(user -> {
+                        UUID userId = user.getId();
+                        result.put(userId, adminSnapshot(now));
+                        remainingUserIds.remove(userId);
+                    });
+        }
+
+        if (remainingUserIds.isEmpty()) {
+            return result;
+        }
+
+        specialPremiumGrantRepository.findActiveForUsers(remainingUserIds, now).forEach(grant ->
                 result.put(grant.getUser().getId(), specialGrantSnapshot(grant, now)));
 
-        Set<UUID> billingUserIds = userIds.stream()
+        Set<UUID> billingUserIds = remainingUserIds.stream()
                 .filter(userId -> !result.containsKey(userId))
                 .collect(java.util.stream.Collectors.toSet());
         if (billingUserIds.isEmpty()) {
@@ -167,6 +196,9 @@ public class SubscriptionService {
     }
 
     boolean hasCheckoutBlockingSubscription(UUID userId, Instant now) {
+        if (isAdmin(userId)) {
+            return true;
+        }
         return subscriptionRepository.existsCheckoutBlockingSubscription(
                 userId,
                 now,
@@ -180,6 +212,20 @@ public class SubscriptionService {
                 .comparing((Candidate candidate) -> comparableValidUntil(candidate.decision()))
                 .thenComparing(candidate -> comparableUpdatedAt(candidate.subscription()));
         return comparator.compare(left, right) >= 0 ? left : right;
+    }
+
+    private SubscriptionSnapshot adminSnapshot(Instant checkedAt) {
+        return new SubscriptionSnapshot(
+                PlanCode.ADMIN,
+                SubscriptionStatus.ADMIN,
+                true,
+                null,
+                null,
+                null,
+                null,
+                null,
+                checkedAt
+        );
     }
 
     private SubscriptionSnapshot specialGrantSnapshot(SpecialPremiumGrantEntity grant, Instant checkedAt) {
@@ -198,6 +244,21 @@ public class SubscriptionService {
 
     private boolean isActiveSpecialGrant(SpecialPremiumGrantEntity grant, Instant now) {
         return grant.isActive() && (grant.getValidUntil() == null || grant.getValidUntil().isAfter(now));
+    }
+
+    private boolean isAdmin(UUID userId) {
+        if (adminEmail.isBlank() || userId == null) {
+            return false;
+        }
+        return userRepository.findById(userId).map(this::isAdminUser).orElse(false);
+    }
+
+    private boolean isAdminUser(UserEntity user) {
+        return user != null && adminEmail.equals(normalizeEmail(user.getEmail()));
+    }
+
+    private String normalizeEmail(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     private SubscriptionSnapshot premiumSnapshot(
