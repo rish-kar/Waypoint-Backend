@@ -12,6 +12,7 @@ public enum SubscriptionStatus {
     EXPIRED,
     REFUNDED,
     PREMIUM_SPECIAL,
+    ADMIN,
     INACTIVE,
     UNKNOWN;
 
