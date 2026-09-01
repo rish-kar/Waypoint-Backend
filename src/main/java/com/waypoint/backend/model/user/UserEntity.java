@@ -52,6 +52,12 @@ public class UserEntity {
     @Column(nullable = false)
     private int aiTrialRequestsUsed;
 
+    @Column(name = "openai_api_key_ciphertext", length = 4096)
+    private String openAiApiKeyCiphertext;
+
+    @Column(name = "openai_model", length = 200)
+    private String openAiModel;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -161,6 +167,22 @@ public class UserEntity {
 
     public void setAiTrialRequestsUsed(int aiTrialRequestsUsed) {
         this.aiTrialRequestsUsed = aiTrialRequestsUsed;
+    }
+
+    public String getOpenAiApiKeyCiphertext() {
+        return openAiApiKeyCiphertext;
+    }
+
+    public void setOpenAiApiKeyCiphertext(String openAiApiKeyCiphertext) {
+        this.openAiApiKeyCiphertext = openAiApiKeyCiphertext;
+    }
+
+    public String getOpenAiModel() {
+        return openAiModel;
+    }
+
+    public void setOpenAiModel(String openAiModel) {
+        this.openAiModel = openAiModel;
     }
 
     public Instant getCreatedAt() {
