@@ -83,7 +83,13 @@ public class ByokService {
         requireEligible(userId);
         UserEntity user = requireConfiguredUser(userId);
         List<String> models = openAiClient.availableModels(apiKeyCipher.decrypt(user.getOpenAiApiKeyCiphertext()));
-        return new ByokModelCatalogResponse(models, cleanModel(user.getOpenAiModel()));
+        String selectedModel = cleanModel(user.getOpenAiModel());
+        if (StringUtils.hasText(selectedModel) && !models.contains(selectedModel)) {
+            user.setOpenAiModel(null);
+            userRepository.save(user);
+            selectedModel = "";
+        }
+        return new ByokModelCatalogResponse(models, selectedModel);
     }
 
     public ByokStatusResponse selectModel(UUID userId, String model) {
