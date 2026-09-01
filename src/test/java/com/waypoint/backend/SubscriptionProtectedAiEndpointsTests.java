@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -51,8 +52,16 @@ class SubscriptionProtectedAiEndpointsTests {
     }
 
     @Test
-    void anonymousUserCannotCallPremiumAi() throws Exception {
+    void modelCatalogueRemainsPublic() throws Exception {
         mockMvc.perform(get("/api/v1/ai/models"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void anonymousUserCannotCallPremiumAi() throws Exception {
+        mockMvc.perform(post("/api/v1/ai/intent")
+                        .contentType("application/json")
+                        .content("{\"request\":\"group my tabs\",\"lastSelectionAvailable\":false}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
@@ -61,7 +70,10 @@ class SubscriptionProtectedAiEndpointsTests {
     void freeUserCannotCallPremiumAi() throws Exception {
         UserEntity user = createUser();
 
-        mockMvc.perform(get("/api/v1/ai/models").header("Authorization", bearer(user)))
+        mockMvc.perform(post("/api/v1/ai/intent")
+                        .header("Authorization", bearer(user))
+                        .contentType("application/json")
+                        .content("{\"request\":\"group my tabs\",\"lastSelectionAvailable\":false}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("SUBSCRIPTION_REQUIRED"));
     }
