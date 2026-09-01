@@ -92,10 +92,10 @@ class UserServiceGoogleEmailCollisionIntegrationTests {
         assertThat(google.getEmail()).isEqualTo("user@example.com");
         assertThat(microsoft.getEmail()).isEqualTo("user@example.com");
         assertThat(userRepository.findAll()).hasSize(2);
-        assertThat(userRepository.findByEmailAndProvider("user@example.com", UserService.GOOGLE_PROVIDER))
-                .contains(google);
-        assertThat(userRepository.findByEmailAndProvider("user@example.com", UserService.MICROSOFT_PROVIDER))
-                .contains(microsoft);
+        assertThat(userRepository.findByEmailAndProvider("user@example.com", UserService.GOOGLE_PROVIDER)
+                .map(UserEntity::getId)).contains(google.getId());
+        assertThat(userRepository.findByEmailAndProvider("user@example.com", UserService.MICROSOFT_PROVIDER)
+                .map(UserEntity::getId)).contains(microsoft.getId());
     }
 
     private GoogleProfile googleProfile(String providerUserId, String email) {
