@@ -212,8 +212,8 @@ class MicrosoftOAuthIntegrationTests {
 
         assertThat(location).contains("waypoint_auth=success").contains("exchange_code=");
         assertThat(userRepository.findAll()).hasSize(2);
-        assertThat(userRepository.findByEmailAndProvider("microsoft@example.com", "GOOGLE"))
-                .contains(googleUser);
+        assertThat(userRepository.findByEmailAndProvider("microsoft@example.com", "GOOGLE")
+                .map(UserEntity::getId)).contains(googleUser.getId());
 
         UserEntity microsoftUser = userRepository
                 .findByEmailAndProvider("microsoft@example.com", "MICROSOFT")
