@@ -47,30 +47,23 @@ public class UserService {
                 .orElse(null);
 
         if (user == null) {
-            user = compatibleGoogleUserByEmail(normalizedEmail);
+            user = userRepository.findByEmailAndProvider(normalizedEmail, GOOGLE_PROVIDER).orElse(null);
         }
 
         if (user == null) {
             try {
                 user = googleUserProvisioningService.create(profile, normalizedEmail, freePlan);
             } catch (DataIntegrityViolationException exception) {
-                // Concurrent first-login attempts can race on either the provider identity
-                // or the unique email. Re-read both keys after the failed insert instead of
-                // surfacing the database constraint violation to the OAuth callback.
+                // Concurrent first-login attempts can race on either provider identity or
+                // the provider-scoped email identity. Re-read both keys after the failed insert.
                 user = userRepository.findByProviderAndProviderUserId(GOOGLE_PROVIDER, profile.providerUserId())
-                        .orElseGet(() -> {
-                            UserEntity existingByEmail = compatibleGoogleUserByEmail(normalizedEmail);
-                            if (existingByEmail == null) {
-                                throw new UnauthorizedException("Google account identity conflict");
-                            }
-                            return existingByEmail;
-                        });
+                        .orElseGet(() -> userRepository.findByEmailAndProvider(normalizedEmail, GOOGLE_PROVIDER)
+                                .orElseThrow(() -> new UnauthorizedException("Google account identity conflict")));
             }
         }
 
-        // A verified Google email can safely recover an existing GOOGLE account whose
-        // provider subject changed during an OAuth-client migration. Cross-provider email
-        // collisions are rejected by compatibleGoogleUserByEmail and are never auto-linked.
+        // Provider subject is authoritative for the current Google login. A verified email
+        // only matches another GOOGLE row; a MICROSOFT row with the same email is independent.
         user.setProvider(GOOGLE_PROVIDER);
         user.setProviderUserId(profile.providerUserId());
 
@@ -82,19 +75,25 @@ public class UserService {
     public UserEntity findOrCreateMicrosoftUser(MicrosoftProfile profile) {
         String normalizedEmail = normalizeEmail(profile.email());
         PlanEntity freePlan = planService.require(PlanCode.FREE);
-        UserEntity user = userRepository.findByProviderAndProviderUserId(MICROSOFT_PROVIDER, profile.providerUserId()).orElse(null);
+        UserEntity user = userRepository.findByProviderAndProviderUserId(MICROSOFT_PROVIDER, profile.providerUserId())
+                .orElse(null);
 
         if (user == null) {
-            if (userRepository.findByEmail(normalizedEmail).isPresent()) {
-                throw new UnauthorizedException("Existing Waypoint account must explicitly link Microsoft after signing in");
-            }
+            user = userRepository.findByEmailAndProvider(normalizedEmail, MICROSOFT_PROVIDER).orElse(null);
+        }
+
+        if (user == null) {
             try {
                 user = microsoftUserProvisioningService.create(profile, normalizedEmail, freePlan);
             } catch (DataIntegrityViolationException exception) {
                 user = userRepository.findByProviderAndProviderUserId(MICROSOFT_PROVIDER, profile.providerUserId())
-                        .orElseThrow(() -> new UnauthorizedException("Microsoft account identity conflict"));
+                        .orElseGet(() -> userRepository.findByEmailAndProvider(normalizedEmail, MICROSOFT_PROVIDER)
+                                .orElseThrow(() -> new UnauthorizedException("Microsoft account identity conflict")));
             }
         }
+
+        user.setProvider(MICROSOFT_PROVIDER);
+        user.setProviderUserId(profile.providerUserId());
 
         UserEntity saved = microsoftUserProvisioningService.updateLogin(user, profile, normalizedEmail, freePlan);
         planService.synchronizeUserPlan(saved);
@@ -141,15 +140,6 @@ public class UserService {
         user.setPhoneNumber(hasPhone ? normalizedPhone : null);
         user.setPhoneCountryCode(hasPhone && normalizedCountry != null && !normalizedCountry.isBlank() ? normalizedCountry : null);
         return userRepository.save(user);
-    }
-
-    private UserEntity compatibleGoogleUserByEmail(String normalizedEmail) {
-        UserEntity existing = userRepository.findByEmail(normalizedEmail).orElse(null);
-        if (existing == null) return null;
-        if (!GOOGLE_PROVIDER.equals(existing.getProvider())) {
-            throw new UnauthorizedException("Existing Waypoint account uses a different sign-in provider");
-        }
-        return existing;
     }
 
     private String normalizeEmail(String email) {
