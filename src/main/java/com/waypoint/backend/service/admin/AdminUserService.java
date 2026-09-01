@@ -106,8 +106,14 @@ public class AdminUserService {
         if (!StringUtils.hasText(email)) {
             throw new InvalidRequestException("email is required");
         }
-        UserEntity user = userRepository.findByEmail(email.trim().toLowerCase(Locale.ROOT))
-                .orElseThrow(() -> new NotFoundException("User not found"));
+        List<UserEntity> matches = userRepository.findAllByEmail(email.trim().toLowerCase(Locale.ROOT));
+        if (matches.isEmpty()) {
+            throw new NotFoundException("User not found");
+        }
+        if (matches.size() > 1) {
+            throw new InvalidRequestException("Multiple accounts use this email; filter users by provider");
+        }
+        UserEntity user = matches.getFirst();
         return toResponse(user, subscriptionService.current(user.getId()));
     }
 

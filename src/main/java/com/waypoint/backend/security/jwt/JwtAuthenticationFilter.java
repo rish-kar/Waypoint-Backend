@@ -52,7 +52,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || path.equals("/api/v1/auth/microsoft/callback")
                 || path.equals("/api/v1/auth/session/exchange")
                 || path.equals("/api/v1/auth/session/refresh")
-                || path.startsWith("/api/v1/ai/")
+                || path.equals("/api/v1/ai/models")
                 || path.equals("/api/v1/webhooks/lemonsqueezy")
                 || path.equals("/api/v1/admin")
                 || path.startsWith("/api/v1/admin/")

@@ -47,13 +47,25 @@ public class UserService {
                 .orElse(null);
 
         if (user == null) {
+            user = userRepository.findByEmailAndProvider(normalizedEmail, GOOGLE_PROVIDER).orElse(null);
+        }
+
+        if (user == null) {
             try {
                 user = googleUserProvisioningService.create(profile, normalizedEmail, freePlan);
             } catch (DataIntegrityViolationException exception) {
+                // Concurrent first-login attempts can race on either provider identity or
+                // the provider-scoped email identity. Re-read both keys after the failed insert.
                 user = userRepository.findByProviderAndProviderUserId(GOOGLE_PROVIDER, profile.providerUserId())
-                        .orElseThrow(() -> new UnauthorizedException("Google account identity conflict"));
+                        .orElseGet(() -> userRepository.findByEmailAndProvider(normalizedEmail, GOOGLE_PROVIDER)
+                                .orElseThrow(() -> new UnauthorizedException("Google account identity conflict")));
             }
         }
+
+        // Provider subject is authoritative for the current Google login. A verified email
+        // only matches another GOOGLE row; a MICROSOFT row with the same email is independent.
+        user.setProvider(GOOGLE_PROVIDER);
+        user.setProviderUserId(profile.providerUserId());
 
         UserEntity saved = googleUserProvisioningService.updateLogin(user, profile, normalizedEmail, freePlan);
         planService.synchronizeUserPlan(saved);
@@ -63,19 +75,25 @@ public class UserService {
     public UserEntity findOrCreateMicrosoftUser(MicrosoftProfile profile) {
         String normalizedEmail = normalizeEmail(profile.email());
         PlanEntity freePlan = planService.require(PlanCode.FREE);
-        UserEntity user = userRepository.findByProviderAndProviderUserId(MICROSOFT_PROVIDER, profile.providerUserId()).orElse(null);
+        UserEntity user = userRepository.findByProviderAndProviderUserId(MICROSOFT_PROVIDER, profile.providerUserId())
+                .orElse(null);
 
         if (user == null) {
-            if (userRepository.findByEmail(normalizedEmail).isPresent()) {
-                throw new UnauthorizedException("Existing Waypoint account must explicitly link Microsoft after signing in");
-            }
+            user = userRepository.findByEmailAndProvider(normalizedEmail, MICROSOFT_PROVIDER).orElse(null);
+        }
+
+        if (user == null) {
             try {
                 user = microsoftUserProvisioningService.create(profile, normalizedEmail, freePlan);
             } catch (DataIntegrityViolationException exception) {
                 user = userRepository.findByProviderAndProviderUserId(MICROSOFT_PROVIDER, profile.providerUserId())
-                        .orElseThrow(() -> new UnauthorizedException("Microsoft account identity conflict"));
+                        .orElseGet(() -> userRepository.findByEmailAndProvider(normalizedEmail, MICROSOFT_PROVIDER)
+                                .orElseThrow(() -> new UnauthorizedException("Microsoft account identity conflict")));
             }
         }
+
+        user.setProvider(MICROSOFT_PROVIDER);
+        user.setProviderUserId(profile.providerUserId());
 
         UserEntity saved = microsoftUserProvisioningService.updateLogin(user, profile, normalizedEmail, freePlan);
         planService.synchronizeUserPlan(saved);

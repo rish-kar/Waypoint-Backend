@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
@@ -25,23 +25,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
-@AutoConfigureMockMvc
-@TestPropertySource(properties = {
+@SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:subscription-entitlement;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH",
-        "spring.datasource.username=sa",
-        "spring.datasource.password=",
-        "spring.jpa.hibernate.ddl-auto=none",
-        "jwt.secret=test-secret-that-is-long-enough-for-hmac",
-        "jwt.expiration-seconds=86400",
-        "google.client-id=test-google-client",
-        "lemon-squeezy.api-key=test-api-key",
-        "lemon-squeezy.store-id=123",
-        "lemon-squeezy.monthly-variant-id=111",
-        "lemon-squeezy.annual-variant-id=222",
-        "lemon-squeezy.webhook-secret=test-webhook-secret",
-        "cors.allowed-origins=http://localhost:5173"
+        "subscription-access.admin-email=waypoint-admin@example.com"
 })
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
 class SubscriptionEntitlementEndpointsTests {
     private final MockMvc mockMvc;
     private final UserRepository userRepository;
@@ -71,14 +60,19 @@ class SubscriptionEntitlementEndpointsTests {
     }
 
     @Test
-    void returnsFreeSubscriptionAndDeniesPremiumFeature() throws Exception {
-        UserEntity user = createUser();
+    void returnsFreeSubscriptionAllowsInstantSearchAndDeniesPremiumFeature() throws Exception {
+        UserEntity user = createUser("subscription-test@example.com");
 
         mockMvc.perform(get("/api/v1/subscriptions/current").header("Authorization", bearer(user)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.plan").value("FREE"))
                 .andExpect(jsonPath("$.status").value("INACTIVE"))
                 .andExpect(jsonPath("$.premium").value(false));
+
+        mockMvc.perform(get("/api/v1/entitlements/features/instant-tab-search").header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.allowed").value(true))
+                .andExpect(jsonPath("$.plan").value("FREE"));
 
         mockMvc.perform(get("/api/v1/entitlements/features/ai-summary").header("Authorization", bearer(user)))
                 .andExpect(status().isOk())
@@ -89,7 +83,7 @@ class SubscriptionEntitlementEndpointsTests {
 
     @Test
     void returnsMonthlySubscriptionAndAllowsPremiumFeature() throws Exception {
-        UserEntity user = createUser();
+        UserEntity user = createUser("subscription-monthly@example.com");
         Instant renewsAt = Instant.now().plusSeconds(86400);
         SubscriptionEntity subscription = new SubscriptionEntity();
         subscription.setUser(user);
@@ -114,19 +108,35 @@ class SubscriptionEntitlementEndpointsTests {
     }
 
     @Test
+    void configuredAdminEmailGetsAdminStatusAndAllFeatures() throws Exception {
+        UserEntity admin = createUser("WAYPOINT-ADMIN@example.com");
+
+        mockMvc.perform(get("/api/v1/subscriptions/current").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.plan").value("ADMIN"))
+                .andExpect(jsonPath("$.status").value("ADMIN"))
+                .andExpect(jsonPath("$.premium").value(true));
+
+        mockMvc.perform(get("/api/v1/entitlements/features/ai-summary").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.allowed").value(true))
+                .andExpect(jsonPath("$.plan").value("ADMIN"));
+    }
+
+    @Test
     void rejectsUnknownFeatureWithBadRequest() throws Exception {
-        UserEntity user = createUser();
+        UserEntity user = createUser("subscription-invalid@example.com");
 
         mockMvc.perform(get("/api/v1/entitlements/features/not-a-feature").header("Authorization", bearer(user)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
-    private UserEntity createUser() {
+    private UserEntity createUser(String email) {
         Instant now = Instant.now();
         UserEntity user = new UserEntity();
         user.setId(UUID.randomUUID());
-        user.setEmail("subscription-test@example.com");
+        user.setEmail(email);
         user.setDisplayName("Subscription Test");
         user.setProvider("GOOGLE");
         user.setProviderUserId("google-" + user.getId());
