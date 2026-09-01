@@ -4,6 +4,7 @@ import com.waypoint.backend.model.ai.ByokModelCatalogResponse;
 import com.waypoint.backend.model.ai.ByokStatusResponse;
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
+import com.waypoint.backend.model.subscription.SubscriptionStatus;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.security.ai.ByokApiKeyCipher;
@@ -127,7 +128,10 @@ public class ByokService {
 
     private boolean eligible(UUID userId) {
         SubscriptionSnapshot subscription = subscriptionService.current(userId);
-        return subscription != null && ELIGIBLE_PLANS.contains(subscription.planCode());
+        return subscription != null
+                && subscription.premium()
+                && subscription.status() != SubscriptionStatus.ON_TRIAL
+                && ELIGIBLE_PLANS.contains(subscription.planCode());
     }
 
     private void requireEligible(UUID userId) {
