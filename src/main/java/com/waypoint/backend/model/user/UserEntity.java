@@ -18,13 +18,14 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "users", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_users_provider_user", columnNames = {"provider", "provider_user_id"})
+        @UniqueConstraint(name = "uk_users_provider_user", columnNames = {"provider", "provider_user_id"}),
+        @UniqueConstraint(name = "uk_users_email_provider", columnNames = {"email", "provider"})
 })
 public class UserEntity {
     @Id
     private UUID id;
 
-    @Column(nullable = false, unique = true, length = 320)
+    @Column(nullable = false, length = 320)
     private String email;
 
     private String displayName;
