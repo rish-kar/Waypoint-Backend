@@ -174,7 +174,7 @@ class MicrosoftOAuthIntegrationTests {
     @Test
     void logoutRevokesWaypointSessionButPreservesMicrosoftCredential() throws Exception {
         LoginResult login = loginMicrosoft();
-        UUID userId = userRepository.findByEmail("microsoft@example.com").orElseThrow().getId();
+        UUID userId = userRepository.findByEmailAndProvider("microsoft@example.com", "MICROSOFT").orElseThrow().getId();
         assertThat(credentialRepository.findByUserId(userId)).isPresent();
 
         mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + login.accessToken()))
@@ -192,7 +192,7 @@ class MicrosoftOAuthIntegrationTests {
     @Test
     void explicitDisconnectDeletesMicrosoftCredential() throws Exception {
         LoginResult login = loginMicrosoft();
-        UUID userId = userRepository.findByEmail("microsoft@example.com").orElseThrow().getId();
+        UUID userId = userRepository.findByEmailAndProvider("microsoft@example.com", "MICROSOFT").orElseThrow().getId();
         assertThat(credentialRepository.findByUserId(userId)).isPresent();
 
         mockMvc.perform(delete("/api/v1/auth/microsoft").header("Authorization", "Bearer " + login.accessToken()))
@@ -204,15 +204,22 @@ class MicrosoftOAuthIntegrationTests {
     }
 
     @Test
-    void doesNotAutomaticallyMergeMicrosoftIntoExistingGoogleAccountByEmail() throws Exception {
-        createGoogleUser("microsoft@example.com");
+    void createsSeparateMicrosoftAccountWhenGoogleUsesSameEmail() throws Exception {
+        UserEntity googleUser = createGoogleUser("microsoft@example.com");
         String state = query(startMicrosoft(false, null), "state");
         MvcResult callback = callback("code-2", state);
         String location = callback.getResponse().getHeader("Location");
 
-        assertThat(location).contains("waypoint_auth=error").contains("authentication_failed");
-        assertThat(userRepository.findAll()).hasSize(1);
-        assertThat(credentialRepository.findAll()).isEmpty();
+        assertThat(location).contains("waypoint_auth=success").contains("exchange_code=");
+        assertThat(userRepository.findAll()).hasSize(2);
+        assertThat(userRepository.findByEmailAndProvider("microsoft@example.com", "GOOGLE"))
+                .contains(googleUser);
+
+        UserEntity microsoftUser = userRepository
+                .findByEmailAndProvider("microsoft@example.com", "MICROSOFT")
+                .orElseThrow();
+        assertThat(microsoftUser.getId()).isNotEqualTo(googleUser.getId());
+        assertThat(credentialRepository.findByUserId(microsoftUser.getId())).isPresent();
     }
 
     @Test
@@ -252,7 +259,7 @@ class MicrosoftOAuthIntegrationTests {
     @Test
     void rotatesMicrosoftRefreshTokenAndDeletesRejectedCredential() throws Exception {
         loginMicrosoft();
-        UUID userId = userRepository.findByEmail("microsoft@example.com").orElseThrow().getId();
+        UUID userId = userRepository.findByEmailAndProvider("microsoft@example.com", "MICROSOFT").orElseThrow().getId();
 
         MicrosoftTokenSet rotated = credentialService.refreshAccessToken(userId);
         assertThat(rotated.refreshToken()).startsWith("provider-refresh-rotated-");
