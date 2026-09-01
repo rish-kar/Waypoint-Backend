@@ -8,13 +8,10 @@ import com.waypoint.backend.model.ai.FamilyAiPoolUsageEntity;
 import com.waypoint.backend.model.ai.FamilyAiUsageResponse;
 import com.waypoint.backend.model.ai.FamilyAiUserUsageEntity;
 import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
-import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.ai.FamilyAiPoolUsageRepository;
 import com.waypoint.backend.repository.ai.FamilyAiUserUsageRepository;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
-import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.utilities.exception.ApiException;
-import com.waypoint.backend.utilities.exception.NotFoundException;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -39,21 +36,18 @@ public class FamilyAiBudgetService {
     private final SpecialPremiumGrantRepository grantRepository;
     private final FamilyAiPoolUsageRepository poolRepository;
     private final FamilyAiUserUsageRepository userUsageRepository;
-    private final UserRepository userRepository;
     private final ThreadLocal<RequestContext> requestContext = new ThreadLocal<>();
 
     public FamilyAiBudgetService(
             FamilyAiAccessProperties properties,
             SpecialPremiumGrantRepository grantRepository,
             FamilyAiPoolUsageRepository poolRepository,
-            FamilyAiUserUsageRepository userUsageRepository,
-            UserRepository userRepository
+            FamilyAiUserUsageRepository userUsageRepository
     ) {
         this.properties = properties;
         this.grantRepository = grantRepository;
         this.poolRepository = poolRepository;
         this.userUsageRepository = userUsageRepository;
-        this.userRepository = userRepository;
     }
 
     public int estimateInputTokens(AiIntentRequest request) {
@@ -85,12 +79,17 @@ public class FamilyAiBudgetService {
         String period = periodKey(now);
         long poolBudget = monthlyBudgetMicrorupees();
         long allowance = activeUsers == 0 ? 0 : poolBudget / activeUsers;
+        long poolCommitted = poolRepository.findById(period)
+                .map(pool -> safeAdd(pool.getSpentMicrorupees(), pool.getReservedMicrorupees()))
+                .orElse(0L);
+        long globalRemaining = Math.max(0L, poolBudget - Math.min(poolBudget, poolCommitted));
         long spent = special
                 ? userUsageRepository.findByUserIdAndPeriodKey(userId, period)
                         .map(FamilyAiUserUsageEntity::getSpentMicrorupees)
                         .orElse(0L)
                 : 0L;
-        long remaining = special ? Math.max(0L, allowance - spent) : 0L;
+        long individualRemaining = Math.max(0L, allowance - spent);
+        long remaining = special ? Math.min(individualRemaining, globalRemaining) : 0L;
         double percent = allowance <= 0 ? 0.0 : Math.min(100.0, (spent * 100.0) / allowance);
         return new FamilyAiUsageResponse(
                 special,
@@ -134,14 +133,9 @@ public class FamilyAiBudgetService {
         FamilyAiPoolUsageEntity pool = poolRepository.findForUpdate(period)
                 .orElseThrow(() -> new IllegalStateException("Family AI pool could not be initialized"));
 
-        UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User not found"));
-        FamilyAiUserUsageEntity usage = userUsageRepository.findForUpdate(userId, period).orElseGet(() -> {
-            FamilyAiUserUsageEntity created = new FamilyAiUserUsageEntity();
-            created.setUser(user);
-            created.setPeriodKey(period);
-            return userUsageRepository.saveAndFlush(created);
-        });
+        userUsageRepository.ensureUserPeriod(UUID.randomUUID(), userId, period);
+        FamilyAiUserUsageEntity usage = userUsageRepository.findForUpdate(userId, period)
+                .orElseThrow(() -> new IllegalStateException("Family AI user usage could not be initialized"));
 
         int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
         if (activeUsers <= 0) {
@@ -151,13 +145,13 @@ public class FamilyAiBudgetService {
         long userAllowance = totalBudget / activeUsers;
         long reserve = requestBudgetMicrorupees(estimatedInputTokens, maxProviderCalls, maxOutputTokensPerCall);
 
-        if (pool.getSpentMicrorupees() + pool.getReservedMicrorupees() + reserve > totalBudget
-                || usage.getSpentMicrorupees() + usage.getReservedMicrorupees() + reserve > userAllowance) {
+        if (safeAdd(safeAdd(pool.getSpentMicrorupees(), pool.getReservedMicrorupees()), reserve) > totalBudget
+                || safeAdd(safeAdd(usage.getSpentMicrorupees(), usage.getReservedMicrorupees()), reserve) > userAllowance) {
             throw familyLimitReached();
         }
 
-        pool.setReservedMicrorupees(pool.getReservedMicrorupees() + reserve);
-        usage.setReservedMicrorupees(usage.getReservedMicrorupees() + reserve);
+        pool.setReservedMicrorupees(safeAdd(pool.getReservedMicrorupees(), reserve));
+        usage.setReservedMicrorupees(safeAdd(usage.getReservedMicrorupees(), reserve));
         poolRepository.save(pool);
         userUsageRepository.save(usage);
         requestContext.set(new RequestContext(userId, period, reserve));
@@ -176,8 +170,8 @@ public class FamilyAiBudgetService {
 
             pool.setReservedMicrorupees(Math.max(0L, pool.getReservedMicrorupees() - context.reservedMicrorupees));
             usage.setReservedMicrorupees(Math.max(0L, usage.getReservedMicrorupees() - context.reservedMicrorupees));
-            pool.setSpentMicrorupees(Math.addExact(pool.getSpentMicrorupees(), context.reservedMicrorupees));
-            usage.setSpentMicrorupees(Math.addExact(usage.getSpentMicrorupees(), context.reservedMicrorupees));
+            pool.setSpentMicrorupees(safeAdd(pool.getSpentMicrorupees(), context.reservedMicrorupees));
+            usage.setSpentMicrorupees(safeAdd(usage.getSpentMicrorupees(), context.reservedMicrorupees));
             poolRepository.save(pool);
             userUsageRepository.save(usage);
         } finally {
@@ -227,6 +221,14 @@ public class FamilyAiBudgetService {
 
     private long monthlyBudgetMicrorupees() {
         return Math.multiplyExact(properties.monthlyBudgetRupees(), MICRORUPEES_PER_RUPEE);
+    }
+
+    private long safeAdd(long left, long right) {
+        try {
+            return Math.addExact(Math.max(0L, left), Math.max(0L, right));
+        } catch (ArithmeticException exception) {
+            return Long.MAX_VALUE;
+        }
     }
 
     private String periodKey(Instant now) {
