@@ -68,15 +68,14 @@ public class AiController {
         requireAiAccess(userId);
         boolean familyRequest = familyAiBudgetService.beginRequest(
                 userId,
-                familyAiBudgetService.estimateInputTokens(request)
+                familyAiBudgetService.estimateInputTokens(request),
+                2,
+                800
         );
-        boolean completed = false;
         try {
-            AiIntentResponse response = aiIntentService.route(request);
-            completed = true;
-            return response;
+            return aiIntentService.route(request);
         } finally {
-            if (familyRequest) familyAiBudgetService.finishRequest(completed);
+            if (familyRequest) familyAiBudgetService.finishRequest();
         }
     }
 
@@ -88,15 +87,14 @@ public class AiController {
         requireAiAccess(userId);
         boolean familyRequest = familyAiBudgetService.beginRequest(
                 userId,
-                familyAiBudgetService.estimateInputTokens(request)
+                familyAiBudgetService.estimateInputTokens(request),
+                4,
+                1_200
         );
-        boolean completed = false;
         try {
-            AiChatResponse response = aiIntentService.chat(request);
-            completed = true;
-            return response;
+            return aiIntentService.chat(request);
         } finally {
-            if (familyRequest) familyAiBudgetService.finishRequest(completed);
+            if (familyRequest) familyAiBudgetService.finishRequest();
         }
     }
 
