@@ -6,9 +6,11 @@ import com.waypoint.backend.model.ai.AiIntentRequest;
 import com.waypoint.backend.model.ai.AiIntentResponse;
 import com.waypoint.backend.model.ai.AiModelCatalogResponse;
 import com.waypoint.backend.model.ai.AiUsageResponse;
+import com.waypoint.backend.model.ai.FamilyAiUsageResponse;
 import com.waypoint.backend.model.entitlement.FeatureCode;
 import com.waypoint.backend.service.ai.AiIntentService;
 import com.waypoint.backend.service.ai.AiUsageService;
+import com.waypoint.backend.service.ai.FamilyAiBudgetService;
 import com.waypoint.backend.service.entitlement.EntitlementService;
 
 import jakarta.validation.Valid;
@@ -26,15 +28,18 @@ import java.util.UUID;
 public class AiController {
     private final AiIntentService aiIntentService;
     private final AiUsageService aiUsageService;
+    private final FamilyAiBudgetService familyAiBudgetService;
     private final EntitlementService entitlementService;
 
     public AiController(
             AiIntentService aiIntentService,
             AiUsageService aiUsageService,
+            FamilyAiBudgetService familyAiBudgetService,
             EntitlementService entitlementService
     ) {
         this.aiIntentService = aiIntentService;
         this.aiUsageService = aiUsageService;
+        this.familyAiBudgetService = familyAiBudgetService;
         this.entitlementService = entitlementService;
     }
 
@@ -49,13 +54,30 @@ public class AiController {
         return aiUsageService.current(userId);
     }
 
+    @GetMapping("/family-usage")
+    public FamilyAiUsageResponse familyUsage(@AuthenticationPrincipal UUID userId) {
+        requireAiAccess(userId);
+        return familyAiBudgetService.current(userId);
+    }
+
     @PostMapping("/intent")
     public AiIntentResponse routeIntent(
             @AuthenticationPrincipal UUID userId,
             @Valid @RequestBody AiIntentRequest request
     ) {
         requireAiAccess(userId);
-        return aiIntentService.route(request);
+        boolean familyRequest = familyAiBudgetService.beginRequest(
+                userId,
+                familyAiBudgetService.estimateInputTokens(request)
+        );
+        boolean completed = false;
+        try {
+            AiIntentResponse response = aiIntentService.route(request);
+            completed = true;
+            return response;
+        } finally {
+            if (familyRequest) familyAiBudgetService.finishRequest(completed);
+        }
     }
 
     @PostMapping("/chat")
@@ -64,7 +86,18 @@ public class AiController {
             @Valid @RequestBody AiChatRequest request
     ) {
         requireAiAccess(userId);
-        return aiIntentService.chat(request);
+        boolean familyRequest = familyAiBudgetService.beginRequest(
+                userId,
+                familyAiBudgetService.estimateInputTokens(request)
+        );
+        boolean completed = false;
+        try {
+            AiChatResponse response = aiIntentService.chat(request);
+            completed = true;
+            return response;
+        } finally {
+            if (familyRequest) familyAiBudgetService.finishRequest(completed);
+        }
     }
 
     private void requireAiAccess(UUID userId) {
