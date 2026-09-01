@@ -12,6 +12,7 @@ import com.waypoint.backend.utilities.exception.AiUnavailableException;
 import com.waypoint.backend.utilities.exception.ExternalServiceException;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -51,6 +52,7 @@ public class AiIntentService {
     private final AiModelClient aiClient;
     private final ByokService byokService;
 
+    @Autowired
     public AiIntentService(AiModelClient aiClient, ByokService byokService) {
         this.aiClient = aiClient;
         this.byokService = byokService;
