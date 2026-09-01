@@ -6,7 +6,6 @@ import com.waypoint.backend.model.plan.PlanEntity;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.service.plan.PlanService;
-import com.waypoint.backend.utilities.exception.UnauthorizedException;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,7 +17,6 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -44,7 +42,8 @@ class UserServiceGoogleLoginTests {
         when(planService.require(PlanCode.FREE)).thenReturn(freePlan);
         when(userRepository.findByProviderAndProviderUserId(UserService.GOOGLE_PROVIDER, "google-new-subject"))
                 .thenReturn(Optional.empty());
-        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(existing));
+        when(userRepository.findByEmailAndProvider("user@example.com", UserService.GOOGLE_PROVIDER))
+                .thenReturn(Optional.of(existing));
         when(googleUserProvisioningService.updateLogin(existing, profile, "user@example.com", freePlan))
                 .thenReturn(existing);
 
@@ -58,37 +57,38 @@ class UserServiceGoogleLoginTests {
     }
 
     @Test
-    void rejectsCrossProviderEmailBeforeDatabaseInsert() {
+    void createsGoogleAccountWithoutTreatingMicrosoftEmailAsSameIdentity() {
         GoogleProfile profile = googleProfile("google-subject", "user@example.com");
-        UserEntity existing = user("MICROSOFT", "microsoft-subject", "user@example.com");
+        UserEntity created = user("GOOGLE", "google-subject", "user@example.com");
 
         when(planService.require(PlanCode.FREE)).thenReturn(freePlan);
         when(userRepository.findByProviderAndProviderUserId(UserService.GOOGLE_PROVIDER, "google-subject"))
                 .thenReturn(Optional.empty());
-        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(existing));
+        when(userRepository.findByEmailAndProvider("user@example.com", UserService.GOOGLE_PROVIDER))
+                .thenReturn(Optional.empty());
+        when(googleUserProvisioningService.create(profile, "user@example.com", freePlan)).thenReturn(created);
+        when(googleUserProvisioningService.updateLogin(created, profile, "user@example.com", freePlan))
+                .thenReturn(created);
 
-        UnauthorizedException error = assertThrows(
-                UnauthorizedException.class,
-                () -> service().findOrCreateGoogleUser(profile)
-        );
+        UserEntity result = service().findOrCreateGoogleUser(profile);
 
-        assertEquals("Existing Waypoint account uses a different sign-in provider", error.getMessage());
-        verify(googleUserProvisioningService, never()).create(profile, "user@example.com", freePlan);
-        verify(googleUserProvisioningService, never()).updateLogin(existing, profile, "user@example.com", freePlan);
+        assertSame(created, result);
+        verify(googleUserProvisioningService).create(profile, "user@example.com", freePlan);
+        verify(planService).synchronizeUserPlan(created);
     }
 
     @Test
-    void recoversWhenConcurrentGoogleInsertWinsUniqueEmailRace() {
+    void recoversWhenConcurrentGoogleInsertWinsProviderScopedIdentityRace() {
         GoogleProfile profile = googleProfile("google-subject", "user@example.com");
         UserEntity existing = user("GOOGLE", "google-subject", "user@example.com");
 
         when(planService.require(PlanCode.FREE)).thenReturn(freePlan);
         when(userRepository.findByProviderAndProviderUserId(UserService.GOOGLE_PROVIDER, "google-subject"))
                 .thenReturn(Optional.empty(), Optional.empty());
-        when(userRepository.findByEmail("user@example.com"))
+        when(userRepository.findByEmailAndProvider("user@example.com", UserService.GOOGLE_PROVIDER))
                 .thenReturn(Optional.empty(), Optional.of(existing));
         when(googleUserProvisioningService.create(profile, "user@example.com", freePlan))
-                .thenThrow(new DataIntegrityViolationException("duplicate email"));
+                .thenThrow(new DataIntegrityViolationException("duplicate provider-scoped identity"));
         when(googleUserProvisioningService.updateLogin(existing, profile, "user@example.com", freePlan))
                 .thenReturn(existing);
 
