@@ -9,27 +9,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest
-@TestPropertySource(properties = {
-        "spring.datasource.url=jdbc:h2:mem:google-email-collision;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH",
-        "spring.datasource.username=sa",
-        "spring.datasource.password=",
-        "spring.jpa.hibernate.ddl-auto=none",
-        "jwt.secret=test-secret-that-is-long-enough-for-hmac",
-        "google.client-id=test-google-client",
-        "lemon-squeezy.api-key=test-api-key",
-        "lemon-squeezy.store-id=123",
-        "lemon-squeezy.monthly-variant-id=111",
-        "lemon-squeezy.annual-variant-id=222",
-        "lemon-squeezy.webhook-secret=test-webhook-secret",
-        "cors.allowed-origins=http://localhost:5173",
-        "app.base-url=http://localhost:8080"
+@SpringBootTest(properties = {
+        "spring.datasource.url=jdbc:h2:mem:google-email-collision;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH"
 })
+@ActiveProfiles("test")
 class UserServiceGoogleEmailCollisionIntegrationTests {
     private final UserService userService;
     private final UserRepository userRepository;
