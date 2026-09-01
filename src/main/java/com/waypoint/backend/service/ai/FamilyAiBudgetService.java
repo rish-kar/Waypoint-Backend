@@ -31,7 +31,9 @@ import java.util.UUID;
 @Service
 public class FamilyAiBudgetService {
     private static final BigDecimal ONE_MILLION = new BigDecimal("1000000");
+    private static final BigDecimal SAFETY_MULTIPLIER = new BigDecimal("2.0");
     private static final long MICRORUPEES_PER_RUPEE = 1_000_000L;
+    private static final int PROVIDER_OVERHEAD_TOKENS = 2_500;
 
     private final FamilyAiAccessProperties properties;
     private final SpecialPremiumGrantRepository grantRepository;
@@ -106,7 +108,12 @@ public class FamilyAiBudgetService {
     }
 
     @Transactional
-    public boolean beginRequest(UUID userId, int estimatedInputTokens) {
+    public boolean beginRequest(
+            UUID userId,
+            int estimatedInputTokens,
+            int maxProviderCalls,
+            int maxOutputTokensPerCall
+    ) {
         Instant now = Instant.now();
         if (!isSpecialAccess(userId, now)) {
             return false;
@@ -142,7 +149,7 @@ public class FamilyAiBudgetService {
         }
         long totalBudget = monthlyBudgetMicrorupees();
         long userAllowance = totalBudget / activeUsers;
-        long reserve = properties.requestReservationMicrorupees();
+        long reserve = requestBudgetMicrorupees(estimatedInputTokens, maxProviderCalls, maxOutputTokensPerCall);
 
         if (pool.getSpentMicrorupees() + pool.getReservedMicrorupees() + reserve > totalBudget
                 || usage.getSpentMicrorupees() + usage.getReservedMicrorupees() + reserve > userAllowance) {
@@ -157,20 +164,8 @@ public class FamilyAiBudgetService {
         return true;
     }
 
-    public void recordProviderUsage(long inputTokens, long outputTokens) {
-        RequestContext context = requestContext.get();
-        if (context == null || inputTokens < 0 || outputTokens < 0) {
-            return;
-        }
-        context.providerUsageSeen = true;
-        context.actualMicrorupees = Math.addExact(
-                context.actualMicrorupees,
-                providerCostMicrorupees(inputTokens, outputTokens)
-        );
-    }
-
     @Transactional
-    public void finishRequest(boolean completed) {
+    public void finishRequest() {
         RequestContext context = requestContext.get();
         if (context == null) return;
         try {
@@ -179,14 +174,10 @@ public class FamilyAiBudgetService {
             FamilyAiUserUsageEntity usage = userUsageRepository.findForUpdate(context.userId, context.periodKey)
                     .orElseThrow(() -> new IllegalStateException("Family AI user usage not found"));
 
-            long charge = context.providerUsageSeen
-                    ? Math.max(1L, context.actualMicrorupees)
-                    : completed ? context.reservedMicrorupees : 0L;
-
             pool.setReservedMicrorupees(Math.max(0L, pool.getReservedMicrorupees() - context.reservedMicrorupees));
             usage.setReservedMicrorupees(Math.max(0L, usage.getReservedMicrorupees() - context.reservedMicrorupees));
-            pool.setSpentMicrorupees(Math.addExact(pool.getSpentMicrorupees(), charge));
-            usage.setSpentMicrorupees(Math.addExact(usage.getSpentMicrorupees(), charge));
+            pool.setSpentMicrorupees(Math.addExact(pool.getSpentMicrorupees(), context.reservedMicrorupees));
+            usage.setSpentMicrorupees(Math.addExact(usage.getSpentMicrorupees(), context.reservedMicrorupees));
             poolRepository.save(pool);
             userUsageRepository.save(usage);
         } finally {
@@ -197,7 +188,7 @@ public class FamilyAiBudgetService {
     private int estimate(String value) {
         if (value == null || value.isBlank()) return 0;
         int bytes = value.getBytes(StandardCharsets.UTF_8).length;
-        // Conservative estimate for user-provided text. This intentionally overestimates most English input.
+        // Deliberately conservative: most English text will be overestimated rather than underestimated.
         return Math.max(1, (bytes + 2) / 3);
     }
 
@@ -208,18 +199,30 @@ public class FamilyAiBudgetService {
                 .orElse(false);
     }
 
-    private long providerCostMicrorupees(long inputTokens, long outputTokens) {
+    private long requestBudgetMicrorupees(int inputTokens, int maxProviderCalls, int maxOutputTokensPerCall) {
+        long providerInputTokens = Math.min(
+                Integer.MAX_VALUE,
+                Math.max(0L, (long) inputTokens + PROVIDER_OVERHEAD_TOKENS)
+        );
+        BigDecimal oneCallUsd = tokenCostUsd(providerInputTokens, maxOutputTokensPerCall);
+        return oneCallUsd
+                .multiply(BigDecimal.valueOf(Math.max(1, maxProviderCalls)))
+                .multiply(properties.usdInrAccountingRate())
+                .multiply(SAFETY_MULTIPLIER)
+                .multiply(BigDecimal.valueOf(MICRORUPEES_PER_RUPEE))
+                .setScale(0, RoundingMode.CEILING)
+                .max(BigDecimal.ONE)
+                .longValueExact();
+    }
+
+    private BigDecimal tokenCostUsd(long inputTokens, long outputTokens) {
         BigDecimal inputUsd = BigDecimal.valueOf(inputTokens)
                 .multiply(properties.inputUsdPerMillionTokens())
                 .divide(ONE_MILLION, 12, RoundingMode.HALF_UP);
-        BigDecimal outputUsd = BigDecimal.valueOf(outputTokens)
+        BigDecimal outputUsd = BigDecimal.valueOf(Math.max(0L, outputTokens))
                 .multiply(properties.outputUsdPerMillionTokens())
                 .divide(ONE_MILLION, 12, RoundingMode.HALF_UP);
-        return inputUsd.add(outputUsd)
-                .multiply(properties.usdInrAccountingRate())
-                .multiply(BigDecimal.valueOf(MICRORUPEES_PER_RUPEE))
-                .setScale(0, RoundingMode.CEILING)
-                .longValueExact();
+        return inputUsd.add(outputUsd);
     }
 
     private long monthlyBudgetMicrorupees() {
@@ -250,8 +253,6 @@ public class FamilyAiBudgetService {
         private final UUID userId;
         private final String periodKey;
         private final long reservedMicrorupees;
-        private long actualMicrorupees;
-        private boolean providerUsageSeen;
 
         private RequestContext(UUID userId, String periodKey, long reservedMicrorupees) {
             this.userId = userId;
