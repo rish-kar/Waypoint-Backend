@@ -39,8 +39,7 @@ public class AiController {
     }
 
     @GetMapping("/models")
-    public AiModelCatalogResponse models(@AuthenticationPrincipal UUID userId) {
-        requireAiAccess(userId);
+    public AiModelCatalogResponse models() {
         return aiIntentService.models();
     }
 
