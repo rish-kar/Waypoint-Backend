@@ -133,7 +133,7 @@ public class ByokService {
     }
 
     private boolean eligible(UUID userId) {
-        SubscriptionSnapshot subscription = subscriptionService.current(userId);
+        SubscriptionSnapshot subscription = subscriptionService.currentBilling(userId);
         return subscription != null
                 && subscription.premium()
                 && subscription.status() != SubscriptionStatus.ON_TRIAL
