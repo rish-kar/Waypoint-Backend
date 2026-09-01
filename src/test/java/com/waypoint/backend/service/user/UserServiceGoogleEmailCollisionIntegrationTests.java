@@ -1,6 +1,7 @@
 package com.waypoint.backend.service.user;
 
 import com.waypoint.backend.model.auth.GoogleProfile;
+import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.utilities.exception.UnauthorizedException;
@@ -15,7 +16,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(properties = {
-        "spring.datasource.url=jdbc:h2:mem:google-email-collision;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH"
+        "spring.datasource.url=jdbc:h2:mem:google-email-collision;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH",
+        "subscription-access.admin-email=admin@example.com"
 })
 @ActiveProfiles("test")
 class UserServiceGoogleEmailCollisionIntegrationTests {
@@ -50,6 +52,26 @@ class UserServiceGoogleEmailCollisionIntegrationTests {
         assertThat(authenticated.getProvider()).isEqualTo(UserService.GOOGLE_PROVIDER);
         assertThat(authenticated.getProviderUserId()).isEqualTo("new-google-subject");
         assertThat(authenticated.getEmail()).isEqualTo("user@example.com");
+        assertThat(userRepository.findAll()).hasSize(1);
+    }
+
+    @Test
+    void configuredAdminGoogleLoginReusesAccountAndSynchronizesAdminPlan() {
+        UserEntity existing = userRepository.save(user(
+                UserService.GOOGLE_PROVIDER,
+                "old-admin-google-subject",
+                "admin@example.com"
+        ));
+
+        UserEntity authenticated = userService.findOrCreateGoogleUser(googleProfile(
+                "new-admin-google-subject",
+                "ADMIN@Example.com"
+        ));
+
+        assertThat(authenticated.getId()).isEqualTo(existing.getId());
+        assertThat(authenticated.getProviderUserId()).isEqualTo("new-admin-google-subject");
+        assertThat(authenticated.getPlan()).isNotNull();
+        assertThat(authenticated.getPlan().getCode()).isEqualTo(PlanCode.ADMIN);
         assertThat(userRepository.findAll()).hasSize(1);
     }
 
