@@ -4,7 +4,6 @@ import com.waypoint.backend.model.auth.GoogleProfile;
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.user.UserRepository;
-import com.waypoint.backend.utilities.exception.UnauthorizedException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,7 +12,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:google-email-collision;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH",
@@ -36,7 +34,7 @@ class UserServiceGoogleEmailCollisionIntegrationTests {
     }
 
     @Test
-    void existingGoogleEmailIsReusedInsteadOfViolatingUniqueEmailConstraint() {
+    void existingGoogleEmailIsReusedWithinGoogleProvider() {
         UserEntity existing = userRepository.save(user(
                 UserService.GOOGLE_PROVIDER,
                 "old-google-subject",
@@ -76,23 +74,28 @@ class UserServiceGoogleEmailCollisionIntegrationTests {
     }
 
     @Test
-    void crossProviderEmailCollisionIsRejectedBeforeInsert() {
-        UserEntity existing = userRepository.save(user(
+    void googleAndMicrosoftCanUseSameEmailAsSeparateAccounts() {
+        UserEntity microsoft = userRepository.save(user(
                 UserService.MICROSOFT_PROVIDER,
                 "microsoft-subject",
                 "user@example.com"
         ));
 
-        assertThatThrownBy(() -> userService.findOrCreateGoogleUser(googleProfile(
+        UserEntity google = userService.findOrCreateGoogleUser(googleProfile(
                 "google-subject",
                 "user@example.com"
-        )))
-                .isInstanceOf(UnauthorizedException.class)
-                .hasMessageContaining("different sign-in provider");
+        ));
 
-        assertThat(userRepository.findAll())
-                .singleElement()
-                .satisfies(user -> assertThat(user.getId()).isEqualTo(existing.getId()));
+        assertThat(google.getId()).isNotEqualTo(microsoft.getId());
+        assertThat(google.getProvider()).isEqualTo(UserService.GOOGLE_PROVIDER);
+        assertThat(microsoft.getProvider()).isEqualTo(UserService.MICROSOFT_PROVIDER);
+        assertThat(google.getEmail()).isEqualTo("user@example.com");
+        assertThat(microsoft.getEmail()).isEqualTo("user@example.com");
+        assertThat(userRepository.findAll()).hasSize(2);
+        assertThat(userRepository.findByEmailAndProvider("user@example.com", UserService.GOOGLE_PROVIDER))
+                .contains(google);
+        assertThat(userRepository.findByEmailAndProvider("user@example.com", UserService.MICROSOFT_PROVIDER))
+                .contains(microsoft);
     }
 
     private GoogleProfile googleProfile(String providerUserId, String email) {
