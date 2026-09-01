@@ -27,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
         "lemon-squeezy.monthly-variant-id=111",
         "lemon-squeezy.annual-variant-id=222",
         "lemon-squeezy.webhook-secret=test-webhook-secret",
-        "cors.allowed-origins=http://localhost:5173"
+        "cors.allowed-origins=http://localhost:5173",
+        "app.base-url=http://localhost:8080"
 })
 class UserServiceGoogleEmailCollisionIntegrationTests {
     private final UserService userService;
