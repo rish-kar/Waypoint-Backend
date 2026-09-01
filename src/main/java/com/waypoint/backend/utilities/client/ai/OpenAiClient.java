@@ -8,6 +8,7 @@ import com.waypoint.backend.model.ai.AiIntentRequest;
 import com.waypoint.backend.model.ai.AiIntentResponse;
 import com.waypoint.backend.utilities.exception.AiUnavailableException;
 import com.waypoint.backend.utilities.exception.ExternalServiceException;
+import com.waypoint.backend.utilities.exception.InvalidRequestException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +29,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
@@ -45,30 +47,57 @@ public class OpenAiClient implements AiModelClient {
     private static final String NOT_FOUND_MARKER = "[[WAYPOINT_NOT_FOUND]]";
     private static final String EVIDENCE_START = "[[WAYPOINT_EVIDENCE]]";
     private static final String EVIDENCE_END = "[[/WAYPOINT_EVIDENCE]]";
+    private static final List<String> BYOK_TEXT_MODEL_PREFIXES = List.of(
+            "gpt-5",
+            "gpt-4.1",
+            "gpt-4o",
+            "o1",
+            "o3",
+            "o4"
+    );
+    private static final List<String> BYOK_UNSUPPORTED_MARKERS = List.of(
+            "audio",
+            "realtime",
+            "transcribe",
+            "tts",
+            "image",
+            "search"
+    );
 
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final OpenAiProperties properties;
     private final URI chatCompletionsUri;
+    private final URI modelsUri;
 
     public OpenAiClient(WebClient.Builder builder, ObjectMapper objectMapper, OpenAiProperties properties) {
         this.webClient = builder.build();
         this.objectMapper = objectMapper;
         this.properties = properties;
-        this.chatCompletionsUri = URI.create(stripTrailingSlash(properties.baseUrl()) + "/chat/completions");
+        String baseUrl = stripTrailingSlash(properties.baseUrl());
+        this.chatCompletionsUri = URI.create(baseUrl + "/chat/completions");
+        this.modelsUri = URI.create(baseUrl + "/models");
     }
 
     @Override
     public AiIntentResponse route(AiIntentRequest request) {
         requireEnabled();
+        return routeWithCredentials(request, properties.apiKey(), properties.model());
+    }
+
+    public AiIntentResponse routeWithCredentials(AiIntentRequest request, String apiKey, String model) {
+        requireCredentials(apiKey, model);
         RuntimeException last = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                return parseResponse(send(intentBody(request)));
+                return parseResponse(
+                        send(intentBody(request, model), apiKey, model),
+                        modelIdFor(model)
+                );
             } catch (ExternalServiceException | AiUnavailableException exception) {
                 last = exception;
                 if (attempt < MAX_ATTEMPTS) {
-                    logRetry("intent", attempt);
+                    logRetry("intent", attempt, model);
                     continue;
                 }
                 throw exception;
@@ -80,24 +109,84 @@ public class OpenAiClient implements AiModelClient {
     @Override
     public AiChatResponse chat(AiChatRequest request) {
         requireEnabled();
+        return chatWithCredentials(request, properties.apiKey(), properties.model());
+    }
+
+    public AiChatResponse chatWithCredentials(AiChatRequest request, String apiKey, String model) {
+        requireCredentials(apiKey, model);
         RuntimeException last = null;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                PageAnswer pageAnswer = verifiedPageAnswer(request);
+                PageAnswer pageAnswer = verifiedPageAnswer(request, apiKey, model);
+                String modelId = modelIdFor(model);
                 if (pageAnswer != null) {
-                    return new AiChatResponse(pageAnswer.answer(), "page", MODEL_ID);
+                    return new AiChatResponse(pageAnswer.answer(), "page", modelId);
                 }
-                return new AiChatResponse(completion(generalChatBody(request)), "general", MODEL_ID);
+                return new AiChatResponse(
+                        completion(generalChatBody(request, model), apiKey, model),
+                        "general",
+                        modelId
+                );
             } catch (ExternalServiceException | AiUnavailableException exception) {
                 last = exception;
                 if (attempt < MAX_ATTEMPTS) {
-                    logRetry("chat", attempt);
+                    logRetry("chat", attempt, model);
                     continue;
                 }
                 throw exception;
             }
         }
         throw last == null ? new ExternalServiceException("OpenAI request failed") : last;
+    }
+
+    public List<String> availableModels(String apiKey) {
+        if (!StringUtils.hasText(apiKey)) {
+            throw new InvalidRequestException("OpenAI API key is required");
+        }
+        try {
+            ResponseEntity<JsonNode> response = webClient.get()
+                    .uri(modelsUri)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey.trim())
+                    .retrieve()
+                    .toEntity(JsonNode.class)
+                    .timeout(properties.requestTimeout())
+                    .block();
+            JsonNode data = response == null || response.getBody() == null
+                    ? null
+                    : response.getBody().path("data");
+            if (data == null || !data.isArray()) {
+                throw new ExternalServiceException("OpenAI returned an invalid model catalog");
+            }
+
+            List<String> models = new ArrayList<>();
+            for (JsonNode item : data) {
+                String id = item.path("id").asText("").trim();
+                if (byokCompatibleModel(id) && !models.contains(id)) {
+                    models.add(id);
+                }
+            }
+            models.sort(String.CASE_INSENSITIVE_ORDER);
+            return List.copyOf(models);
+        } catch (WebClientResponseException exception) {
+            int status = exception.getStatusCode().value();
+            if (status == 401 || status == 403) {
+                throw new InvalidRequestException("OpenAI rejected the API key");
+            }
+            if (status == 429) {
+                throw new ExternalServiceException("OpenAI rate limit reached while checking the API key");
+            }
+            throw new ExternalServiceException("OpenAI could not validate the API key");
+        } catch (WebClientRequestException exception) {
+            throw new AiUnavailableException("OpenAI is unavailable");
+        } catch (InvalidRequestException | ExternalServiceException | AiUnavailableException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            if (containsTimeout(exception)) {
+                throw new ExternalServiceException("OpenAI took too long to validate the API key");
+            }
+            throw exception;
+        }
     }
 
     @Override
@@ -114,29 +203,36 @@ public class OpenAiClient implements AiModelClient {
         if (!enabled()) {
             throw new AiUnavailableException("OpenAI is not enabled");
         }
-        if (!StringUtils.hasText(properties.apiKey())) {
+        requireCredentials(properties.apiKey(), properties.model());
+    }
+
+    private void requireCredentials(String apiKey, String model) {
+        if (!StringUtils.hasText(apiKey)) {
             throw new AiUnavailableException("OpenAI API key is not configured");
+        }
+        if (!StringUtils.hasText(model)) {
+            throw new AiUnavailableException("OpenAI model is not configured");
         }
     }
 
-    private JsonNode send(Map<String, Object> body) {
+    private JsonNode send(Map<String, Object> body, String apiKey, String model) {
         long startedAt = System.nanoTime();
         try {
             ResponseEntity<JsonNode> response = webClient.post()
                     .uri(chatCompletionsUri)
                     .accept(MediaType.APPLICATION_JSON)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey().trim())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey.trim())
                     .bodyValue(body)
                     .retrieve()
                     .toEntity(JsonNode.class)
                     .timeout(properties.requestTimeout())
                     .block();
             if (response == null) {
-                logFailure(null, 0, "empty_response", startedAt);
+                logFailure(null, 0, "empty_response", startedAt, model);
                 return null;
             }
-            logSuccess(response, startedAt);
+            logSuccess(response, startedAt, model);
             return response.getBody();
         } catch (WebClientResponseException exception) {
             int status = exception.getStatusCode().value();
@@ -144,28 +240,29 @@ public class OpenAiClient implements AiModelClient {
                     exception.getHeaders().getFirst(OPENAI_REQUEST_ID_HEADER),
                     status,
                     status == 429 ? "rate_limit" : "http_error",
-                    startedAt
+                    startedAt,
+                    model
             );
             if (status == 429) {
                 throw new ExternalServiceException("OpenAI rate limit reached");
             }
             throw new ExternalServiceException("OpenAI rejected the request");
         } catch (WebClientRequestException exception) {
-            logFailure(null, 0, "connection_error", startedAt);
+            logFailure(null, 0, "connection_error", startedAt, model);
             throw new AiUnavailableException("OpenAI is unavailable");
         } catch (ExternalServiceException | AiUnavailableException exception) {
             throw exception;
         } catch (RuntimeException exception) {
             if (containsTimeout(exception)) {
-                logFailure(null, 0, "timeout", startedAt);
+                logFailure(null, 0, "timeout", startedAt, model);
                 throw new ExternalServiceException("OpenAI took too long to respond");
             }
-            logFailure(null, 0, "unexpected_error", startedAt);
+            logFailure(null, 0, "unexpected_error", startedAt, model);
             throw exception;
         }
     }
 
-    private void logSuccess(ResponseEntity<JsonNode> response, long startedAt) {
+    private void logSuccess(ResponseEntity<JsonNode> response, long startedAt, String model) {
         JsonNode body = response.getBody();
         long inputTokens = usageToken(body, "prompt_tokens", "input_tokens");
         long outputTokens = usageToken(body, "completion_tokens", "output_tokens");
@@ -177,7 +274,7 @@ public class OpenAiClient implements AiModelClient {
         LOGGER.atInfo()
                 .addKeyValue("event", "openai_request_completed")
                 .addKeyValue("openai_request_id", safeTelemetryId(response.getHeaders().getFirst(OPENAI_REQUEST_ID_HEADER)))
-                .addKeyValue("model", properties.model())
+                .addKeyValue("model", model)
                 .addKeyValue("status", response.getStatusCode().value())
                 .addKeyValue("input_tokens", inputTokens)
                 .addKeyValue("output_tokens", outputTokens)
@@ -186,22 +283,22 @@ public class OpenAiClient implements AiModelClient {
                 .log("OpenAI request completed");
     }
 
-    private void logFailure(String requestId, int status, String failureType, long startedAt) {
+    private void logFailure(String requestId, int status, String failureType, long startedAt, String model) {
         LOGGER.atWarn()
                 .addKeyValue("event", "openai_request_failed")
                 .addKeyValue("openai_request_id", safeTelemetryId(requestId))
-                .addKeyValue("model", properties.model())
+                .addKeyValue("model", model)
                 .addKeyValue("status", status)
                 .addKeyValue("failure_type", failureType)
                 .addKeyValue("latency_ms", elapsedMilliseconds(startedAt))
                 .log("OpenAI request failed");
     }
 
-    private void logRetry(String operation, int completedAttempt) {
+    private void logRetry(String operation, int completedAttempt, String model) {
         LOGGER.atWarn()
                 .addKeyValue("event", "openai_request_retry")
                 .addKeyValue("operation", operation)
-                .addKeyValue("model", properties.model())
+                .addKeyValue("model", model)
                 .addKeyValue("completed_attempt", completedAttempt)
                 .log("Retrying OpenAI request");
     }
@@ -232,8 +329,8 @@ public class OpenAiClient implements AiModelClient {
         return (System.nanoTime() - startedAt) / 1_000_000;
     }
 
-    private String completion(Map<String, Object> body) {
-        JsonNode response = send(body);
+    private String completion(Map<String, Object> body, String apiKey, String model) {
+        JsonNode response = send(body, apiKey, model);
         String content = response == null ? null : response.at("/choices/0/message/content").asText(null);
         if (!StringUtils.hasText(content)) {
             throw new ExternalServiceException("OpenAI returned an empty response");
@@ -241,8 +338,8 @@ public class OpenAiClient implements AiModelClient {
         return content.trim();
     }
 
-    private PageAnswer verifiedPageAnswer(AiChatRequest request) {
-        String content = completion(pageChatBody(request));
+    private PageAnswer verifiedPageAnswer(AiChatRequest request, String apiKey, String model) {
+        String content = completion(pageChatBody(request, model), apiKey, model);
         if (content.contains(NOT_FOUND_MARKER)) {
             return null;
         }
@@ -267,28 +364,30 @@ public class OpenAiClient implements AiModelClient {
         return pageEvidence.contains(evidence) ? new PageAnswer(answer) : null;
     }
 
-    private Map<String, Object> intentBody(AiIntentRequest request) {
-        return Map.of(
-                "model", properties.model(),
-                "messages", List.of(
-                        Map.of("role", "developer", "content", systemPrompt()),
-                        Map.of("role", "user", "content", userPrompt(request))
-                ),
-                "reasoning_effort", "minimal",
-                "stream", false,
-                "max_completion_tokens", 800,
-                "response_format", Map.of(
-                        "type", "json_schema",
-                        "json_schema", Map.of(
-                                "name", "waypoint_intent",
-                                "strict", true,
-                                "schema", intentSchema()
-                        )
+    private Map<String, Object> intentBody(AiIntentRequest request, String model) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", model);
+        body.put("messages", List.of(
+                Map.of("role", "developer", "content", systemPrompt()),
+                Map.of("role", "user", "content", userPrompt(request))
+        ));
+        if (supportsReasoningEffort(model)) {
+            body.put("reasoning_effort", "minimal");
+        }
+        body.put("stream", false);
+        body.put("max_completion_tokens", 800);
+        body.put("response_format", Map.of(
+                "type", "json_schema",
+                "json_schema", Map.of(
+                        "name", "waypoint_intent",
+                        "strict", true,
+                        "schema", intentSchema()
                 )
-        );
+        ));
+        return body;
     }
 
-    private Map<String, Object> pageChatBody(AiChatRequest request) {
+    private Map<String, Object> pageChatBody(AiChatRequest request, String model) {
         List<Map<String, String>> messages = new ArrayList<>();
         messages.add(Map.of("role", "developer", "content", String.join("\n",
                 "You are Waypoint's Cloud page assistant.",
@@ -312,10 +411,10 @@ public class OpenAiClient implements AiModelClient {
                 "QUESTION: " + request.question().trim()
         );
         messages.add(Map.of("role", "user", "content", prompt));
-        return plainChatBody(messages, 1_200);
+        return plainChatBody(messages, 1_200, model);
     }
 
-    private Map<String, Object> generalChatBody(AiChatRequest request) {
+    private Map<String, Object> generalChatBody(AiChatRequest request, String model) {
         List<Map<String, String>> messages = new ArrayList<>();
         messages.add(Map.of("role", "developer", "content", String.join("\n",
                 "You are Waypoint's Cloud assistant.",
@@ -325,7 +424,7 @@ public class OpenAiClient implements AiModelClient {
         )));
         appendHistory(messages, request.history());
         messages.add(Map.of("role", "user", "content", request.question().trim()));
-        return plainChatBody(messages, 1_200);
+        return plainChatBody(messages, 1_200, model);
     }
 
     private void appendHistory(List<Map<String, String>> messages, List<AiChatMessage> history) {
@@ -344,17 +443,19 @@ public class OpenAiClient implements AiModelClient {
         }
     }
 
-    private Map<String, Object> plainChatBody(List<Map<String, String>> messages, int maxTokens) {
-        return Map.of(
-                "model", properties.model(),
-                "messages", messages,
-                "reasoning_effort", "minimal",
-                "stream", false,
-                "max_completion_tokens", maxTokens
-        );
+    private Map<String, Object> plainChatBody(List<Map<String, String>> messages, int maxTokens, String model) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", model);
+        body.put("messages", messages);
+        if (supportsReasoningEffort(model)) {
+            body.put("reasoning_effort", "minimal");
+        }
+        body.put("stream", false);
+        body.put("max_completion_tokens", maxTokens);
+        return body;
     }
 
-    private AiIntentResponse parseResponse(JsonNode response) {
+    private AiIntentResponse parseResponse(JsonNode response, String modelId) {
         String content = response == null ? null : response.at("/choices/0/message/content").asText(null);
         if (!StringUtils.hasText(content)) {
             throw new ExternalServiceException("OpenAI returned an invalid response");
@@ -375,7 +476,7 @@ public class OpenAiClient implements AiModelClient {
                     text(intent, "workspaceName", 64),
                     text(intent, "wakeAt", 80),
                     text(intent, "clarification", 220),
-                    MODEL_ID
+                    modelId
             );
         } catch (ExternalServiceException exception) {
             throw exception;
@@ -525,6 +626,26 @@ public class OpenAiClient implements AiModelClient {
                 "maxItems", MAX_TERMS,
                 "items", Map.of("type", "string", "minLength", 1, "maxLength", MAX_TERM_LENGTH)
         );
+    }
+
+    private boolean byokCompatibleModel(String model) {
+        String value = model == null ? "" : model.trim().toLowerCase(Locale.ROOT);
+        if (value.isBlank() || BYOK_TEXT_MODEL_PREFIXES.stream().noneMatch(value::startsWith)) {
+            return false;
+        }
+        return BYOK_UNSUPPORTED_MARKERS.stream().noneMatch(value::contains);
+    }
+
+    private boolean supportsReasoningEffort(String model) {
+        String value = model == null ? "" : model.trim().toLowerCase(Locale.ROOT);
+        return value.startsWith("gpt-5")
+                || value.startsWith("o1")
+                || value.startsWith("o3")
+                || value.startsWith("o4");
+    }
+
+    private String modelIdFor(String model) {
+        return "openai-" + model.trim();
     }
 
     private String cleanOptional(String value, String fallback) {
