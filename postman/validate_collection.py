@@ -34,10 +34,18 @@ def forbid(rel, *needles):
 
 
 # Global request safety: stale production TOTP must never leak into a local/non-admin request.
+# Collection-level scripts execute before request-level pre-request scripts, so global
+# validation must not reject dynamic header/body variables that are intentionally generated later.
 require(
     "collections/Waypoint-Backend/.resources/definition.yaml",
     "pm.request.headers.remove('X-Admin-TOTP')",
-    "Unresolved Postman variables",
+    "Unresolved Postman URL variables",
+    "dynamic header/body variables",
+)
+forbid(
+    "collections/Waypoint-Backend/.resources/definition.yaml",
+    "checkResolved('Body'",
+    "checkResolved(`Header",
 )
 
 # Simulated webhook flows must generate unique IDs and current provider event timestamps.
