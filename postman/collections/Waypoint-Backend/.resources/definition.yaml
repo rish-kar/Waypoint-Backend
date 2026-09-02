@@ -8,4 +8,9 @@ scripts:
       if (!pm.environment.get('baseUrl')) {
           throw new Error('Select the Waypoint Local environment.');
       }
+      const adminTotp = pm.environment.get('adminTotp');
+      const requestUrl = pm.request.url.toString();
+      if (adminTotp && requestUrl.includes('/api/v1/admin/')) {
+          pm.request.headers.upsert({ key: 'X-Admin-TOTP', value: adminTotp });
+      }
     language: text/javascript

@@ -82,6 +82,14 @@ The generated Base64 value is stored in:
 adminBasicAuth
 ```
 
+Production admin requests also require Microsoft Authenticator TOTP. Configure the same Base32 `ADMIN_TOTP_SECRET` in Microsoft Authenticator as a standard OATH-TOTP account using SHA-1, 6 digits and the normal 30-second period. Put the currently displayed code in:
+
+```text
+adminTotp
+```
+
+The Postman collection automatically sends it as `X-Admin-TOTP` for admin requests. Microsoft Authenticator will continue to display a new code every 30 seconds, but the backend accepts the entered code for up to five minutes.
+
 **01 - Overview**
 - Overall admin summary
 
@@ -162,6 +170,7 @@ Postman environment:
 ```text
 adminId = same value as ADMIN_ID
 adminPassword = same value as ADMIN_PASSWORD
+adminTotp = current Microsoft Authenticator code when testing production
 webhookSecret = same value as LEMON_SQUEEZY_WEBHOOK_SECRET
 ```
 
