@@ -46,9 +46,7 @@ forbid(
     "checkResolved(`Header",
 )
 
-# Monthly switching must be self-contained for admin/local testing: fresh provider event,
-# fresh ID, no dependency on an expiring user JWT, and admin verification of both user
-# state and the exact subscription written by the webhook.
+# Simulated webhook lifecycle tests must be repeatable and independent of an expiring user JWT.
 activate_rel = "collections/Waypoint-Backend/04 - Webhooks/01 - Subscription Events/01 - Activate Monthly Subscription.request.yaml"
 activate = require(
     activate_rel,
@@ -62,15 +60,17 @@ activate = require(
     "created.plan).to.eql('MONTHLY')",
     "created.status).to.eql('ACTIVE')",
 )
-forbid(activate_rel, "const jwt =", "A JWT for the same user is required")
+forbid(activate_rel, "const jwt =", "A JWT for the same user is required", "/api/v1/subscriptions/current")
 
+refund_rel = "collections/Waypoint-Backend/04 - Webhooks/01 - Subscription Events/02 - Refund Subscription.request.yaml"
 refund = require(
-    "collections/Waypoint-Backend/04 - Webhooks/01 - Subscription Events/02 - Refund Subscription.request.yaml",
+    refund_rel,
     "updated_at: new Date().toISOString()",
     "Run Activate Monthly Subscription first",
-    "/api/v1/subscriptions/current",
-    "REFUNDED",
+    "/api/v1/admin/subscriptions?userId=",
+    "refunded.status).to.eql('REFUNDED')",
 )
+forbid(refund_rel, "const jwt =", "A JWT for the same user is required", "/api/v1/subscriptions/current")
 for text, name in [(activate, "activate monthly"), (refund, "refund")]:
     if "2030-01-01T00:00:00Z" in text:
         errors.append(f"{name}: hardcoded provider timestamp must not be used")
