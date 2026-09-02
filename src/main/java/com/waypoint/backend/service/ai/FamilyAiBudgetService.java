@@ -11,9 +11,7 @@ import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
 import com.waypoint.backend.repository.ai.FamilyAiPoolUsageRepository;
 import com.waypoint.backend.repository.ai.FamilyAiUserUsageRepository;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
-import com.waypoint.backend.utilities.exception.ApiException;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +28,7 @@ public class FamilyAiBudgetService {
     private static final BigDecimal ONE_MILLION = new BigDecimal("1000000");
     private static final BigDecimal SAFETY_MULTIPLIER = new BigDecimal("2.0");
     private static final long MICRORUPEES_PER_RUPEE = 1_000_000L;
-    private static final int PROVIDER_OVERHEAD_TOKENS = 2_500;
+    private static final int PROVIDER_OVERHEAD_TOKENS = 5_000;
 
     private final FamilyAiAccessProperties properties;
     private final SpecialPremiumGrantRepository grantRepository;
@@ -99,7 +97,7 @@ public class FamilyAiBudgetService {
                 spent,
                 remaining,
                 percent,
-                properties.maxInputTokens(),
+                0,
                 period,
                 resetsAt(now),
                 special ? (remaining > 0 ? "ACTIVE" : "LIMIT_REACHED") : "NOT_SPECIAL"
@@ -116,13 +114,6 @@ public class FamilyAiBudgetService {
         Instant now = Instant.now();
         if (!isSpecialAccess(userId, now)) {
             return false;
-        }
-        if (estimatedInputTokens > properties.maxInputTokens()) {
-            throw new ApiException(
-                    HttpStatus.PAYLOAD_TOO_LARGE,
-                    "FAMILY_AI_INPUT_LIMIT_REACHED",
-                    "Friends & Family AI requests are limited to " + properties.maxInputTokens() + " input tokens."
-            );
         }
         if (requestContext.get() != null) {
             throw new IllegalStateException("Family AI request context already active");
@@ -181,9 +172,9 @@ public class FamilyAiBudgetService {
 
     private int estimate(String value) {
         if (value == null || value.isBlank()) return 0;
-        int bytes = value.getBytes(StandardCharsets.UTF_8).length;
-        // Deliberately conservative: most English text will be overestimated rather than underestimated.
-        return Math.max(1, (bytes + 2) / 3);
+        // GPT tokenization is byte based. Counting UTF-8 bytes is a conservative upper bound
+        // for user-supplied input and avoids imposing an unrelated per-request token quota.
+        return Math.max(1, value.getBytes(StandardCharsets.UTF_8).length);
     }
 
     private boolean isSpecialAccess(UUID userId, Instant now) {
@@ -243,9 +234,13 @@ public class FamilyAiBudgetService {
                 .toInstant();
     }
 
-    private ApiException familyLimitReached() {
-        return new ApiException(
-                HttpStatus.TOO_MANY_REQUESTS,
+    private IllegalStateException impossibleBudgetState() {
+        return new IllegalStateException("Family AI budget state is invalid");
+    }
+
+    private com.waypoint.backend.utilities.exception.ApiException familyLimitReached() {
+        return new com.waypoint.backend.utilities.exception.ApiException(
+                org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
                 "FAMILY_AI_BUDGET_REACHED",
                 "Your Friends & Family AI allowance has been used for this month."
         );
