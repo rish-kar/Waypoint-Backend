@@ -36,7 +36,6 @@ public class FamilyAiBudgetService {
     private final SpecialPremiumGrantRepository grantRepository;
     private final FamilyAiPoolUsageRepository poolRepository;
     private final FamilyAiUserUsageRepository userUsageRepository;
-    private final ThreadLocal<RequestContext> requestContext = new ThreadLocal<>();
 
     public FamilyAiBudgetService(
             FamilyAiAccessProperties properties,
@@ -79,10 +78,10 @@ public class FamilyAiBudgetService {
         String period = periodKey(now);
         long poolBudget = monthlyBudgetMicrorupees();
         long allowance = activeUsers == 0 ? 0 : poolBudget / activeUsers;
-        long poolCommitted = poolRepository.findById(period)
-                .map(pool -> safeAdd(pool.getSpentMicrorupees(), pool.getReservedMicrorupees()))
+        long poolSpent = poolRepository.findById(period)
+                .map(FamilyAiPoolUsageEntity::getSpentMicrorupees)
                 .orElse(0L);
-        long globalRemaining = Math.max(0L, poolBudget - Math.min(poolBudget, poolCommitted));
+        long globalRemaining = Math.max(0L, poolBudget - Math.min(poolBudget, poolSpent));
         long spent = special
                 ? userUsageRepository.findByUserIdAndPeriodKey(userId, period)
                         .map(FamilyAiUserUsageEntity::getSpentMicrorupees)
@@ -106,7 +105,7 @@ public class FamilyAiBudgetService {
     }
 
     @Transactional
-    public boolean beginRequest(
+    public boolean consumeRequestBudget(
             UUID userId,
             int estimatedInputTokens,
             int maxProviderCalls,
@@ -115,9 +114,6 @@ public class FamilyAiBudgetService {
         Instant now = Instant.now();
         if (!isSpecialAccess(userId, now)) {
             return false;
-        }
-        if (requestContext.get() != null) {
-            throw new IllegalStateException("Family AI request context already active");
         }
 
         String period = periodKey(now);
@@ -135,46 +131,23 @@ public class FamilyAiBudgetService {
         }
         long totalBudget = monthlyBudgetMicrorupees();
         long userAllowance = totalBudget / activeUsers;
-        long reserve = requestBudgetMicrorupees(estimatedInputTokens, maxProviderCalls, maxOutputTokensPerCall);
+        long debit = requestBudgetMicrorupees(estimatedInputTokens, maxProviderCalls, maxOutputTokensPerCall);
 
-        if (safeAdd(safeAdd(pool.getSpentMicrorupees(), pool.getReservedMicrorupees()), reserve) > totalBudget
-                || safeAdd(safeAdd(usage.getSpentMicrorupees(), usage.getReservedMicrorupees()), reserve) > userAllowance) {
+        if (safeAdd(pool.getSpentMicrorupees(), debit) > totalBudget
+                || safeAdd(usage.getSpentMicrorupees(), debit) > userAllowance) {
             throw familyLimitReached();
         }
 
-        pool.setReservedMicrorupees(safeAdd(pool.getReservedMicrorupees(), reserve));
-        usage.setReservedMicrorupees(safeAdd(usage.getReservedMicrorupees(), reserve));
+        pool.setSpentMicrorupees(safeAdd(pool.getSpentMicrorupees(), debit));
+        usage.setSpentMicrorupees(safeAdd(usage.getSpentMicrorupees(), debit));
         poolRepository.save(pool);
         userUsageRepository.save(usage);
-        requestContext.set(new RequestContext(userId, period, reserve));
         return true;
-    }
-
-    @Transactional
-    public void finishRequest() {
-        RequestContext context = requestContext.get();
-        if (context == null) return;
-        try {
-            FamilyAiPoolUsageEntity pool = poolRepository.findForUpdate(context.periodKey)
-                    .orElseThrow(() -> new IllegalStateException("Family AI pool not found"));
-            FamilyAiUserUsageEntity usage = userUsageRepository.findForUpdate(context.userId, context.periodKey)
-                    .orElseThrow(() -> new IllegalStateException("Family AI user usage not found"));
-
-            pool.setReservedMicrorupees(Math.max(0L, pool.getReservedMicrorupees() - context.reservedMicrorupees));
-            usage.setReservedMicrorupees(Math.max(0L, usage.getReservedMicrorupees() - context.reservedMicrorupees));
-            pool.setSpentMicrorupees(safeAdd(pool.getSpentMicrorupees(), context.reservedMicrorupees));
-            usage.setSpentMicrorupees(safeAdd(usage.getSpentMicrorupees(), context.reservedMicrorupees));
-            poolRepository.save(pool);
-            userUsageRepository.save(usage);
-        } finally {
-            requestContext.remove();
-        }
     }
 
     private int estimate(String value) {
         if (value == null || value.isBlank()) return 0;
-        // GPT tokenization is byte based. UTF-8 byte length is a conservative upper bound
-        // for user supplied token count and avoids imposing an unrelated request quota.
+        // UTF-8 byte length is deliberately conservative versus typical GPT token counts.
         return Math.max(1, value.getBytes(StandardCharsets.UTF_8).length);
     }
 
@@ -241,17 +214,5 @@ public class FamilyAiBudgetService {
                 "FAMILY_AI_BUDGET_REACHED",
                 "Your Friends & Family AI allowance has been used for this month."
         );
-    }
-
-    private static final class RequestContext {
-        private final UUID userId;
-        private final String periodKey;
-        private final long reservedMicrorupees;
-
-        private RequestContext(UUID userId, String periodKey, long reservedMicrorupees) {
-            this.userId = userId;
-            this.periodKey = periodKey;
-            this.reservedMicrorupees = reservedMicrorupees;
-        }
     }
 }
