@@ -24,7 +24,7 @@ scripts:
       if (!pm.environment.get('lemonSqueezyProviderStatus')) {
           throw new Error('Run the relevant Lemon Squeezy provider action first.');
       }
-      pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
     language: text/javascript
   - type: afterResponse
     code: |-
