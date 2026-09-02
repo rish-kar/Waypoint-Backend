@@ -8,9 +8,11 @@ import com.waypoint.backend.model.ai.FamilyAiPoolUsageEntity;
 import com.waypoint.backend.model.ai.FamilyAiUsageResponse;
 import com.waypoint.backend.model.ai.FamilyAiUserUsageEntity;
 import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
+import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.repository.ai.FamilyAiPoolUsageRepository;
 import com.waypoint.backend.repository.ai.FamilyAiUserUsageRepository;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
+import com.waypoint.backend.repository.plan.PlanRepository;
 import com.waypoint.backend.utilities.exception.ApiException;
 
 import org.springframework.http.HttpStatus;
@@ -23,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -34,17 +37,20 @@ public class FamilyAiBudgetService {
 
     private final FamilyAiAccessProperties properties;
     private final SpecialPremiumGrantRepository grantRepository;
+    private final PlanRepository planRepository;
     private final FamilyAiPoolUsageRepository poolRepository;
     private final FamilyAiUserUsageRepository userUsageRepository;
 
     public FamilyAiBudgetService(
             FamilyAiAccessProperties properties,
             SpecialPremiumGrantRepository grantRepository,
+            PlanRepository planRepository,
             FamilyAiPoolUsageRepository poolRepository,
             FamilyAiUserUsageRepository userUsageRepository
     ) {
         this.properties = properties;
         this.grantRepository = grantRepository;
+        this.planRepository = planRepository;
         this.poolRepository = poolRepository;
         this.userUsageRepository = userUsageRepository;
     }
@@ -73,7 +79,7 @@ public class FamilyAiBudgetService {
     @Transactional(readOnly = true)
     public FamilyAiUsageResponse current(UUID userId) {
         Instant now = Instant.now();
-        boolean special = isSpecialAccess(userId, now);
+        boolean special = activeSpecialGrant(userId, now).isPresent();
         int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
         String period = periodKey(now);
         long poolBudget = monthlyBudgetMicrorupees();
@@ -112,18 +118,35 @@ public class FamilyAiBudgetService {
             int maxOutputTokensPerCall
     ) {
         Instant now = Instant.now();
-        if (!isSpecialAccess(userId, now)) {
+        Optional<SpecialPremiumGrantEntity> specialGrant = activeSpecialGrant(userId, now);
+        if (specialGrant.isEmpty()) {
             return false;
         }
 
-        String period = periodKey(now);
-        poolRepository.ensurePeriod(period);
-        FamilyAiPoolUsageEntity pool = poolRepository.findForUpdate(period)
-                .orElseThrow(() -> new IllegalStateException("Family AI pool could not be initialized"));
+        // PREMIUM_SPECIAL is a single, permanent catalogue row. Locking it gives
+        // every Friends & Family request the same database-portable serialization
+        // point before creating/updating monthly usage rows. The transaction ends
+        // before the provider call, so the lock is never held during network I/O.
+        planRepository.findByCodeForUpdate(PlanCode.PREMIUM_SPECIAL)
+                .orElseThrow(() -> new IllegalStateException("Premium Special plan is unavailable"));
 
-        userUsageRepository.ensureUserPeriod(UUID.randomUUID(), userId, period);
-        FamilyAiUserUsageEntity usage = userUsageRepository.findForUpdate(userId, period)
-                .orElseThrow(() -> new IllegalStateException("Family AI user usage could not be initialized"));
+        String period = periodKey(now);
+        FamilyAiPoolUsageEntity pool = poolRepository.findById(period)
+                .orElseGet(() -> {
+                    FamilyAiPoolUsageEntity created = new FamilyAiPoolUsageEntity();
+                    created.setPeriodKey(period);
+                    created.setSpentMicrorupees(0L);
+                    return poolRepository.saveAndFlush(created);
+                });
+
+        FamilyAiUserUsageEntity usage = userUsageRepository.findByUserIdAndPeriodKey(userId, period)
+                .orElseGet(() -> {
+                    FamilyAiUserUsageEntity created = new FamilyAiUserUsageEntity();
+                    created.setUser(specialGrant.orElseThrow().getUser());
+                    created.setPeriodKey(period);
+                    created.setSpentMicrorupees(0L);
+                    return userUsageRepository.saveAndFlush(created);
+                });
 
         int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
         if (activeUsers <= 0) {
@@ -151,11 +174,10 @@ public class FamilyAiBudgetService {
         return Math.max(1, value.getBytes(StandardCharsets.UTF_8).length);
     }
 
-    private boolean isSpecialAccess(UUID userId, Instant now) {
+    private Optional<SpecialPremiumGrantEntity> activeSpecialGrant(UUID userId, Instant now) {
         return grantRepository.findByUserId(userId)
                 .filter(SpecialPremiumGrantEntity::isActive)
-                .map(grant -> grant.getValidUntil() == null || grant.getValidUntil().isAfter(now))
-                .orElse(false);
+                .filter(grant -> grant.getValidUntil() == null || grant.getValidUntil().isAfter(now));
     }
 
     private long requestBudgetMicrorupees(int inputTokens, int maxProviderCalls, int maxOutputTokensPerCall) {
