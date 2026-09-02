@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -106,6 +107,32 @@ class FamilyAiBudgetServiceTests {
                     assertThat(exception.status()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
                     assertThat(exception.code()).isEqualTo("FAMILY_AI_BUDGET_REACHED");
                 });
+    }
+
+    @Test
+    void rejectsRequestsThatWouldCrossTheUsersDynamicShare() {
+        when(grantRepository.countActiveAt(any())).thenReturn(50L);
+        FamilyAiPoolUsageEntity pool = new FamilyAiPoolUsageEntity();
+        pool.setPeriodKey("ignored");
+        FamilyAiUserUsageEntity usage = new FamilyAiUserUsageEntity();
+        usage.setSpentMicrorupees(100L * 1_000_000L - 1L);
+        when(poolRepository.findForUpdate(anyString())).thenReturn(Optional.of(pool));
+        when(userUsageRepository.findForUpdate(any(UUID.class), anyString())).thenReturn(Optional.of(usage));
+
+        assertThatThrownBy(() -> service.consumeRequestBudget(userId, 100, 1, 800))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+                    assertThat(exception.code()).isEqualTo("FAMILY_AI_BUDGET_REACHED");
+                });
+    }
+
+    @Test
+    void expiredSpecialAccessDoesNotConsumeTheFamilyPool() {
+        grant.setValidUntil(Instant.now().minusSeconds(60));
+
+        assertThat(service.consumeRequestBudget(userId, 50_000, 4, 1_200)).isFalse();
+
+        verify(poolRepository, never()).ensurePeriod(anyString());
     }
 
     @Test
