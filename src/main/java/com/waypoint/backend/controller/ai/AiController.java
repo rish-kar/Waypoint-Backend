@@ -56,7 +56,6 @@ public class AiController {
 
     @GetMapping("/family-usage")
     public FamilyAiUsageResponse familyUsage(@AuthenticationPrincipal UUID userId) {
-        requireAiAccess(userId);
         return familyAiBudgetService.current(userId);
     }
 
