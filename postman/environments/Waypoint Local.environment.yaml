@@ -41,7 +41,9 @@ values:
   - key: webhookSecret
     value: local-webhook-secret
   - key: monthlyVariantId
-    value: local-monthly-variant-id
+    value: ''
+  - key: annualVariantId
+    value: ''
   - key: subscriptionId
     value: ''
   - key: lemonSqueezyApiKey
