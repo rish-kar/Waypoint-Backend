@@ -1,16 +1,16 @@
-create table family_ai_pool_usage (
-    period_key varchar(7) primary key,
-    spent_microrupees bigint not null default 0,
-    updated_at timestamp not null default current_timestamp
+CREATE TABLE family_ai_pool_usage (
+    period_key VARCHAR(7) PRIMARY KEY,
+    spent_microrupees BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-create table family_ai_user_usage (
-    id uuid primary key,
-    user_id uuid not null references users(id) on delete cascade,
-    period_key varchar(7) not null,
-    spent_microrupees bigint not null default 0,
-    updated_at timestamp not null default current_timestamp,
-    constraint uq_family_ai_user_period unique (user_id, period_key)
+CREATE TABLE family_ai_user_usage (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id),
+    period_key VARCHAR(7) NOT NULL,
+    spent_microrupees BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_family_ai_user_period UNIQUE (user_id, period_key)
 );
 
-create index idx_family_ai_user_usage_period on family_ai_user_usage(period_key);
+CREATE INDEX idx_family_ai_user_usage_period ON family_ai_user_usage (period_key);
