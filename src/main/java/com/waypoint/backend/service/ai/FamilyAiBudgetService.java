@@ -29,6 +29,7 @@ public class FamilyAiBudgetService {
     private static final BigDecimal ONE_MILLION = new BigDecimal("1000000");
     private static final BigDecimal SAFETY_MULTIPLIER = new BigDecimal("2.0");
     private static final long MICRORUPEES_PER_RUPEE = 1_000_000L;
+    private static final int MAX_SPECIAL_REQUEST_INPUT_TOKENS = 5_000;
     private static final int PROVIDER_OVERHEAD_TOKENS = 5_000;
 
     private final FamilyAiAccessProperties properties;
@@ -108,7 +109,11 @@ public class FamilyAiBudgetService {
     ) {
         Instant now = Instant.now();
         if (activeSpecialGrant(userId, now).isEmpty()) {
+            // This limiter is deliberately scoped only to Premium Special.
             return false;
+        }
+        if (Math.max(0, estimatedInputTokens) > MAX_SPECIAL_REQUEST_INPUT_TOKENS) {
+            throw familyRequestTooLarge();
         }
 
         // This permanent catalogue row is shared by every Premium Special user.
@@ -152,8 +157,12 @@ public class FamilyAiBudgetService {
 
     private int estimate(String value) {
         if (value == null || value.isBlank()) return 0;
-        // UTF-8 byte length is deliberately conservative versus typical GPT token counts.
-        return Math.max(1, value.getBytes(StandardCharsets.UTF_8).length);
+        // No tokenizer dependency is added to the request path. UTF-8 bytes / 4 is
+        // the standard conservative approximation used here for the 5k input cap;
+        // actual cost accounting still carries a large provider-overhead allowance
+        // plus a 2x safety multiplier before any OpenAI request is sent.
+        long bytes = value.getBytes(StandardCharsets.UTF_8).length;
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(1L, (bytes + 3L) / 4L));
     }
 
     private Optional<SpecialPremiumGrantEntity> activeSpecialGrant(UUID userId, Instant now) {
@@ -218,6 +227,14 @@ public class FamilyAiBudgetService {
                 .atDay(1)
                 .atStartOfDay(ZoneOffset.UTC)
                 .toInstant();
+    }
+
+    private ApiException familyRequestTooLarge() {
+        return new ApiException(
+                HttpStatus.BAD_REQUEST,
+                "FAMILY_AI_REQUEST_TOO_LARGE",
+                "Premium Special Cloud AI requests are limited to 5,000 input tokens."
+        );
     }
 
     private ApiException familyLimitReached() {
