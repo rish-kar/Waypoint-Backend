@@ -6,9 +6,11 @@ import com.waypoint.backend.model.admin.PremiumSpecialGrantRequest;
 import com.waypoint.backend.model.admin.PremiumSpecialGrantResponse;
 import com.waypoint.backend.model.admin.PremiumSpecialSummaryResponse;
 import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
+import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.admin.AdminAuditEventRepository;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
+import com.waypoint.backend.repository.plan.PlanRepository;
 import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.service.plan.PlanService;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
@@ -35,17 +37,20 @@ public class AdminGrantService {
 
     private final UserRepository userRepository;
     private final SpecialPremiumGrantRepository grantRepository;
+    private final PlanRepository planRepository;
     private final PlanService planService;
     private final AdminAuditEventRepository auditEventRepository;
 
     public AdminGrantService(
             UserRepository userRepository,
             SpecialPremiumGrantRepository grantRepository,
+            PlanRepository planRepository,
             PlanService planService,
             AdminAuditEventRepository auditEventRepository
     ) {
         this.userRepository = userRepository;
         this.grantRepository = grantRepository;
+        this.planRepository = planRepository;
         this.planService = planService;
         this.auditEventRepository = auditEventRepository;
     }
@@ -57,6 +62,7 @@ public class AdminGrantService {
             throw new InvalidRequestException("validUntil must be in the future or omitted for lifetime access");
         }
         UserEntity user = requireUser(userId);
+        lockPremiumSpecialMembership();
         SpecialPremiumGrantEntity grant = grantRepository.findByUserIdForUpdate(userId).orElseGet(SpecialPremiumGrantEntity::new);
         grant.setUser(user);
         grant.setActive(true);
@@ -75,6 +81,7 @@ public class AdminGrantService {
     @Transactional
     public PremiumSpecialGrantResponse revokePremiumSpecial(UUID userId, String adminId) {
         UserEntity user = requireUser(userId);
+        lockPremiumSpecialMembership();
         SpecialPremiumGrantEntity grant = grantRepository.findByUserIdForUpdate(userId)
                 .orElseThrow(() -> new NotFoundException("Premium Special grant not found"));
         Instant now = Instant.now();
@@ -158,6 +165,11 @@ public class AdminGrantService {
 
     private UserEntity requireUser(UUID userId) {
         return userRepository.findById(userId).orElseThrow(() -> new NotFoundException("User not found"));
+    }
+
+    private void lockPremiumSpecialMembership() {
+        planRepository.findByCodeForUpdate(PlanCode.PREMIUM_SPECIAL)
+                .orElseThrow(() -> new IllegalStateException("Premium Special plan is unavailable"));
     }
 
     private void audit(String adminId, String action, SpecialPremiumGrantEntity grant, String details) {
