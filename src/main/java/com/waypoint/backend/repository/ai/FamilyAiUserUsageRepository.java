@@ -16,8 +16,8 @@ public interface FamilyAiUserUsageRepository extends JpaRepository<FamilyAiUserU
 
     @Modifying
     @Query(value = """
-            insert into family_ai_user_usage(id, user_id, period_key, spent_microrupees, reserved_microrupees, updated_at)
-            values (:id, :userId, :periodKey, 0, 0, now())
+            insert into family_ai_user_usage(id, user_id, period_key, spent_microrupees, updated_at)
+            values (:id, :userId, :periodKey, 0, now())
             on conflict (user_id, period_key) do nothing
             """, nativeQuery = true)
     void ensureUserPeriod(
