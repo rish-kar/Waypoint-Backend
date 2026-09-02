@@ -73,12 +73,8 @@ public class WebhookSubscriptionProcessor {
 
         String variantId = firstText(attributes, "variant_id", relationshipId(data, "variant"));
         if (StringUtils.hasText(variantId)) {
-            String resolvedPlan = subscriptionAccessPolicy.planForVariant(variantId);
-            if ("UNKNOWN".equals(resolvedPlan)) {
-                throw new InvalidRequestException("Webhook subscription variant is not configured");
-            }
             subscription.setExternalVariantId(variantId);
-            subscription.setPlan(resolvedPlan);
+            subscription.setPlan(subscriptionAccessPolicy.planForVariant(variantId));
         } else if (!StringUtils.hasText(subscription.getPlan())) {
             subscription.setPlan("UNKNOWN");
         }
