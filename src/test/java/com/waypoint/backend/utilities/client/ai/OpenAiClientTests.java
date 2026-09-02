@@ -63,6 +63,23 @@ class OpenAiClientTests {
             exchange.getResponseBody().write(bytes);
             exchange.close();
         });
+        server.createContext("/v1/models", exchange -> {
+            authorizationHeader.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            String response = "{\"data\":["
+                    + "{\"id\":\"gpt-5.6-sol\"},"
+                    + "{\"id\":\"gpt-5.5-pro\"},"
+                    + "{\"id\":\"gpt-5.3-codex\"},"
+                    + "{\"id\":\"gpt-5.6-cyber\"},"
+                    + "{\"id\":\"gpt-4o\"},"
+                    + "{\"id\":\"gpt-4o-realtime-preview\"},"
+                    + "{\"id\":\"text-embedding-3-large\"},"
+                    + "{\"id\":\"o3\"}]}";
+            byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
         server.start();
     }
 
@@ -99,6 +116,37 @@ class OpenAiClientTests {
         assertThat(outbound.at("/response_format/json_schema/strict").asBoolean()).isTrue();
         assertThat(outbound.at("/messages/0/role").asText()).isEqualTo("developer");
         assertThat(outbound.at("/messages/0/content").asText()).contains("never choose or invent tab IDs");
+    }
+
+    @Test
+    void usesCurrentReasoningEffortForGpt56ByokRequests() throws Exception {
+        OpenAiClient client = client("server-key");
+
+        AiIntentResponse response = client.routeWithCredentials(new AiIntentRequest(
+                "Group my project tabs",
+                false,
+                "",
+                "2026-09-02T12:00:00+05:30",
+                "Asia/Kolkata",
+                "en-IN",
+                OpenAiClient.MODEL_ID
+        ), "user-key", "gpt-5.6-sol");
+
+        assertThat(response.modelId()).isEqualTo("openai-gpt-5.6-sol");
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer user-key");
+        JsonNode outbound = objectMapper.readTree(requestBody.get());
+        assertThat(outbound.path("model").asText()).isEqualTo("gpt-5.6-sol");
+        assertThat(outbound.path("reasoning_effort").asText()).isEqualTo("low");
+    }
+
+    @Test
+    void exposesOnlyWaypointCompatibleModelsFromUserKey() {
+        OpenAiClient client = client("server-key");
+
+        assertThat(client.availableModels("user-key"))
+                .containsExactly("gpt-4o", "gpt-5.6-sol", "o3")
+                .doesNotContain("gpt-5.5-pro", "gpt-5.3-codex", "gpt-5.6-cyber", "gpt-4o-realtime-preview");
+        assertThat(authorizationHeader.get()).isEqualTo("Bearer user-key");
     }
 
     @Test
