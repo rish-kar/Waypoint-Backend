@@ -102,7 +102,7 @@ microsoft:
   token-encryption-key: ${MICROSOFT_TOKEN_ENCRYPTION_KEY:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
   token-encryption-key-file: ${MICROSOFT_TOKEN_ENCRYPTION_KEY_FILE:}
   allowed-extension-redirect-uris: ${MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS:https://local-dev.chromiumapp.org/microsoft}
-  transaction-ttl-seconds: ${MICROSOFT_OAUTH_TRANSACTION_TTL_SECONDS:600}
+  transaction-ttl-seconds: ${MICROSOFT_TRANSACTION_TTL_SECONDS:600}
   exchange-code-ttl-seconds: ${MICROSOFT_EXCHANGE_CODE_TTL_SECONDS:180}
   cleanup-ms: ${MICROSOFT_OAUTH_CLEANUP_MS:3600000}
 
