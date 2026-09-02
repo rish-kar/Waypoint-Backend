@@ -43,11 +43,9 @@ class FamilyAiBudgetServiceTests {
         service = new FamilyAiBudgetService(
                 new FamilyAiAccessProperties(
                         5_000,
-                        5_000,
                         new BigDecimal("100"),
                         new BigDecimal("0.05"),
-                        new BigDecimal("0.40"),
-                        2_000_000L
+                        new BigDecimal("0.40")
                 ),
                 grantRepository,
                 poolRepository,
@@ -71,7 +69,6 @@ class FamilyAiBudgetServiceTests {
         assertThat(fiftyUsers.activeSpecialUsers()).isEqualTo(50);
         assertThat(fiftyUsers.monthlyPoolMicrorupees()).isEqualTo(5_000L * 1_000_000L);
         assertThat(fiftyUsers.monthlyAllowanceMicrorupees()).isEqualTo(100L * 1_000_000L);
-        assertThat(fiftyUsers.requestTokenLimit()).isZero();
         assertThat(fiveUsers.activeSpecialUsers()).isEqualTo(5);
         assertThat(fiveUsers.monthlyAllowanceMicrorupees()).isEqualTo(1_000L * 1_000_000L);
     }
