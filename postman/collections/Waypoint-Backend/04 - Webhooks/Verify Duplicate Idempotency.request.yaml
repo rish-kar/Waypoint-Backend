@@ -21,7 +21,7 @@ scripts:
       if (pm.environment.get('webhookDuplicateReady') !== 'true') {
           throw new Error('Run Duplicate Idempotency first.');
       }
-      pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
     language: text/javascript
   - type: afterResponse
     code: |-
