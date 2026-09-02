@@ -1,5 +1,8 @@
 package com.waypoint.backend.service.ai;
 
+import com.knuddels.jtokkit.Encodings;
+import com.knuddels.jtokkit.api.Encoding;
+import com.knuddels.jtokkit.api.EncodingType;
 import com.waypoint.backend.config.ai.FamilyAiAccessProperties;
 import com.waypoint.backend.model.ai.AiChatMessage;
 import com.waypoint.backend.model.ai.AiChatRequest;
@@ -17,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
@@ -31,6 +33,8 @@ public class FamilyAiBudgetService {
     private static final long MICRORUPEES_PER_RUPEE = 1_000_000L;
     private static final int MAX_SPECIAL_REQUEST_INPUT_TOKENS = 5_000;
     private static final int PROVIDER_OVERHEAD_TOKENS = 5_000;
+    private static final Encoding GPT5_ENCODING = Encodings.newDefaultEncodingRegistry()
+            .getEncoding(EncodingType.O200K_BASE);
 
     private final FamilyAiAccessProperties properties;
     private final SpecialPremiumGrantRepository grantRepository;
@@ -47,24 +51,26 @@ public class FamilyAiBudgetService {
     }
 
     public int estimateInputTokens(AiIntentRequest request) {
-        return estimate(request.request())
-                + estimate(request.lastSelectionTarget())
-                + estimate(request.currentTime())
-                + estimate(request.timeZone())
-                + estimate(request.locale());
+        long total = (long) countTokens(request.request())
+                + countTokens(request.lastSelectionTarget())
+                + countTokens(request.currentTime())
+                + countTokens(request.timeZone())
+                + countTokens(request.locale());
+        return clampTokenCount(total);
     }
 
     public int estimateInputTokens(AiChatRequest request) {
-        long total = (long) estimate(request.question())
-                + estimate(request.pageTitle())
-                + estimate(request.pageDescription())
-                + estimate(request.pageText());
+        long total = (long) countTokens(request.question())
+                + countTokens(request.pageTitle())
+                + countTokens(request.pageDescription())
+                + countTokens(request.pageText());
         if (request.history() != null) {
             for (AiChatMessage message : request.history()) {
-                if (message != null) total += estimate(message.text());
+                if (message != null) total += countTokens(message.text());
+                if (total >= Integer.MAX_VALUE) return Integer.MAX_VALUE;
             }
         }
-        return total > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
+        return clampTokenCount(total);
     }
 
     @Transactional(readOnly = true)
@@ -110,16 +116,16 @@ public class FamilyAiBudgetService {
     ) {
         Instant now = Instant.now();
         if (activeSpecialGrant(userId, now).isEmpty()) {
-            // This limiter is deliberately scoped only to Premium Special.
+            // Family AI limits are deliberately scoped only to Premium Special.
             return false;
         }
         if (Math.max(0, estimatedInputTokens) > MAX_SPECIAL_REQUEST_INPUT_TOKENS) {
             throw familyRequestTooLarge();
         }
 
-        // This permanent catalogue row is shared by every Premium Special user.
-        // Lock it first so all Family AI budget checks are serialized across users.
-        // The transaction completes before the OpenAI network call.
+        // The permanent Premium Special catalogue row is the single global lock.
+        // Admin grant/revoke operations take the same lock before changing membership,
+        // so the active-user divisor cannot change while this debit is calculated.
         planRepository.findByCodeForUpdate(PlanCode.PREMIUM_SPECIAL)
                 .orElseThrow(() -> new IllegalStateException("Premium Special plan is unavailable"));
 
@@ -156,14 +162,13 @@ public class FamilyAiBudgetService {
         return true;
     }
 
-    private int estimate(String value) {
+    private int countTokens(String value) {
         if (value == null || value.isBlank()) return 0;
-        // No tokenizer dependency is added to the request path. UTF-8 bytes / 4 is
-        // the standard approximation used here for the 5k input cap; actual cost
-        // accounting still carries a large provider-overhead allowance plus a 2x
-        // safety multiplier before any OpenAI request is sent.
-        long bytes = value.getBytes(StandardCharsets.UTF_8).length;
-        return (int) Math.min(Integer.MAX_VALUE, Math.max(1L, (bytes + 3L) / 4L));
+        return GPT5_ENCODING.countTokensOrdinary(value);
+    }
+
+    private int clampTokenCount(long value) {
+        return value >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) Math.max(0L, value);
     }
 
     private Optional<SpecialPremiumGrantEntity> activeSpecialGrant(UUID userId, Instant now) {
