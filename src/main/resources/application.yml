@@ -102,7 +102,7 @@ microsoft:
   token-encryption-key: ${MICROSOFT_TOKEN_ENCRYPTION_KEY:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
   token-encryption-key-file: ${MICROSOFT_TOKEN_ENCRYPTION_KEY_FILE:}
   allowed-extension-redirect-uris: ${MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS:https://local-dev.chromiumapp.org/microsoft}
-  transaction-ttl-seconds: ${MICROSOFT_TRANSACTION_TTL_SECONDS:600}
+  transaction-ttl-seconds: ${MICROSOFT_OAUTH_TRANSACTION_TTL_SECONDS:600}
   exchange-code-ttl-seconds: ${MICROSOFT_EXCHANGE_CODE_TTL_SECONDS:180}
   cleanup-ms: ${MICROSOFT_OAUTH_CLEANUP_MS:3600000}
 
@@ -123,11 +123,9 @@ ai:
     request-timeout: ${AI_OPENAI_REQUEST_TIMEOUT:30s}
   family-access:
     monthly-budget-rupees: ${AI_FAMILY_MONTHLY_BUDGET_RUPEES:5000}
-    max-input-tokens: ${AI_FAMILY_MAX_INPUT_TOKENS:5000}
     usd-inr-accounting-rate: ${AI_FAMILY_USD_INR_ACCOUNTING_RATE:100}
     input-usd-per-million-tokens: ${AI_FAMILY_INPUT_USD_PER_MILLION_TOKENS:0.05}
     output-usd-per-million-tokens: ${AI_FAMILY_OUTPUT_USD_PER_MILLION_TOKENS:0.40}
-    request-reservation-microrupees: ${AI_FAMILY_REQUEST_RESERVATION_MICRORUPEES:2000000}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:}
