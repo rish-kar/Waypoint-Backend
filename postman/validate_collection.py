@@ -46,13 +46,24 @@ forbid(
     "checkResolved(`Header",
 )
 
-# Simulated webhook lifecycle tests must be repeatable and independent of an expiring user JWT.
+# Admin plan discovery is the source of truth for the running backend's configured variants.
+plans_rel = "collections/Waypoint-Backend/05 - Admin/06 - Plans/01 - List Plans.request.yaml"
+require(
+    plans_rel,
+    "providerVariantId",
+    "pm.environment.set('monthlyVariantId', monthly.providerVariantId)",
+    "pm.environment.set('annualVariantId', annual.providerVariantId)",
+)
+
+# Simulated webhook lifecycle tests must be repeatable, use the backend-synced variant,
+# and remain independent of an expiring user JWT.
 activate_rel = "collections/Waypoint-Backend/04 - Webhooks/01 - Subscription Events/01 - Activate Monthly Subscription.request.yaml"
 activate = require(
     activate_rel,
     "Date.now()",
     "updated_at: now.toISOString()",
     "pm.environment.set('subscriptionId', subscriptionId)",
+    "Run Admin > Plans > List Plans first",
     "/api/v1/admin/users/${expectedUserId}",
     "/api/v1/admin/subscriptions?userId=",
     "body.persistedPlan).to.eql('PREMIUM_MONTHLY')",
@@ -150,16 +161,23 @@ require(
     "pm.environment.unset(key)",
 )
 
-# Both environment representations must start with an empty generated subscriptionId.
+# Generated IDs and backend-derived billing variants must start empty in both environment representations.
 yaml_env = read("environments/Waypoint Local.environment.yaml")
 if re.search(r"- key: subscriptionId\s+value:\s*[^'\"\n]*postman-subscription", yaml_env):
     errors.append("Waypoint Local.environment.yaml: subscriptionId must start empty")
+if "value: local-monthly-variant-id" in yaml_env:
+    errors.append("Waypoint Local.environment.yaml: monthlyVariantId must come from Admin > Plans, not a fixed default")
+
 json_env_path = ROOT / "Waypoint-Local.postman_environment.json"
 try:
     env = json.loads(json_env_path.read_text(encoding="utf-8"))
     values = {item.get("key"): item.get("value") for item in env.get("values", [])}
     if values.get("subscriptionId"):
         errors.append("Waypoint-Local.postman_environment.json: subscriptionId must start empty")
+    if values.get("monthlyVariantId"):
+        errors.append("Waypoint-Local.postman_environment.json: monthlyVariantId must start empty and be populated from Admin > Plans")
+    if values.get("annualVariantId"):
+        errors.append("Waypoint-Local.postman_environment.json: annualVariantId must start empty and be populated from Admin > Plans")
     if "adminSubscriptionUserId" not in values:
         errors.append("Waypoint-Local.postman_environment.json: adminSubscriptionUserId is required")
 except Exception as exc:
