@@ -83,6 +83,24 @@ class FamilyAiBudgetServiceTests {
     }
 
     @Test
+    void nonSpecialUsageIsZeroedWithoutReadingTheFamilyPool() {
+        when(grantRepository.findByUserId(userId)).thenReturn(Optional.empty());
+
+        FamilyAiUsageResponse usage = service.current(userId);
+
+        assertThat(usage.specialAccess()).isFalse();
+        assertThat(usage.status()).isEqualTo("NOT_SPECIAL");
+        assertThat(usage.activeSpecialUsers()).isZero();
+        assertThat(usage.requestTokenLimit()).isZero();
+        assertThat(usage.monthlyPoolMicrorupees()).isZero();
+        assertThat(usage.monthlyAllowanceMicrorupees()).isZero();
+        assertThat(usage.spentMicrorupees()).isZero();
+        assertThat(usage.remainingMicrorupees()).isZero();
+        verify(grantRepository, never()).countActiveAt(any());
+        verify(grantRepository, never()).sumAiSpentMicrorupeesForPeriod(anyString());
+    }
+
+    @Test
     void serializesAndDebitsThePremiumSpecialGrant() {
         when(grantRepository.countActiveAt(any())).thenReturn(1L);
 
