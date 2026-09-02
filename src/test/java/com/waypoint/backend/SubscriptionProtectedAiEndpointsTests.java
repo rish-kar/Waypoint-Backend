@@ -58,6 +58,30 @@ class SubscriptionProtectedAiEndpointsTests {
     }
 
     @Test
+    void anonymousUserCannotReadFamilyUsage() throws Exception {
+        mockMvc.perform(get("/api/v1/ai/family-usage"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void freeUserGetsZeroedNotSpecialFamilyUsage() throws Exception {
+        UserEntity user = createUser();
+
+        mockMvc.perform(get("/api/v1/ai/family-usage")
+                        .header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.specialAccess").value(false))
+                .andExpect(jsonPath("$.status").value("NOT_SPECIAL"))
+                .andExpect(jsonPath("$.activeSpecialUsers").value(0))
+                .andExpect(jsonPath("$.requestTokenLimit").value(0))
+                .andExpect(jsonPath("$.monthlyPoolMicrorupees").value(0))
+                .andExpect(jsonPath("$.monthlyAllowanceMicrorupees").value(0))
+                .andExpect(jsonPath("$.spentMicrorupees").value(0))
+                .andExpect(jsonPath("$.remainingMicrorupees").value(0));
+    }
+
+    @Test
     void anonymousUserCannotCallPremiumAi() throws Exception {
         mockMvc.perform(post("/api/v1/ai/intent")
                         .contentType("application/json")
