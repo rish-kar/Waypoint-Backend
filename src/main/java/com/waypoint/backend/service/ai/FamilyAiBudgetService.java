@@ -78,7 +78,22 @@ public class FamilyAiBudgetService {
     public FamilyAiUsageResponse current(UUID userId) {
         Instant now = Instant.now();
         Optional<SpecialPremiumGrantEntity> specialGrant = activeSpecialGrant(userId, now);
-        boolean special = specialGrant.isPresent();
+        if (specialGrant.isEmpty()) {
+            return new FamilyAiUsageResponse(
+                    false,
+                    0,
+                    0,
+                    0L,
+                    0L,
+                    0L,
+                    0L,
+                    0.0,
+                    periodKey(now),
+                    resetsAt(now),
+                    "NOT_SPECIAL"
+            );
+        }
+
         int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
         String period = periodKey(now);
         long poolBudget = monthlyBudgetMicrorupees();
@@ -91,10 +106,10 @@ public class FamilyAiBudgetService {
                 .map(value -> Math.max(0L, value))
                 .orElse(0L);
         long individualRemaining = Math.max(0L, allowance - spent);
-        long remaining = special ? Math.min(individualRemaining, globalRemaining) : 0L;
+        long remaining = Math.min(individualRemaining, globalRemaining);
         double percent = allowance <= 0 ? 0.0 : Math.min(100.0, (spent * 100.0) / allowance);
         return new FamilyAiUsageResponse(
-                special,
+                true,
                 activeUsers,
                 MAX_SPECIAL_REQUEST_INPUT_TOKENS,
                 poolBudget,
@@ -104,7 +119,7 @@ public class FamilyAiBudgetService {
                 percent,
                 period,
                 resetsAt(now),
-                special ? (remaining > 0 ? "ACTIVE" : "LIMIT_REACHED") : "NOT_SPECIAL"
+                remaining > 0 ? "ACTIVE" : "LIMIT_REACHED"
         );
     }
 
@@ -138,7 +153,7 @@ public class FamilyAiBudgetService {
         );
     }
 
-    // Kept as a narrow numeric entry point for budget boundary tests.
+    // Narrow numeric entry point used by budget-boundary unit tests.
     @Transactional
     public boolean consumeRequestBudget(
             UUID userId,
