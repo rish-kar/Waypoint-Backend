@@ -24,6 +24,8 @@ values:
     value: ''
   - key: adminPassword
     value: ''
+  - key: adminBasicAuth
+    value: ''
   - key: adminSubscriptionId
     value: ''
   - key: adminGrantId
