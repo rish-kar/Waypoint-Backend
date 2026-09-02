@@ -25,7 +25,7 @@ scripts:
           throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
       }
       const raw = `${adminId}:${adminPassword}`;
-      pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(raw)));
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(raw)));
     language: text/javascript
   - type: afterResponse
     code: |-
