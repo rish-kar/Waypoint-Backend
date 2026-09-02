@@ -3,6 +3,7 @@ package com.waypoint.backend.service.ai;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -13,6 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FamilyAiPersistenceIntegrationTests {
     private final SpecialPremiumGrantRepository grantRepository;
 
+    @Autowired
     FamilyAiPersistenceIntegrationTests(SpecialPremiumGrantRepository grantRepository) {
         this.grantRepository = grantRepository;
     }
