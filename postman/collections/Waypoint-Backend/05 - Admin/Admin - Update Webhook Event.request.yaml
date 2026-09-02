@@ -27,7 +27,7 @@ scripts:
       if (!adminId || !adminPassword) {
           throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
       }
-      pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
     language: text/javascript
   - type: afterResponse
     code: |-
