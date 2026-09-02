@@ -35,7 +35,7 @@ class PlanCatalogueMigrationIntegrationTests {
         assertThat(monthly.getPriceCents()).isEqualTo(39900);
         assertThat(monthly.getCurrency()).isEqualTo("INR");
 
-        assertThat(annual.getPriceCents()).isEqualTo(350000);
+        assertThat(annual.getPriceCents()).isEqualTo(349900);
         assertThat(annual.getCurrency()).isEqualTo("INR");
 
         assertThat(special.getPriceCents()).isZero();
