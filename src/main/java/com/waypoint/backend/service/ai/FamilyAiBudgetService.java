@@ -11,7 +11,9 @@ import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
 import com.waypoint.backend.repository.ai.FamilyAiPoolUsageRepository;
 import com.waypoint.backend.repository.ai.FamilyAiUserUsageRepository;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
+import com.waypoint.backend.utilities.exception.ApiException;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -97,7 +99,6 @@ public class FamilyAiBudgetService {
                 spent,
                 remaining,
                 percent,
-                0,
                 period,
                 resetsAt(now),
                 special ? (remaining > 0 ? "ACTIVE" : "LIMIT_REACHED") : "NOT_SPECIAL"
@@ -172,8 +173,8 @@ public class FamilyAiBudgetService {
 
     private int estimate(String value) {
         if (value == null || value.isBlank()) return 0;
-        // GPT tokenization is byte based. Counting UTF-8 bytes is a conservative upper bound
-        // for user-supplied input and avoids imposing an unrelated per-request token quota.
+        // GPT tokenization is byte based. UTF-8 byte length is a conservative upper bound
+        // for user supplied token count and avoids imposing an unrelated request quota.
         return Math.max(1, value.getBytes(StandardCharsets.UTF_8).length);
     }
 
@@ -234,13 +235,9 @@ public class FamilyAiBudgetService {
                 .toInstant();
     }
 
-    private IllegalStateException impossibleBudgetState() {
-        return new IllegalStateException("Family AI budget state is invalid");
-    }
-
-    private com.waypoint.backend.utilities.exception.ApiException familyLimitReached() {
-        return new com.waypoint.backend.utilities.exception.ApiException(
-                org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
+    private ApiException familyLimitReached() {
+        return new ApiException(
+                HttpStatus.TOO_MANY_REQUESTS,
                 "FAMILY_AI_BUDGET_REACHED",
                 "Your Friends & Family AI allowance has been used for this month."
         );
