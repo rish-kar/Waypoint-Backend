@@ -61,7 +61,10 @@ public class OpenAiClient implements AiModelClient {
             "transcribe",
             "tts",
             "image",
-            "search"
+            "search",
+            "-pro",
+            "codex",
+            "cyber"
     );
 
     private final WebClient webClient;
@@ -371,8 +374,9 @@ public class OpenAiClient implements AiModelClient {
                 Map.of("role", "developer", "content", systemPrompt()),
                 Map.of("role", "user", "content", userPrompt(request))
         ));
-        if (supportsReasoningEffort(model)) {
-            body.put("reasoning_effort", "minimal");
+        String reasoningEffort = reasoningEffort(model);
+        if (!reasoningEffort.isBlank()) {
+            body.put("reasoning_effort", reasoningEffort);
         }
         body.put("stream", false);
         body.put("max_completion_tokens", 800);
@@ -447,8 +451,9 @@ public class OpenAiClient implements AiModelClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model);
         body.put("messages", messages);
-        if (supportsReasoningEffort(model)) {
-            body.put("reasoning_effort", "minimal");
+        String reasoningEffort = reasoningEffort(model);
+        if (!reasoningEffort.isBlank()) {
+            body.put("reasoning_effort", reasoningEffort);
         }
         body.put("stream", false);
         body.put("max_completion_tokens", maxTokens);
@@ -636,12 +641,18 @@ public class OpenAiClient implements AiModelClient {
         return BYOK_UNSUPPORTED_MARKERS.stream().noneMatch(value::contains);
     }
 
-    private boolean supportsReasoningEffort(String model) {
+    private String reasoningEffort(String model) {
         String value = model == null ? "" : model.trim().toLowerCase(Locale.ROOT);
-        return value.startsWith("gpt-5")
-                || value.startsWith("o1")
-                || value.startsWith("o3")
-                || value.startsWith("o4");
+        if (value.startsWith("gpt-5.")) {
+            return "low";
+        }
+        if (value.startsWith("gpt-5")) {
+            return "minimal";
+        }
+        if (value.startsWith("o1") || value.startsWith("o3") || value.startsWith("o4")) {
+            return "low";
+        }
+        return "";
     }
 
     private String modelIdFor(String model) {
