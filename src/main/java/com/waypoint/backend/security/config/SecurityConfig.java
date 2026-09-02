@@ -74,7 +74,7 @@ public class SecurityConfig {
         http
                 .securityMatcher("/api/v1/admin/**")
                 .csrf(csrf -> csrf.ignoringRequestMatchers(request ->
-                        environment.acceptsProfiles(Profiles.of("test"))
+                        environment.acceptsProfiles(Profiles.of("dev", "test"))
                                 || request.getHeader("X-Admin-TOTP") != null))
                 .cors(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
