@@ -4,13 +4,9 @@ import com.waypoint.backend.config.ai.FamilyAiAccessProperties;
 import com.waypoint.backend.model.ai.AiChatMessage;
 import com.waypoint.backend.model.ai.AiChatRequest;
 import com.waypoint.backend.model.ai.AiIntentRequest;
-import com.waypoint.backend.model.ai.FamilyAiPoolUsageEntity;
 import com.waypoint.backend.model.ai.FamilyAiUsageResponse;
-import com.waypoint.backend.model.ai.FamilyAiUserUsageEntity;
 import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
 import com.waypoint.backend.model.plan.PlanCode;
-import com.waypoint.backend.repository.ai.FamilyAiPoolUsageRepository;
-import com.waypoint.backend.repository.ai.FamilyAiUserUsageRepository;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
 import com.waypoint.backend.repository.plan.PlanRepository;
 import com.waypoint.backend.utilities.exception.ApiException;
@@ -38,21 +34,15 @@ public class FamilyAiBudgetService {
     private final FamilyAiAccessProperties properties;
     private final SpecialPremiumGrantRepository grantRepository;
     private final PlanRepository planRepository;
-    private final FamilyAiPoolUsageRepository poolRepository;
-    private final FamilyAiUserUsageRepository userUsageRepository;
 
     public FamilyAiBudgetService(
             FamilyAiAccessProperties properties,
             SpecialPremiumGrantRepository grantRepository,
-            PlanRepository planRepository,
-            FamilyAiPoolUsageRepository poolRepository,
-            FamilyAiUserUsageRepository userUsageRepository
+            PlanRepository planRepository
     ) {
         this.properties = properties;
         this.grantRepository = grantRepository;
         this.planRepository = planRepository;
-        this.poolRepository = poolRepository;
-        this.userUsageRepository = userUsageRepository;
     }
 
     public int estimateInputTokens(AiIntentRequest request) {
@@ -79,20 +69,19 @@ public class FamilyAiBudgetService {
     @Transactional(readOnly = true)
     public FamilyAiUsageResponse current(UUID userId) {
         Instant now = Instant.now();
-        boolean special = activeSpecialGrant(userId, now).isPresent();
+        Optional<SpecialPremiumGrantEntity> specialGrant = activeSpecialGrant(userId, now);
+        boolean special = specialGrant.isPresent();
         int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
         String period = periodKey(now);
         long poolBudget = monthlyBudgetMicrorupees();
         long allowance = activeUsers == 0 ? 0 : poolBudget / activeUsers;
-        long poolSpent = poolRepository.findById(period)
-                .map(FamilyAiPoolUsageEntity::getSpentMicrorupees)
-                .orElse(0L);
+        long poolSpent = normalizeSpent(grantRepository.sumAiSpentMicrorupeesForPeriod(period));
         long globalRemaining = Math.max(0L, poolBudget - Math.min(poolBudget, poolSpent));
-        long spent = special
-                ? userUsageRepository.findByUserIdAndPeriodKey(userId, period)
-                        .map(FamilyAiUserUsageEntity::getSpentMicrorupees)
-                        .orElse(0L)
-                : 0L;
+        long spent = specialGrant
+                .filter(grant -> period.equals(grant.getAiPeriodKey()))
+                .map(SpecialPremiumGrantEntity::getAiSpentMicrorupees)
+                .map(value -> Math.max(0L, value))
+                .orElse(0L);
         long individualRemaining = Math.max(0L, allowance - spent);
         long remaining = special ? Math.min(individualRemaining, globalRemaining) : 0L;
         double percent = allowance <= 0 ? 0.0 : Math.min(100.0, (spent * 100.0) / allowance);
@@ -118,53 +107,46 @@ public class FamilyAiBudgetService {
             int maxOutputTokensPerCall
     ) {
         Instant now = Instant.now();
-        Optional<SpecialPremiumGrantEntity> specialGrant = activeSpecialGrant(userId, now);
-        if (specialGrant.isEmpty()) {
+        if (activeSpecialGrant(userId, now).isEmpty()) {
             return false;
         }
 
-        // PREMIUM_SPECIAL is a single, permanent catalogue row. Locking it gives
-        // every Friends & Family request the same database-portable serialization
-        // point before creating/updating monthly usage rows. The transaction ends
-        // before the provider call, so the lock is never held during network I/O.
+        // This permanent catalogue row is shared by every Premium Special user.
+        // Lock it first so all Family AI budget checks are serialized across users.
+        // The transaction completes before the OpenAI network call.
         planRepository.findByCodeForUpdate(PlanCode.PREMIUM_SPECIAL)
                 .orElseThrow(() -> new IllegalStateException("Premium Special plan is unavailable"));
 
+        SpecialPremiumGrantEntity grant = grantRepository.findByUserIdForUpdate(userId)
+                .filter(value -> isActiveSpecialGrant(value, now))
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.FORBIDDEN,
+                        "AI_ACCESS_DENIED",
+                        "Premium Special access is not active for this account."
+                ));
+
         String period = periodKey(now);
-        FamilyAiPoolUsageEntity pool = poolRepository.findById(period)
-                .orElseGet(() -> {
-                    FamilyAiPoolUsageEntity created = new FamilyAiPoolUsageEntity();
-                    created.setPeriodKey(period);
-                    created.setSpentMicrorupees(0L);
-                    return poolRepository.saveAndFlush(created);
-                });
-
-        FamilyAiUserUsageEntity usage = userUsageRepository.findByUserIdAndPeriodKey(userId, period)
-                .orElseGet(() -> {
-                    FamilyAiUserUsageEntity created = new FamilyAiUserUsageEntity();
-                    created.setUser(specialGrant.orElseThrow().getUser());
-                    created.setPeriodKey(period);
-                    created.setSpentMicrorupees(0L);
-                    return userUsageRepository.saveAndFlush(created);
-                });
-
         int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
         if (activeUsers <= 0) {
             throw familyLimitReached();
         }
+
         long totalBudget = monthlyBudgetMicrorupees();
         long userAllowance = totalBudget / activeUsers;
+        long globalSpent = normalizeSpent(grantRepository.sumAiSpentMicrorupeesForPeriod(period));
+        long userSpent = period.equals(grant.getAiPeriodKey())
+                ? Math.max(0L, grant.getAiSpentMicrorupees())
+                : 0L;
         long debit = requestBudgetMicrorupees(estimatedInputTokens, maxProviderCalls, maxOutputTokensPerCall);
 
-        if (safeAdd(pool.getSpentMicrorupees(), debit) > totalBudget
-                || safeAdd(usage.getSpentMicrorupees(), debit) > userAllowance) {
+        if (safeAdd(globalSpent, debit) > totalBudget
+                || safeAdd(userSpent, debit) > userAllowance) {
             throw familyLimitReached();
         }
 
-        pool.setSpentMicrorupees(safeAdd(pool.getSpentMicrorupees(), debit));
-        usage.setSpentMicrorupees(safeAdd(usage.getSpentMicrorupees(), debit));
-        poolRepository.save(pool);
-        userUsageRepository.save(usage);
+        grant.setAiPeriodKey(period);
+        grant.setAiSpentMicrorupees(safeAdd(userSpent, debit));
+        grantRepository.save(grant);
         return true;
     }
 
@@ -176,8 +158,16 @@ public class FamilyAiBudgetService {
 
     private Optional<SpecialPremiumGrantEntity> activeSpecialGrant(UUID userId, Instant now) {
         return grantRepository.findByUserId(userId)
-                .filter(SpecialPremiumGrantEntity::isActive)
-                .filter(grant -> grant.getValidUntil() == null || grant.getValidUntil().isAfter(now));
+                .filter(grant -> isActiveSpecialGrant(grant, now));
+    }
+
+    private boolean isActiveSpecialGrant(SpecialPremiumGrantEntity grant, Instant now) {
+        return grant.isActive()
+                && (grant.getValidUntil() == null || grant.getValidUntil().isAfter(now));
+    }
+
+    private long normalizeSpent(Long value) {
+        return value == null ? 0L : Math.max(0L, value);
     }
 
     private long requestBudgetMicrorupees(int inputTokens, int maxProviderCalls, int maxOutputTokensPerCall) {
