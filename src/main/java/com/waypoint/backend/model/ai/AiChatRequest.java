@@ -1,14 +1,18 @@
 package com.waypoint.backend.model.ai;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
 import java.util.List;
 
 public record AiChatRequest(
-        String question,
-        String pageTitle,
-        String pageDescription,
-        String pageText,
-        List<AiChatMessage> history,
-        String model
+        @NotBlank @Size(max = 500) String question,
+        @Size(max = 220) String pageTitle,
+        @Size(max = 1000) String pageDescription,
+        @NotBlank @Size(max = 14000) String pageText,
+        @Valid @Size(max = 12) List<AiChatMessage> history,
+        @Size(max = 40) String model
 ) {
     public AiChatRequest {
         question = truncate(question, 500);
@@ -19,7 +23,6 @@ public record AiChatRequest(
                 ? List.of()
                 : List.copyOf(history.subList(0, Math.min(history.size(), 12)));
 
-        // Cloud AI testing currently has no frontend plan/auth enforcement.
         // The backend owns the provider/model choice, so ignore any client model value.
         model = null;
     }
