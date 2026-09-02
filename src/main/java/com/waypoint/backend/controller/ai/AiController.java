@@ -66,17 +66,13 @@ public class AiController {
             @Valid @RequestBody AiIntentRequest request
     ) {
         requireAiAccess(userId);
-        boolean familyRequest = familyAiBudgetService.beginRequest(
+        familyAiBudgetService.consumeRequestBudget(
                 userId,
                 familyAiBudgetService.estimateInputTokens(request),
                 2,
                 800
         );
-        try {
-            return aiIntentService.route(request);
-        } finally {
-            if (familyRequest) familyAiBudgetService.finishRequest();
-        }
+        return aiIntentService.route(request);
     }
 
     @PostMapping("/chat")
@@ -85,17 +81,13 @@ public class AiController {
             @Valid @RequestBody AiChatRequest request
     ) {
         requireAiAccess(userId);
-        boolean familyRequest = familyAiBudgetService.beginRequest(
+        familyAiBudgetService.consumeRequestBudget(
                 userId,
                 familyAiBudgetService.estimateInputTokens(request),
                 4,
                 1_200
         );
-        try {
-            return aiIntentService.chat(request);
-        } finally {
-            if (familyRequest) familyAiBudgetService.finishRequest();
-        }
+        return aiIntentService.chat(request);
     }
 
     private void requireAiAccess(UUID userId) {
