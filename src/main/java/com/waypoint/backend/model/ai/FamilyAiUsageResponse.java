@@ -10,7 +10,6 @@ public record FamilyAiUsageResponse(
         long spentMicrorupees,
         long remainingMicrorupees,
         double usagePercent,
-        int requestTokenLimit,
         String periodKey,
         Instant resetsAt,
         String status
