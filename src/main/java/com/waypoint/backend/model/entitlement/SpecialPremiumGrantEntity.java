@@ -47,6 +47,12 @@ public class SpecialPremiumGrantEntity {
     @Column(nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "ai_period_key", length = 7)
+    private String aiPeriodKey;
+
+    @Column(name = "ai_spent_microrupees", nullable = false)
+    private long aiSpentMicrorupees;
+
     @PrePersist
     void prePersist() {
         Instant now = Instant.now();
@@ -144,5 +150,21 @@ public class SpecialPremiumGrantEntity {
 
     public void setUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getAiPeriodKey() {
+        return aiPeriodKey;
+    }
+
+    public void setAiPeriodKey(String aiPeriodKey) {
+        this.aiPeriodKey = aiPeriodKey;
+    }
+
+    public long getAiSpentMicrorupees() {
+        return aiSpentMicrorupees;
+    }
+
+    public void setAiSpentMicrorupees(long aiSpentMicrorupees) {
+        this.aiSpentMicrorupees = aiSpentMicrorupees;
     }
 }
