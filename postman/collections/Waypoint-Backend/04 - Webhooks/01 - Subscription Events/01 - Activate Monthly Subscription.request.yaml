@@ -1,5 +1,5 @@
 $kind: http-request
-description: Creates a fresh ACTIVE monthly subscription for the selected user using the Lemon Squeezy webhook path, then verifies the resulting user plan and exact subscription through admin Basic Auth. This local test does not depend on the user's JWT being current.
+description: Creates a fresh ACTIVE monthly subscription for the selected user using the Lemon Squeezy webhook path, then verifies the resulting user plan and exact subscription through admin Basic Auth. Run Admin > Plans > List Plans first so monthlyVariantId is copied from the running backend configuration.
 url: "{{baseUrl}}/api/v1/webhooks/lemonsqueezy"
 method: POST
 headers:
@@ -25,7 +25,7 @@ scripts:
       const adminPassword = pm.environment.get('adminPassword');
       if (!secret) throw new Error('Set webhookSecret in the environment.');
       if (!userId) throw new Error('Run Find User by Email first so userId is populated.');
-      if (!variantId) throw new Error('Set monthlyVariantId in the environment.');
+      if (!variantId) throw new Error('Run Admin > Plans > List Plans first so monthlyVariantId matches the running backend.');
       if (!adminId || !adminPassword) throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
 
       const adminBasicAuth = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`));
