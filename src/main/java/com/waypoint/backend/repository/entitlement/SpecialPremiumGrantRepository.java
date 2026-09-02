@@ -2,8 +2,10 @@ package com.waypoint.backend.repository.entitlement;
 
 import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,6 +18,10 @@ import java.util.UUID;
 public interface SpecialPremiumGrantRepository
         extends JpaRepository<SpecialPremiumGrantEntity, UUID>, JpaSpecificationExecutor<SpecialPremiumGrantEntity> {
     Optional<SpecialPremiumGrantEntity> findByUserId(UUID userId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select grant from SpecialPremiumGrantEntity grant where grant.user.id = :userId")
+    Optional<SpecialPremiumGrantEntity> findByUserIdForUpdate(@Param("userId") UUID userId);
 
     List<SpecialPremiumGrantEntity> findByActiveTrueOrderByGrantedAtDesc();
 
@@ -46,4 +52,11 @@ public interface SpecialPremiumGrantRepository
               and (grant.validUntil is null or grant.validUntil > :now)
             """)
     long countActiveAt(@Param("now") Instant now);
+
+    @Query("""
+            select sum(grant.aiSpentMicrorupees)
+            from SpecialPremiumGrantEntity grant
+            where grant.aiPeriodKey = :periodKey
+            """)
+    Long sumAiSpentMicrorupeesForPeriod(@Param("periodKey") String periodKey);
 }
