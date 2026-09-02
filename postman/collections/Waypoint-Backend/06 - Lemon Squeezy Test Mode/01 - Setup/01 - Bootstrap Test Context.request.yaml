@@ -1,5 +1,5 @@
 $kind: http-request
-description: Starts the Lemon Squeezy Test Mode lifecycle flow from Waypoint's current billing state. This request owns the Lemon Squeezy test variables so normal Waypoint backend folders do not mutate provider-test state.
+description: Starts a clean Lemon Squeezy Test Mode lifecycle flow from Waypoint's current paid billing state. Clears all lifecycle IDs/state first so an interrupted or previous run cannot contaminate the new run.
 url: "{{baseUrl}}/api/v1/billing/status"
 method: GET
 headers:
@@ -8,27 +8,36 @@ scripts:
   - type: beforeRequest
     code: |-
       if (!pm.environment.get('jwt')) {
-        throw new Error('Run Google Login first so jwt is populated.');
+        throw new Error('Run login first so jwt is populated.');
       }
+      [
+        'lemonSqueezySubscriptionId',
+        'lemonSqueezyBootstrapSubscriptionId',
+        'lemonSqueezyLifecycleSubscriptionId',
+        'lemonSqueezyProviderStatus',
+        'lemonSqueezyStoreId',
+        'lemonSqueezyVariantId',
+        'lemonSqueezyWaypointPlan',
+        'lemonSqueezyCheckoutUrl',
+        'lemonSqueezyPaymentMethodUrl',
+        'lemonSqueezyCustomerPortalUrl',
+        'lemonSqueezyInvoiceId'
+      ].forEach(key => pm.environment.unset(key));
+      pm.environment.set('lemonSqueezyNoTrialPaidReady', 'false');
     language: text/javascript
   - type: afterResponse
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) return;
       const body = pm.response.json();
       pm.test('A paid billing subscription is available for Test Mode bootstrap', () => {
         pm.expect(body.externalSubscriptionId).to.be.a('string').and.not.empty;
         pm.expect(body.planCode).to.be.oneOf(['PREMIUM_MONTHLY', 'PREMIUM_ANNUAL']);
       });
-      pm.environment.unset('lemonSqueezyLifecycleSubscriptionId');
-      if (body.externalSubscriptionId) {
+      if (body.externalSubscriptionId && ['PREMIUM_MONTHLY', 'PREMIUM_ANNUAL'].includes(body.planCode)) {
         pm.environment.set('lemonSqueezySubscriptionId', body.externalSubscriptionId);
         pm.environment.set('lemonSqueezyBootstrapSubscriptionId', body.externalSubscriptionId);
+        pm.environment.set('lemonSqueezyWaypointPlan', body.planCode === 'PREMIUM_MONTHLY' ? 'MONTHLY' : 'ANNUAL');
       }
-      if (body.planCode === 'PREMIUM_MONTHLY') {
-        pm.environment.set('lemonSqueezyWaypointPlan', 'MONTHLY');
-      } else if (body.planCode === 'PREMIUM_ANNUAL') {
-        pm.environment.set('lemonSqueezyWaypointPlan', 'ANNUAL');
-      }
-      pm.environment.set('lemonSqueezyNoTrialPaidReady', 'false');
     language: text/javascript
 order: 1000

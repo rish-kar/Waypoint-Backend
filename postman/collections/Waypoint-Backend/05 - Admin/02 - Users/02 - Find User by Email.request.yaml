@@ -1,5 +1,5 @@
 $kind: http-request
-description: Finds one user by email and stores the returned ID in userId for the following admin requests.
+description: Finds one user by email. Clears dependent IDs first so a failed lookup cannot leave a previous user's IDs active, then stores the returned userId only after an exact email match.
 url: "{{baseUrl}}/api/v1/admin/users/by-email?email={{userEmail}}"
 method: GET
 headers:
@@ -15,16 +15,29 @@ scripts:
       }
       const adminId = pm.environment.get('adminId');
       const adminPassword = pm.environment.get('adminPassword');
+      const userEmail = pm.environment.get('userEmail');
       if (!adminId || !adminPassword) {
           throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
       }
+      if (!userEmail) {
+          throw new Error('Set userEmail to the exact account you want to manage.');
+      }
+      pm.environment.unset('userId');
+      pm.environment.unset('adminSubscriptionId');
+      pm.environment.unset('adminSubscriptionUserId');
+      pm.environment.unset('adminGrantId');
       pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
     language: text/javascript
   - type: afterResponse
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) return;
       const body = pm.response.json();
-      pm.test('User email matches', () => pm.expect(body.email).to.eql(pm.environment.get('userEmail')));
-      pm.environment.set('userId', body.id);
+      const expectedEmail = pm.environment.get('userEmail');
+      pm.test('User email matches exactly', () => pm.expect(String(body.email).toLowerCase()).to.eql(String(expectedEmail).toLowerCase()));
+      pm.test('User ID returned', () => pm.expect(body.id).to.be.a('string').and.not.empty);
+      if (String(body.email).toLowerCase() === String(expectedEmail).toLowerCase()) {
+          pm.environment.set('userId', body.id);
+      }
     language: text/javascript
 order: 2000

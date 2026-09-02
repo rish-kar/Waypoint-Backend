@@ -1,6 +1,6 @@
 $kind: http-request
-description: Lists active, revoked and expired Premium Special grants. Filter by userId, email, active, grantedBy and grant dates.
-url: "{{baseUrl}}/api/v1/admin/special-grants?size=50&sort=grantedAt&direction=DESC"
+description: Lists Premium Special grants only for the currently selected userId. Clears any previous adminGrantId first and selects only a grant belonging to that user.
+url: "{{baseUrl}}/api/v1/admin/special-grants?userId={{userId}}&size=50&sort=grantedAt&direction=DESC"
 method: GET
 headers:
   Authorization: Basic {{adminBasicAuth}}
@@ -15,18 +15,24 @@ scripts:
       }
       const adminId = pm.environment.get('adminId');
       const adminPassword = pm.environment.get('adminPassword');
-      if (!adminId || !adminPassword) {
-          throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
-      }
+      const userId = pm.environment.get('userId');
+      if (!adminId || !adminPassword) throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      if (!userId) throw new Error('Run Find User by Email first so userId is populated.');
+      pm.environment.unset('adminGrantId');
       pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
     language: text/javascript
   - type: afterResponse
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) return;
       const body = pm.response.json();
+      const expectedUserId = pm.environment.get('userId');
       pm.test('Paged grants returned', () => pm.expect(body.items).to.be.an('array'));
-      if (body.items.length > 0) {
-          pm.environment.set('adminGrantId', body.items[0].id);
-      }
+      pm.test('Every returned grant belongs to the selected user', () => {
+          body.items.forEach(item => pm.expect(item.userId).to.eql(expectedUserId));
+      });
+      const selected = body.items.find(item => item.userId === expectedUserId && item.active === true)
+          || body.items.find(item => item.userId === expectedUserId);
+      if (selected) pm.environment.set('adminGrantId', selected.id);
     language: text/javascript
 order: 5000

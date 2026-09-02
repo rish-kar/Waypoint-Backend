@@ -8,9 +8,28 @@ scripts:
       if (!pm.environment.get('baseUrl')) {
           throw new Error('Select the Waypoint Local environment.');
       }
-      const adminTotp = pm.environment.get('adminTotp');
+
       const requestUrl = pm.request.url.toString();
+      const adminTotp = pm.environment.get('adminTotp');
       if (adminTotp && requestUrl.includes('/api/v1/admin/')) {
           pm.request.headers.upsert({ key: 'X-Admin-TOTP', value: adminTotp });
+      } else {
+          pm.request.headers.remove('X-Admin-TOTP');
+      }
+
+      const unresolved = [];
+      const checkResolved = (label, rawValue) => {
+          if (rawValue === undefined || rawValue === null) return;
+          const resolved = pm.variables.replaceIn(String(rawValue));
+          const matches = resolved.match(/{{[^}]+}}/g) || [];
+          matches.forEach(token => unresolved.push(`${label}: ${token}`));
+      };
+      checkResolved('URL', requestUrl);
+      pm.request.headers.each(header => checkResolved(`Header ${header.key}`, header.value));
+      if (pm.request.body && pm.request.body.mode === 'raw') {
+          checkResolved('Body', pm.request.body.raw);
+      }
+      if (unresolved.length) {
+          throw new Error(`Unresolved Postman variables: ${unresolved.join(', ')}`);
       }
     language: text/javascript

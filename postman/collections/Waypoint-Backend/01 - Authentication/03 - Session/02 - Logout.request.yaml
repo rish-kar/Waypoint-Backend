@@ -1,12 +1,26 @@
 $kind: http-request
-description: Revokes the current Waypoint JWT and all Waypoint refresh sessions while preserving any linked Microsoft identity. To verify link persistence, sign in with the same Microsoft account again after logout and confirm the same userId is returned.
+description: Revokes the current Waypoint JWT and refresh sessions. On success, clears all local session variables so later requests cannot accidentally reuse logged-out credentials.
 url: "{{baseUrl}}/api/v1/auth/logout"
 method: POST
 headers:
   Authorization: "Bearer {{jwt}}"
 scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('jwt')) {
+          throw new Error('No active jwt is available to log out.');
+      }
+    language: text/javascript
   - type: afterResponse
     code: |-
       pm.test('Status is 204', () => pm.response.to.have.status(204));
+      if (pm.response.code !== 204) return;
+      pm.environment.unset('jwt');
+      pm.environment.unset('waypointRefreshToken');
+      pm.environment.unset('previousWaypointRefreshToken');
+      pm.environment.unset('userId');
+      pm.environment.unset('adminSubscriptionId');
+      pm.environment.unset('adminSubscriptionUserId');
+      pm.environment.unset('adminGrantId');
     language: text/javascript
 order: 5900

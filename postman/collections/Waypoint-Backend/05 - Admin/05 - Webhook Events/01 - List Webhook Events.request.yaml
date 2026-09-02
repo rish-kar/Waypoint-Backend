@@ -1,5 +1,5 @@
 $kind: http-request
-description: Filter by eventName, processingStatus, externalObjectId and received date range. Set includePayload=true only when raw payloads are needed.
+description: Lists webhook events without silently selecting an arbitrary event. Clears adminWebhookEventId first; it is auto-selected only when exactly one result is returned.
 url: "{{baseUrl}}/api/v1/admin/webhook-events?size=50&sort=receivedAt&direction=DESC&includePayload=false"
 method: GET
 headers:
@@ -15,18 +15,20 @@ scripts:
       }
       const adminId = pm.environment.get('adminId');
       const adminPassword = pm.environment.get('adminPassword');
-      if (!adminId || !adminPassword) {
-          throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
-      }
+      if (!adminId || !adminPassword) throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      pm.environment.unset('adminWebhookEventId');
       pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
     language: text/javascript
   - type: afterResponse
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) return;
       const body = pm.response.json();
       pm.test('Paged webhook events returned', () => pm.expect(body.items).to.be.an('array'));
-      if (body.items.length > 0) {
+      if (body.items.length === 1) {
           pm.environment.set('adminWebhookEventId', body.items[0].id);
+      } else if (body.items.length > 1) {
+          console.warn('Multiple webhook events returned. Set adminWebhookEventId explicitly before Get/Update; no arbitrary event was selected.');
       }
     language: text/javascript
 order: 6000

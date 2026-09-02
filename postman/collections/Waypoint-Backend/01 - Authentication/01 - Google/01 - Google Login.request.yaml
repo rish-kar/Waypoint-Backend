@@ -1,5 +1,5 @@
 $kind: http-request
-description: Requires a real Google access token whose audience matches GOOGLE_CLIENT_ID. Saves jwt and userId into the selected environment.
+description: Requires a real Google access token whose audience matches GOOGLE_CLIENT_ID. Clears stale auth state before the attempt, then saves fresh jwt, userId and userEmail only after a successful login.
 url: "{{baseUrl}}/api/v1/auth/google"
 method: POST
 headers:
@@ -12,14 +12,30 @@ body:
       "accessToken": "{{googleAccessToken}}"
     }
 scripts:
+  - type: beforeRequest
+    code: |-
+      if (!pm.environment.get('googleAccessToken')) {
+          throw new Error('Set googleAccessToken in the Waypoint Local environment.');
+      }
+      pm.environment.unset('jwt');
+      pm.environment.unset('userId');
+      pm.environment.unset('waypointRefreshToken');
+      pm.environment.unset('previousWaypointRefreshToken');
+      pm.environment.unset('adminSubscriptionId');
+      pm.environment.unset('adminSubscriptionUserId');
+      pm.environment.unset('adminGrantId');
+    language: text/javascript
   - type: afterResponse
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) return;
       const body = pm.response.json();
       pm.test('Bearer token returned', () => {
           pm.expect(body.tokenType).to.eql('Bearer');
           pm.expect(body.accessToken).to.be.a('string').and.not.empty;
           pm.expect(body.expiresIn).to.be.above(0);
+          pm.expect(body.user?.id).to.be.a('string').and.not.empty;
+          pm.expect(body.user?.email).to.be.a('string').and.not.empty;
       });
       pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-auth-login'));
       pm.environment.set('jwt', body.accessToken);

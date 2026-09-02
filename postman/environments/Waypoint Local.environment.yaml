@@ -30,6 +30,8 @@ values:
     value: ''
   - key: adminSubscriptionId
     value: ''
+  - key: adminSubscriptionUserId
+    value: ''
   - key: adminGrantId
     value: ''
   - key: adminWebhookEventId
@@ -41,10 +43,14 @@ values:
   - key: monthlyVariantId
     value: local-monthly-variant-id
   - key: subscriptionId
-    value: postman-subscription-001
+    value: ''
   - key: lemonSqueezyApiKey
     value: ''
   - key: lemonSqueezySubscriptionId
+    value: ''
+  - key: lemonSqueezyBootstrapSubscriptionId
+    value: ''
+  - key: lemonSqueezyLifecycleSubscriptionId
     value: ''
   - key: lemonSqueezyProviderStatus
     value: ''
