@@ -25,6 +25,7 @@ import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.IntSupplier;
 
 @Service
 public class FamilyAiBudgetService {
@@ -110,16 +111,64 @@ public class FamilyAiBudgetService {
     @Transactional
     public boolean consumeRequestBudget(
             UUID userId,
+            AiIntentRequest request,
+            int maxProviderCalls,
+            int maxOutputTokensPerCall
+    ) {
+        return consumeRequestBudgetIfSpecial(
+                userId,
+                () -> estimateInputTokens(request),
+                maxProviderCalls,
+                maxOutputTokensPerCall
+        );
+    }
+
+    @Transactional
+    public boolean consumeRequestBudget(
+            UUID userId,
+            AiChatRequest request,
+            int maxProviderCalls,
+            int maxOutputTokensPerCall
+    ) {
+        return consumeRequestBudgetIfSpecial(
+                userId,
+                () -> estimateInputTokens(request),
+                maxProviderCalls,
+                maxOutputTokensPerCall
+        );
+    }
+
+    // Kept as a narrow numeric entry point for budget boundary tests.
+    @Transactional
+    public boolean consumeRequestBudget(
+            UUID userId,
             int estimatedInputTokens,
+            int maxProviderCalls,
+            int maxOutputTokensPerCall
+    ) {
+        return consumeRequestBudgetIfSpecial(
+                userId,
+                () -> estimatedInputTokens,
+                maxProviderCalls,
+                maxOutputTokensPerCall
+        );
+    }
+
+    private boolean consumeRequestBudgetIfSpecial(
+            UUID userId,
+            IntSupplier inputTokenCounter,
             int maxProviderCalls,
             int maxOutputTokensPerCall
     ) {
         Instant now = Instant.now();
         if (activeSpecialGrant(userId, now).isEmpty()) {
             // Family AI limits are deliberately scoped only to Premium Special.
+            // Non-Special tiers return before tokenization, locking or accounting.
             return false;
         }
-        if (Math.max(0, estimatedInputTokens) > MAX_SPECIAL_REQUEST_INPUT_TOKENS) {
+
+        int estimatedInputTokens = Math.max(0, inputTokenCounter.getAsInt());
+        if (estimatedInputTokens > MAX_SPECIAL_REQUEST_INPUT_TOKENS) {
             throw familyRequestTooLarge();
         }
 
