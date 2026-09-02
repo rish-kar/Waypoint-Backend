@@ -21,7 +21,7 @@ scripts:
       if (!pm.environment.get('lemonSqueezyLifecycleSubscriptionId')) {
           throw new Error('No locked lifecycle subscription ID. Run 04 for a fresh run or 08A to recover an interrupted run.');
       }
-      pm.variables.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
     language: text/javascript
   - type: afterResponse
     code: |-
