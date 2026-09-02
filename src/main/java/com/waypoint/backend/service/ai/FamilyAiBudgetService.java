@@ -89,6 +89,7 @@ public class FamilyAiBudgetService {
         return new FamilyAiUsageResponse(
                 special,
                 activeUsers,
+                MAX_SPECIAL_REQUEST_INPUT_TOKENS,
                 poolBudget,
                 allowance,
                 spent,
@@ -158,9 +159,9 @@ public class FamilyAiBudgetService {
     private int estimate(String value) {
         if (value == null || value.isBlank()) return 0;
         // No tokenizer dependency is added to the request path. UTF-8 bytes / 4 is
-        // the standard conservative approximation used here for the 5k input cap;
-        // actual cost accounting still carries a large provider-overhead allowance
-        // plus a 2x safety multiplier before any OpenAI request is sent.
+        // the standard approximation used here for the 5k input cap; actual cost
+        // accounting still carries a large provider-overhead allowance plus a 2x
+        // safety multiplier before any OpenAI request is sent.
         long bytes = value.getBytes(StandardCharsets.UTF_8).length;
         return (int) Math.min(Integer.MAX_VALUE, Math.max(1L, (bytes + 3L) / 4L));
     }
