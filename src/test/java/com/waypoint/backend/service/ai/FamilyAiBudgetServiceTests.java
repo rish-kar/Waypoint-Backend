@@ -1,6 +1,7 @@
 package com.waypoint.backend.service.ai;
 
 import com.waypoint.backend.config.ai.FamilyAiAccessProperties;
+import com.waypoint.backend.model.ai.AiChatRequest;
 import com.waypoint.backend.model.ai.FamilyAiUsageResponse;
 import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
 import com.waypoint.backend.model.plan.PlanCode;
@@ -17,6 +18,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -60,6 +62,12 @@ class FamilyAiBudgetServiceTests {
     }
 
     @Test
+    void countsInputWithTheGpt5Tokenizer() {
+        AiChatRequest request = new AiChatRequest("hello", "", "", "", List.of(), null);
+        assertThat(service.estimateInputTokens(request)).isEqualTo(1);
+    }
+
+    @Test
     void dividesTheFiveThousandRupeePoolAcrossCurrentSpecialUsers() {
         when(grantRepository.countActiveAt(any())).thenReturn(50L, 5L);
 
@@ -67,6 +75,7 @@ class FamilyAiBudgetServiceTests {
         FamilyAiUsageResponse fiveUsers = service.current(userId);
 
         assertThat(fiftyUsers.activeSpecialUsers()).isEqualTo(50);
+        assertThat(fiftyUsers.requestTokenLimit()).isEqualTo(5_000);
         assertThat(fiftyUsers.monthlyPoolMicrorupees()).isEqualTo(5_000L * 1_000_000L);
         assertThat(fiftyUsers.monthlyAllowanceMicrorupees()).isEqualTo(100L * 1_000_000L);
         assertThat(fiveUsers.activeSpecialUsers()).isEqualTo(5);
