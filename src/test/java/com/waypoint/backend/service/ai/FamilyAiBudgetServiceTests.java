@@ -5,9 +5,12 @@ import com.waypoint.backend.model.ai.FamilyAiPoolUsageEntity;
 import com.waypoint.backend.model.ai.FamilyAiUsageResponse;
 import com.waypoint.backend.model.ai.FamilyAiUserUsageEntity;
 import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
+import com.waypoint.backend.model.plan.PlanCode;
+import com.waypoint.backend.model.plan.PlanEntity;
 import com.waypoint.backend.repository.ai.FamilyAiPoolUsageRepository;
 import com.waypoint.backend.repository.ai.FamilyAiUserUsageRepository;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
+import com.waypoint.backend.repository.plan.PlanRepository;
 import com.waypoint.backend.utilities.exception.ApiException;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +33,7 @@ import static org.mockito.Mockito.when;
 
 class FamilyAiBudgetServiceTests {
     private SpecialPremiumGrantRepository grantRepository;
+    private PlanRepository planRepository;
     private FamilyAiPoolUsageRepository poolRepository;
     private FamilyAiUserUsageRepository userUsageRepository;
     private FamilyAiBudgetService service;
@@ -39,6 +43,7 @@ class FamilyAiBudgetServiceTests {
     @BeforeEach
     void setUp() {
         grantRepository = mock(SpecialPremiumGrantRepository.class);
+        planRepository = mock(PlanRepository.class);
         poolRepository = mock(FamilyAiPoolUsageRepository.class);
         userUsageRepository = mock(FamilyAiUserUsageRepository.class);
         service = new FamilyAiBudgetService(
@@ -49,6 +54,7 @@ class FamilyAiBudgetServiceTests {
                         new BigDecimal("0.40")
                 ),
                 grantRepository,
+                planRepository,
                 poolRepository,
                 userUsageRepository
         );
@@ -56,6 +62,7 @@ class FamilyAiBudgetServiceTests {
         grant = new SpecialPremiumGrantEntity();
         grant.setActive(true);
         when(grantRepository.findByUserId(userId)).thenReturn(Optional.of(grant));
+        when(planRepository.findByCodeForUpdate(PlanCode.PREMIUM_SPECIAL)).thenReturn(Optional.of(new PlanEntity()));
         when(poolRepository.findById(anyString())).thenReturn(Optional.empty());
         when(userUsageRepository.findByUserIdAndPeriodKey(any(UUID.class), anyString())).thenReturn(Optional.empty());
     }
@@ -80,13 +87,14 @@ class FamilyAiBudgetServiceTests {
         FamilyAiPoolUsageEntity pool = new FamilyAiPoolUsageEntity();
         pool.setPeriodKey("ignored");
         FamilyAiUserUsageEntity usage = new FamilyAiUserUsageEntity();
-        when(poolRepository.findForUpdate(anyString())).thenReturn(Optional.of(pool));
-        when(userUsageRepository.findForUpdate(any(UUID.class), anyString())).thenReturn(Optional.of(usage));
+        when(poolRepository.findById(anyString())).thenReturn(Optional.of(pool));
+        when(userUsageRepository.findByUserIdAndPeriodKey(any(UUID.class), anyString())).thenReturn(Optional.of(usage));
 
         assertThat(service.consumeRequestBudget(userId, 50_000, 1, 1_200)).isTrue();
 
         assertThat(pool.getSpentMicrorupees()).isPositive();
         assertThat(usage.getSpentMicrorupees()).isEqualTo(pool.getSpentMicrorupees());
+        verify(planRepository).findByCodeForUpdate(PlanCode.PREMIUM_SPECIAL);
         verify(poolRepository).save(pool);
         verify(userUsageRepository).save(usage);
     }
@@ -99,8 +107,8 @@ class FamilyAiBudgetServiceTests {
         pool.setSpentMicrorupees(5_000L * 1_000_000L - 1L);
         FamilyAiUserUsageEntity usage = new FamilyAiUserUsageEntity();
         usage.setSpentMicrorupees(0L);
-        when(poolRepository.findForUpdate(anyString())).thenReturn(Optional.of(pool));
-        when(userUsageRepository.findForUpdate(any(UUID.class), anyString())).thenReturn(Optional.of(usage));
+        when(poolRepository.findById(anyString())).thenReturn(Optional.of(pool));
+        when(userUsageRepository.findByUserIdAndPeriodKey(any(UUID.class), anyString())).thenReturn(Optional.of(usage));
 
         assertThatThrownBy(() -> service.consumeRequestBudget(userId, 100, 1, 800))
                 .isInstanceOfSatisfying(ApiException.class, exception -> {
@@ -116,8 +124,8 @@ class FamilyAiBudgetServiceTests {
         pool.setPeriodKey("ignored");
         FamilyAiUserUsageEntity usage = new FamilyAiUserUsageEntity();
         usage.setSpentMicrorupees(100L * 1_000_000L - 1L);
-        when(poolRepository.findForUpdate(anyString())).thenReturn(Optional.of(pool));
-        when(userUsageRepository.findForUpdate(any(UUID.class), anyString())).thenReturn(Optional.of(usage));
+        when(poolRepository.findById(anyString())).thenReturn(Optional.of(pool));
+        when(userUsageRepository.findByUserIdAndPeriodKey(any(UUID.class), anyString())).thenReturn(Optional.of(usage));
 
         assertThatThrownBy(() -> service.consumeRequestBudget(userId, 100, 1, 800))
                 .isInstanceOfSatisfying(ApiException.class, exception -> {
@@ -132,7 +140,8 @@ class FamilyAiBudgetServiceTests {
 
         assertThat(service.consumeRequestBudget(userId, 50_000, 4, 1_200)).isFalse();
 
-        verify(poolRepository, never()).ensurePeriod(anyString());
+        verify(planRepository, never()).findByCodeForUpdate(any());
+        verify(poolRepository, never()).save(any());
     }
 
     @Test
@@ -141,6 +150,7 @@ class FamilyAiBudgetServiceTests {
 
         assertThat(service.consumeRequestBudget(userId, 50_000, 4, 1_200)).isFalse();
 
-        verify(poolRepository, never()).ensurePeriod(anyString());
+        verify(planRepository, never()).findByCodeForUpdate(any());
+        verify(poolRepository, never()).save(any());
     }
 }
