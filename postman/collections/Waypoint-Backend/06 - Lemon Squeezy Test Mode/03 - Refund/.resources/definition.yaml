@@ -1,0 +1,3 @@
+$kind: collection
+description: Select an invoice, refund it and verify Waypoint/webhook synchronization.
+order: 3000
