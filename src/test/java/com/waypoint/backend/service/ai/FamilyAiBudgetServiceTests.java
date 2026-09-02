@@ -69,20 +69,25 @@ class FamilyAiBudgetServiceTests {
         FamilyAiUsageResponse fiveUsers = service.current(userId);
 
         assertThat(fiftyUsers.activeSpecialUsers()).isEqualTo(50);
+        assertThat(fiftyUsers.monthlyPoolMicrorupees()).isEqualTo(5_000L * 1_000_000L);
         assertThat(fiftyUsers.monthlyAllowanceMicrorupees()).isEqualTo(100L * 1_000_000L);
+        assertThat(fiftyUsers.requestTokenLimit()).isZero();
         assertThat(fiveUsers.activeSpecialUsers()).isEqualTo(5);
         assertThat(fiveUsers.monthlyAllowanceMicrorupees()).isEqualTo(1_000L * 1_000_000L);
     }
 
     @Test
-    void rejectsSpecialAccessInputAboveFiveThousandTokens() {
-        assertThatThrownBy(() -> service.beginRequest(userId, 5_001, 1, 1_200))
-                .isInstanceOfSatisfying(ApiException.class, exception -> {
-                    assertThat(exception.status()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
-                    assertThat(exception.code()).isEqualTo("FAMILY_AI_INPUT_LIMIT_REACHED");
-                });
+    void allowsLargeInputWhenTheRupeeBudgetCanCoverIt() {
+        when(grantRepository.countActiveAt(any())).thenReturn(1L);
+        FamilyAiPoolUsageEntity pool = new FamilyAiPoolUsageEntity();
+        pool.setPeriodKey("ignored");
+        FamilyAiUserUsageEntity usage = new FamilyAiUserUsageEntity();
+        when(poolRepository.findForUpdate(anyString())).thenReturn(Optional.of(pool));
+        when(userUsageRepository.findForUpdate(any(UUID.class), anyString())).thenReturn(Optional.of(usage));
 
-        verify(poolRepository, never()).ensurePeriod(anyString());
+        assertThat(service.beginRequest(userId, 50_000, 1, 1_200)).isTrue();
+        verify(poolRepository).save(pool);
+        verify(userUsageRepository).save(usage);
     }
 
     @Test
@@ -107,7 +112,7 @@ class FamilyAiBudgetServiceTests {
     void leavesNormalPaidUsersOutsideTheFamilyBudget() {
         when(grantRepository.findByUserId(userId)).thenReturn(Optional.empty());
 
-        assertThat(service.beginRequest(userId, 5_000, 4, 1_200)).isFalse();
+        assertThat(service.beginRequest(userId, 50_000, 4, 1_200)).isFalse();
 
         verify(poolRepository, never()).ensurePeriod(anyString());
     }
