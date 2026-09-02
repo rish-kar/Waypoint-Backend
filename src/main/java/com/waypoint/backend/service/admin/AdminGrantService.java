@@ -57,7 +57,7 @@ public class AdminGrantService {
             throw new InvalidRequestException("validUntil must be in the future or omitted for lifetime access");
         }
         UserEntity user = requireUser(userId);
-        SpecialPremiumGrantEntity grant = grantRepository.findByUserId(userId).orElseGet(SpecialPremiumGrantEntity::new);
+        SpecialPremiumGrantEntity grant = grantRepository.findByUserIdForUpdate(userId).orElseGet(SpecialPremiumGrantEntity::new);
         grant.setUser(user);
         grant.setActive(true);
         grant.setValidUntil(request.validUntil());
@@ -75,7 +75,7 @@ public class AdminGrantService {
     @Transactional
     public PremiumSpecialGrantResponse revokePremiumSpecial(UUID userId, String adminId) {
         UserEntity user = requireUser(userId);
-        SpecialPremiumGrantEntity grant = grantRepository.findByUserId(userId)
+        SpecialPremiumGrantEntity grant = grantRepository.findByUserIdForUpdate(userId)
                 .orElseThrow(() -> new NotFoundException("Premium Special grant not found"));
         Instant now = Instant.now();
         grant.setActive(false);
