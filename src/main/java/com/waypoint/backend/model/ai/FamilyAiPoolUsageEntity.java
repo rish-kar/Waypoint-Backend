@@ -20,9 +20,6 @@ public class FamilyAiPoolUsageEntity {
     private long spentMicrorupees;
 
     @Column(nullable = false)
-    private long reservedMicrorupees;
-
-    @Column(nullable = false)
     private Instant updatedAt;
 
     @PrePersist
@@ -35,7 +32,5 @@ public class FamilyAiPoolUsageEntity {
     public void setPeriodKey(String periodKey) { this.periodKey = periodKey; }
     public long getSpentMicrorupees() { return spentMicrorupees; }
     public void setSpentMicrorupees(long spentMicrorupees) { this.spentMicrorupees = spentMicrorupees; }
-    public long getReservedMicrorupees() { return reservedMicrorupees; }
-    public void setReservedMicrorupees(long reservedMicrorupees) { this.reservedMicrorupees = reservedMicrorupees; }
     public Instant getUpdatedAt() { return updatedAt; }
 }
