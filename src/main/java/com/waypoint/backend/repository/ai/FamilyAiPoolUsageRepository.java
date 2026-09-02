@@ -12,7 +12,7 @@ import java.util.Optional;
 
 public interface FamilyAiPoolUsageRepository extends JpaRepository<FamilyAiPoolUsageEntity, String> {
     @Modifying
-    @Query(value = "insert into family_ai_pool_usage(period_key, spent_microrupees, reserved_microrupees, updated_at) values (:periodKey, 0, 0, now()) on conflict (period_key) do nothing", nativeQuery = true)
+    @Query(value = "insert into family_ai_pool_usage(period_key, spent_microrupees, updated_at) values (:periodKey, 0, now()) on conflict (period_key) do nothing", nativeQuery = true)
     void ensurePeriod(@Param("periodKey") String periodKey);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
