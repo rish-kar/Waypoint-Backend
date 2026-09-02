@@ -77,13 +77,25 @@ class FamilyAiBudgetServiceTests {
     void serializesAndDebitsThePremiumSpecialGrant() {
         when(grantRepository.countActiveAt(any())).thenReturn(1L);
 
-        assertThat(service.consumeRequestBudget(userId, 50_000, 1, 1_200)).isTrue();
+        assertThat(service.consumeRequestBudget(userId, 5_000, 1, 1_200)).isTrue();
 
         assertThat(grant.getAiPeriodKey()).isEqualTo(currentPeriod());
         assertThat(grant.getAiSpentMicrorupees()).isPositive();
         verify(planRepository).findByCodeForUpdate(PlanCode.PREMIUM_SPECIAL);
         verify(grantRepository).findByUserIdForUpdate(userId);
         verify(grantRepository).save(grant);
+    }
+
+    @Test
+    void rejectsPremiumSpecialRequestAboveFiveThousandTokensBeforeProviderBudgetLock() {
+        assertThatThrownBy(() -> service.consumeRequestBudget(userId, 5_001, 1, 800))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(exception.code()).isEqualTo("FAMILY_AI_REQUEST_TOO_LARGE");
+                });
+
+        verify(planRepository, never()).findByCodeForUpdate(any());
+        verify(grantRepository, never()).findByUserIdForUpdate(any());
     }
 
     @Test
@@ -140,7 +152,7 @@ class FamilyAiBudgetServiceTests {
     }
 
     @Test
-    void expiredSpecialAccessDoesNotConsumeTheFamilyPool() {
+    void expiredSpecialAccessDoesNotConsumeOrCapTheRequest() {
         grant.setValidUntil(Instant.now().minusSeconds(60));
 
         assertThat(service.consumeRequestBudget(userId, 50_000, 4, 1_200)).isFalse();
@@ -150,7 +162,7 @@ class FamilyAiBudgetServiceTests {
     }
 
     @Test
-    void leavesNormalPaidUsersOutsideTheFamilyBudget() {
+    void leavesNormalPaidUsersOutsideTheFamilyBudgetAndRequestCap() {
         when(grantRepository.findByUserId(userId)).thenReturn(Optional.empty());
 
         assertThat(service.consumeRequestBudget(userId, 50_000, 4, 1_200)).isFalse();
