@@ -74,7 +74,7 @@ class FamilyAiBudgetServiceTests {
     }
 
     @Test
-    void allowsLargeInputWhenTheRupeeBudgetCanCoverIt() {
+    void atomicallyDebitsTheSharedAndIndividualBudgets() {
         when(grantRepository.countActiveAt(any())).thenReturn(1L);
         FamilyAiPoolUsageEntity pool = new FamilyAiPoolUsageEntity();
         pool.setPeriodKey("ignored");
@@ -82,7 +82,10 @@ class FamilyAiBudgetServiceTests {
         when(poolRepository.findForUpdate(anyString())).thenReturn(Optional.of(pool));
         when(userUsageRepository.findForUpdate(any(UUID.class), anyString())).thenReturn(Optional.of(usage));
 
-        assertThat(service.beginRequest(userId, 50_000, 1, 1_200)).isTrue();
+        assertThat(service.consumeRequestBudget(userId, 50_000, 1, 1_200)).isTrue();
+
+        assertThat(pool.getSpentMicrorupees()).isPositive();
+        assertThat(usage.getSpentMicrorupees()).isEqualTo(pool.getSpentMicrorupees());
         verify(poolRepository).save(pool);
         verify(userUsageRepository).save(usage);
     }
@@ -98,7 +101,7 @@ class FamilyAiBudgetServiceTests {
         when(poolRepository.findForUpdate(anyString())).thenReturn(Optional.of(pool));
         when(userUsageRepository.findForUpdate(any(UUID.class), anyString())).thenReturn(Optional.of(usage));
 
-        assertThatThrownBy(() -> service.beginRequest(userId, 100, 1, 800))
+        assertThatThrownBy(() -> service.consumeRequestBudget(userId, 100, 1, 800))
                 .isInstanceOfSatisfying(ApiException.class, exception -> {
                     assertThat(exception.status()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
                     assertThat(exception.code()).isEqualTo("FAMILY_AI_BUDGET_REACHED");
@@ -109,7 +112,7 @@ class FamilyAiBudgetServiceTests {
     void leavesNormalPaidUsersOutsideTheFamilyBudget() {
         when(grantRepository.findByUserId(userId)).thenReturn(Optional.empty());
 
-        assertThat(service.beginRequest(userId, 50_000, 4, 1_200)).isFalse();
+        assertThat(service.consumeRequestBudget(userId, 50_000, 4, 1_200)).isFalse();
 
         verify(poolRepository, never()).ensurePeriod(anyString());
     }
