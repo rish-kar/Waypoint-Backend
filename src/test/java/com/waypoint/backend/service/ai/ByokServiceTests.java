@@ -30,6 +30,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ByokServiceTests {
+    private static final String USER_API_KEY = "sk-project-test-12345678901234567890";
+
     @Mock
     private UserRepository userRepository;
     @Mock
@@ -51,17 +53,17 @@ class ByokServiceTests {
         user.setEmail("user@example.com");
         user.setProvider("GOOGLE");
         user.setProviderUserId("provider-user");
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         service = new ByokService(userRepository, subscriptionService, apiKeyCipher, openAiClient);
     }
 
     @Test
     void activeMonthlyUserCanSaveKeyAndDiscoverModels() {
         when(subscriptionService.currentBilling(userId)).thenReturn(snapshot(PlanCode.PREMIUM_MONTHLY, SubscriptionStatus.ACTIVE, true));
-        when(openAiClient.availableModels("sk-user-key")).thenReturn(List.of("gpt-4o", "gpt-5.6-sol"));
-        when(apiKeyCipher.encrypt("sk-user-key")).thenReturn("v1:ciphertext");
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(openAiClient.availableModels(USER_API_KEY)).thenReturn(List.of("gpt-4o", "gpt-5.6-sol"));
+        when(apiKeyCipher.encrypt(USER_API_KEY)).thenReturn("v1:ciphertext");
 
-        ByokModelCatalogResponse response = service.saveApiKey(userId, "sk-user-key");
+        ByokModelCatalogResponse response = service.saveApiKey(userId, USER_API_KEY);
 
         assertThat(response.models()).containsExactly("gpt-4o", "gpt-5.6-sol");
         assertThat(response.selectedModel()).isEmpty();
@@ -74,8 +76,9 @@ class ByokServiceTests {
     void activeAnnualUserCanSelectAndUseOwnModel() {
         user.setOpenAiApiKeyCiphertext("v1:ciphertext");
         when(subscriptionService.currentBilling(userId)).thenReturn(snapshot(PlanCode.PREMIUM_ANNUAL, SubscriptionStatus.ACTIVE, true));
-        when(apiKeyCipher.decrypt("v1:ciphertext")).thenReturn("sk-user-key");
-        when(openAiClient.availableModels("sk-user-key")).thenReturn(List.of("gpt-5.6-sol", "gpt-5.6-terra"));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(apiKeyCipher.decrypt("v1:ciphertext")).thenReturn(USER_API_KEY);
+        when(openAiClient.availableModels(USER_API_KEY)).thenReturn(List.of("gpt-5.6-sol", "gpt-5.6-terra"));
 
         ByokStatusResponse status = service.selectModel(userId, "gpt-5.6-terra");
 
@@ -84,7 +87,7 @@ class ByokServiceTests {
         assertThat(status.active()).isTrue();
         assertThat(status.selectedModel()).isEqualTo("gpt-5.6-terra");
         assertThat(service.credentialsFor(userId)).hasValueSatisfying(credentials -> {
-            assertThat(credentials.apiKey()).isEqualTo("sk-user-key");
+            assertThat(credentials.apiKey()).isEqualTo(USER_API_KEY);
             assertThat(credentials.model()).isEqualTo("gpt-5.6-terra");
         });
     }
@@ -93,13 +96,13 @@ class ByokServiceTests {
     void trialAndSpecialAccessDoNotQualifyForByok() {
         when(subscriptionService.currentBilling(userId)).thenReturn(snapshot(PlanCode.PREMIUM_MONTHLY, SubscriptionStatus.ON_TRIAL, true));
 
-        assertThatThrownBy(() -> service.saveApiKey(userId, "sk-user-key"))
+        assertThatThrownBy(() -> service.saveApiKey(userId, USER_API_KEY))
                 .isInstanceOf(ApiException.class)
                 .satisfies(error -> assertThat(((ApiException) error).code()).isEqualTo("BYOK_PREMIUM_REQUIRED"));
 
         when(subscriptionService.currentBilling(userId)).thenReturn(snapshot(PlanCode.PREMIUM_SPECIAL, SubscriptionStatus.PREMIUM_SPECIAL, true));
 
-        assertThatThrownBy(() -> service.saveApiKey(userId, "sk-user-key"))
+        assertThatThrownBy(() -> service.saveApiKey(userId, USER_API_KEY))
                 .isInstanceOf(ApiException.class)
                 .satisfies(error -> assertThat(((ApiException) error).code()).isEqualTo("BYOK_PREMIUM_REQUIRED"));
     }
@@ -108,6 +111,7 @@ class ByokServiceTests {
     void removingKeyClearsCredentialsAndSelectedModel() {
         user.setOpenAiApiKeyCiphertext("v1:ciphertext");
         user.setOpenAiModel("gpt-5.6-sol");
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         when(subscriptionService.currentBilling(userId)).thenReturn(snapshot(PlanCode.PREMIUM_MONTHLY, SubscriptionStatus.ACTIVE, true));
 
         ByokStatusResponse status = service.remove(userId);
