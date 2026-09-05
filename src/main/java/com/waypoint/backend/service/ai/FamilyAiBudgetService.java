@@ -269,8 +269,14 @@ public class FamilyAiBudgetService {
                 user.getId(),
                 user.getEmail(),
                 user.getDisplayName(),
+                user.getPictureUrl(),
+                user.getPhoneNumber(),
+                user.getPhoneCountryCode(),
                 user.getProvider(),
+                user.getProviderUserId(),
+                user.getPlan() == null ? null : user.getPlan().getCode(),
                 user.getCreatedAt(),
+                user.getUpdatedAt(),
                 user.getLastLoginAt(),
                 active,
                 grant.getValidUntil(),
@@ -282,7 +288,7 @@ public class FamilyAiBudgetService {
                 allowance,
                 spent,
                 userRemaining,
-                percentage(spent, allowance),
+                active ? percentage(spent, allowance) : 0.0,
                 status
         );
     }
