@@ -6,6 +6,7 @@ The Git-synced Postman source is the single source of truth:
 - `environments/Waypoint Local.environment.yaml` — connected environment source
 - `Waypoint-Local.postman_environment.json` — optional environment export
 - `Waypoint-AI.postman_collection.json` — optional focused AI-only export
+- `Waypoint-Family-AI.postman_collection.json` — focused personal + admin Friends & Family AI checks
 
 The old generated main collection JSON has been removed because the workspace reads the Git-synced collection directly.
 
@@ -112,6 +113,7 @@ The Postman collection automatically sends it as `X-Admin-TOTP` for admin reques
 3. List Special Grants
 4. Get Special Grant
 5. Revoke Premium Special
+6. Family AI Pool Usage — complete admin-only pool and per-user usage/details
 
 **05 - Webhook Events**
 1. List Webhook Events
@@ -159,6 +161,29 @@ Use Recovery only when a lifecycle test was interrupted and the selected Lemon S
 2. Usage
 3. Intent - Group Tabs
 4. Chat - Page Context
+5. Friends and Family Usage — authenticated user's personal abstract quota only
+
+## Friends & Family AI visibility
+
+The Family AI APIs intentionally have separate user and admin views.
+
+**Premium Special user**
+
+```text
+GET /api/v1/ai/family-usage
+Authorization: Bearer <Waypoint JWT>
+```
+
+Returns only that user's quota, used amount, remaining amount, usage percentage, 5,000-token request limit and reset. It does **not** return the configured shared pool size, active Special-user count or any other user.
+
+**Admin**
+
+```text
+GET /api/v1/admin/family-ai
+Authorization: Basic <admin credentials>
+```
+
+Returns the complete configured pool, total pool usage/remaining, active Special-user count, reset, and every Special grant user's account details, grant metadata and per-user usage. The extension uses the equivalent JWT-protected admin view at `/api/v1/ai/family-admin-usage` after verifying the signed-in account resolves to `ADMIN`.
 
 ## Local setup
 
