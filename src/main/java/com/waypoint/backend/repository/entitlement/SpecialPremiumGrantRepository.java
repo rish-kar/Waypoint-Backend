@@ -28,6 +28,15 @@ public interface SpecialPremiumGrantRepository
     @Query("""
             select grant
             from SpecialPremiumGrantEntity grant
+            where grant.active = true
+              and (grant.validUntil is null or grant.validUntil > :now)
+            order by grant.grantedAt asc
+            """)
+    List<SpecialPremiumGrantEntity> findActiveAt(@Param("now") Instant now);
+
+    @Query("""
+            select grant
+            from SpecialPremiumGrantEntity grant
             join fetch grant.user u
             order by grant.grantedAt desc
             """)
