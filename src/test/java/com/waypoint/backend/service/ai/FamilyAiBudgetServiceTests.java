@@ -34,6 +34,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class FamilyAiBudgetServiceTests {
+    private static final long RUPEE = 1_000_000L;
+
     private SpecialPremiumGrantRepository grantRepository;
     private PlanRepository planRepository;
     private FamilyAiBudgetService service;
@@ -47,6 +49,8 @@ class FamilyAiBudgetServiceTests {
         service = new FamilyAiBudgetService(
                 new FamilyAiAccessProperties(
                         5_000,
+                        5,
+                        25,
                         new BigDecimal("100"),
                         new BigDecimal("0.05"),
                         new BigDecimal("0.40")
@@ -69,48 +73,72 @@ class FamilyAiBudgetServiceTests {
     }
 
     @Test
-    void dividesTheFiveThousandRupeePoolWithoutExposingPoolDetailsToTheUser() {
-        when(grantRepository.countActiveAt(any())).thenReturn(50L, 5L);
+    void userViewExposesFiveHourAndWeeklyPercentagesInsteadOfMoney() {
+        when(grantRepository.countActiveAt(any())).thenReturn(1L);
+        grant.setAiSessionStartedAt(Instant.now().minusSeconds(60));
+        grant.setAiSessionSpentMicrorupees(25L * RUPEE);
+        grant.setAiWeeklyStartedAt(Instant.now().minusSeconds(60));
+        grant.setAiWeeklySpentMicrorupees(125L * RUPEE);
 
-        FamilyAiUsageResponse fiftyUsers = service.current(userId);
-        FamilyAiUsageResponse fiveUsers = service.current(userId);
+        FamilyAiUsageResponse usage = service.current(userId);
 
-        assertThat(fiftyUsers.specialAccess()).isTrue();
-        assertThat(fiftyUsers.requestTokenLimit()).isEqualTo(5_000);
-        assertThat(fiftyUsers.monthlyAllowanceMicrorupees()).isEqualTo(100L * 1_000_000L);
-        assertThat(fiveUsers.monthlyAllowanceMicrorupees()).isEqualTo(1_000L * 1_000_000L);
+        assertThat(usage.specialAccess()).isTrue();
+        assertThat(usage.requestTokenLimit()).isEqualTo(5_000);
+        assertThat(usage.sessionWindowHours()).isEqualTo(5);
+        assertThat(usage.sessionUsagePercent()).isEqualTo(10.0);
+        assertThat(usage.sessionResetsAt()).isAfter(Instant.now());
+        assertThat(usage.weeklyWindowDays()).isEqualTo(7);
+        assertThat(usage.weeklyUsagePercent()).isEqualTo(10.0);
+        assertThat(usage.weeklyResetsAt()).isAfter(Instant.now());
+        assertThat(usage.status()).isEqualTo("ACTIVE");
     }
 
     @Test
-    void adminViewExposesFullPoolAndEverySpecialGrantUsage() {
+    void adminViewExposesFullPoolAndRollingLimitStats() {
         SpecialPremiumGrantEntity revoked = grant(UUID.randomUUID(), "revoked@example.com", "Revoked User", false);
+        Instant now = Instant.now();
         grant.setAiPeriodKey(currentPeriod());
-        grant.setAiSpentMicrorupees(100L * 1_000_000L);
+        grant.setAiSpentMicrorupees(100L * RUPEE);
+        grant.setAiPeriodRequestCount(12L);
+        grant.setAiPeriodInputTokens(24_000L);
+        grant.setAiSessionStartedAt(now.minusSeconds(60));
+        grant.setAiSessionSpentMicrorupees(25L * RUPEE);
+        grant.setAiSessionRequestCount(3L);
+        grant.setAiSessionInputTokens(6_000L);
+        grant.setAiWeeklyStartedAt(now.minusSeconds(60));
+        grant.setAiWeeklySpentMicrorupees(125L * RUPEE);
+        grant.setAiWeeklyRequestCount(8L);
+        grant.setAiWeeklyInputTokens(16_000L);
         revoked.setAiPeriodKey(currentPeriod());
-        revoked.setAiSpentMicrorupees(500L * 1_000_000L);
+        revoked.setAiSpentMicrorupees(500L * RUPEE);
         revoked.setRevokedBy("test-admin");
-        revoked.setRevokedAt(Instant.now().minusSeconds(60));
+        revoked.setRevokedAt(now.minusSeconds(60));
 
         when(grantRepository.countActiveAt(any())).thenReturn(1L);
-        when(grantRepository.sumAiSpentMicrorupeesForPeriod(anyString())).thenReturn(600L * 1_000_000L);
+        when(grantRepository.sumAiSpentMicrorupeesForPeriod(anyString())).thenReturn(600L * RUPEE);
         when(grantRepository.findAllWithUserForFamilyAiAdmin()).thenReturn(List.of(grant, revoked));
 
         AdminFamilyAiUsageResponse usage = service.adminCurrent();
 
-        assertThat(usage.monthlyPoolMicrorupees()).isEqualTo(5_000L * 1_000_000L);
-        assertThat(usage.poolSpentMicrorupees()).isEqualTo(600L * 1_000_000L);
-        assertThat(usage.poolRemainingMicrorupees()).isEqualTo(4_400L * 1_000_000L);
+        assertThat(usage.monthlyPoolMicrorupees()).isEqualTo(5_000L * RUPEE);
+        assertThat(usage.poolSpentMicrorupees()).isEqualTo(600L * RUPEE);
         assertThat(usage.activeSpecialUsers()).isEqualTo(1);
-        assertThat(usage.requestTokenLimit()).isEqualTo(5_000);
+        assertThat(usage.sessionWindowHours()).isEqualTo(5);
+        assertThat(usage.sessionBudgetPercent()).isEqualTo(5);
+        assertThat(usage.weeklyWindowDays()).isEqualTo(7);
+        assertThat(usage.weeklyBudgetPercent()).isEqualTo(25);
         assertThat(usage.users()).hasSize(2);
-        assertThat(usage.users().get(0).email()).isEqualTo("special@example.com");
-        assertThat(usage.users().get(0).monthlyAllowanceMicrorupees()).isEqualTo(5_000L * 1_000_000L);
-        assertThat(usage.users().get(0).spentMicrorupees()).isEqualTo(100L * 1_000_000L);
-        assertThat(usage.users().get(0).remainingMicrorupees()).isEqualTo(4_400L * 1_000_000L);
+        assertThat(usage.users().get(0).monthlyRequestCount()).isEqualTo(12L);
+        assertThat(usage.users().get(0).monthlyInputTokens()).isEqualTo(24_000L);
+        assertThat(usage.users().get(0).sessionLimitMicrorupees()).isEqualTo(250L * RUPEE);
+        assertThat(usage.users().get(0).sessionSpentMicrorupees()).isEqualTo(25L * RUPEE);
+        assertThat(usage.users().get(0).sessionUsagePercent()).isEqualTo(10.0);
+        assertThat(usage.users().get(0).sessionRequestCount()).isEqualTo(3L);
+        assertThat(usage.users().get(0).weeklyLimitMicrorupees()).isEqualTo(1_250L * RUPEE);
+        assertThat(usage.users().get(0).weeklySpentMicrorupees()).isEqualTo(125L * RUPEE);
+        assertThat(usage.users().get(0).weeklyUsagePercent()).isEqualTo(10.0);
+        assertThat(usage.users().get(0).weeklyRequestCount()).isEqualTo(8L);
         assertThat(usage.users().get(0).status()).isEqualTo("ACTIVE");
-        assertThat(usage.users().get(1).email()).isEqualTo("revoked@example.com");
-        assertThat(usage.users().get(1).monthlyAllowanceMicrorupees()).isZero();
-        assertThat(usage.users().get(1).spentMicrorupees()).isEqualTo(500L * 1_000_000L);
         assertThat(usage.users().get(1).status()).isEqualTo("REVOKED");
     }
 
@@ -123,23 +151,31 @@ class FamilyAiBudgetServiceTests {
         assertThat(usage.specialAccess()).isFalse();
         assertThat(usage.status()).isEqualTo("NOT_SPECIAL");
         assertThat(usage.requestTokenLimit()).isZero();
-        assertThat(usage.monthlyAllowanceMicrorupees()).isZero();
-        assertThat(usage.spentMicrorupees()).isZero();
-        assertThat(usage.remainingMicrorupees()).isZero();
+        assertThat(usage.sessionUsagePercent()).isZero();
+        assertThat(usage.weeklyUsagePercent()).isZero();
         verify(grantRepository, never()).countActiveAt(any());
         verify(grantRepository, never()).sumAiSpentMicrorupeesForPeriod(anyString());
     }
 
     @Test
-    void serializesAndDebitsThePremiumSpecialGrant() {
+    void debitUpdatesMonthlySessionAndWeeklyCountersAtomically() {
         when(grantRepository.countActiveAt(any())).thenReturn(1L);
 
-        assertThat(service.consumeRequestBudget(userId, 5_000, 1, 1_200)).isTrue();
+        assertThat(service.consumeRequestBudget(userId, 1_000, 1, 800)).isTrue();
 
         assertThat(grant.getAiPeriodKey()).isEqualTo(currentPeriod());
         assertThat(grant.getAiSpentMicrorupees()).isPositive();
+        assertThat(grant.getAiPeriodRequestCount()).isEqualTo(1L);
+        assertThat(grant.getAiPeriodInputTokens()).isEqualTo(1_000L);
+        assertThat(grant.getAiSessionStartedAt()).isNotNull();
+        assertThat(grant.getAiSessionSpentMicrorupees()).isEqualTo(grant.getAiSpentMicrorupees());
+        assertThat(grant.getAiSessionRequestCount()).isEqualTo(1L);
+        assertThat(grant.getAiSessionInputTokens()).isEqualTo(1_000L);
+        assertThat(grant.getAiWeeklyStartedAt()).isNotNull();
+        assertThat(grant.getAiWeeklySpentMicrorupees()).isEqualTo(grant.getAiSpentMicrorupees());
+        assertThat(grant.getAiWeeklyRequestCount()).isEqualTo(1L);
+        assertThat(grant.getAiWeeklyInputTokens()).isEqualTo(1_000L);
         verify(planRepository).findByCodeForUpdate(PlanCode.PREMIUM_SPECIAL);
-        verify(grantRepository).findByUserIdForUpdate(userId);
         verify(grantRepository).save(grant);
     }
 
@@ -150,80 +186,108 @@ class FamilyAiBudgetServiceTests {
                     assertThat(exception.status()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(exception.code()).isEqualTo("FAMILY_AI_REQUEST_TOO_LARGE");
                 });
-
         verify(planRepository, never()).findByCodeForUpdate(any());
         verify(grantRepository, never()).findByUserIdForUpdate(any());
     }
 
     @Test
-    void rejectsRequestsThatWouldCrossTheSharedMonthlyPool() {
+    void rejectsRequestsThatWouldCrossTheFiveHourLimit() {
+        when(grantRepository.countActiveAt(any())).thenReturn(1L);
+        grant.setAiSessionStartedAt(Instant.now().minusSeconds(60));
+        grant.setAiSessionSpentMicrorupees(250L * RUPEE - 1L);
+
+        assertThatThrownBy(() -> service.consumeRequestBudget(userId, 100, 1, 800))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+                    assertThat(exception.code()).isEqualTo("FAMILY_AI_SESSION_LIMIT_REACHED");
+                });
+    }
+
+    @Test
+    void expiredFiveHourWindowStartsFreshOnNextRequest() {
+        when(grantRepository.countActiveAt(any())).thenReturn(1L);
+        grant.setAiSessionStartedAt(Instant.now().minusSeconds(5 * 60 * 60 + 5));
+        grant.setAiSessionSpentMicrorupees(250L * RUPEE);
+        grant.setAiSessionRequestCount(99L);
+        grant.setAiSessionInputTokens(999_999L);
+
+        assertThat(service.consumeRequestBudget(userId, 100, 1, 800)).isTrue();
+
+        assertThat(grant.getAiSessionStartedAt()).isAfter(Instant.now().minusSeconds(5));
+        assertThat(grant.getAiSessionRequestCount()).isEqualTo(1L);
+        assertThat(grant.getAiSessionInputTokens()).isEqualTo(100L);
+        assertThat(grant.getAiSessionSpentMicrorupees()).isLessThan(250L * RUPEE);
+    }
+
+    @Test
+    void rejectsRequestsThatWouldCrossTheWeeklyLimit() {
+        when(grantRepository.countActiveAt(any())).thenReturn(1L);
+        grant.setAiWeeklyStartedAt(Instant.now().minusSeconds(60));
+        grant.setAiWeeklySpentMicrorupees(1_250L * RUPEE - 1L);
+
+        assertThatThrownBy(() -> service.consumeRequestBudget(userId, 100, 1, 800))
+                .isInstanceOfSatisfying(ApiException.class, exception -> {
+                    assertThat(exception.status()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+                    assertThat(exception.code()).isEqualTo("FAMILY_AI_WEEKLY_LIMIT_REACHED");
+                });
+    }
+
+    @Test
+    void expiredWeeklyWindowStartsFreshOnNextRequest() {
+        when(grantRepository.countActiveAt(any())).thenReturn(1L);
+        grant.setAiWeeklyStartedAt(Instant.now().minusSeconds(7 * 24 * 60 * 60 + 5));
+        grant.setAiWeeklySpentMicrorupees(1_250L * RUPEE);
+        grant.setAiWeeklyRequestCount(999L);
+        grant.setAiWeeklyInputTokens(9_999_999L);
+
+        assertThat(service.consumeRequestBudget(userId, 100, 1, 800)).isTrue();
+
+        assertThat(grant.getAiWeeklyStartedAt()).isAfter(Instant.now().minusSeconds(5));
+        assertThat(grant.getAiWeeklyRequestCount()).isEqualTo(1L);
+        assertThat(grant.getAiWeeklyInputTokens()).isEqualTo(100L);
+        assertThat(grant.getAiWeeklySpentMicrorupees()).isLessThan(1_250L * RUPEE);
+    }
+
+    @Test
+    void sharedMonthlyPoolStillActsAsTheHardSafetyCap() {
         when(grantRepository.countActiveAt(any())).thenReturn(1L);
         when(grantRepository.sumAiSpentMicrorupeesForPeriod(anyString()))
-                .thenReturn(5_000L * 1_000_000L - 1L);
+                .thenReturn(5_000L * RUPEE - 1L);
 
         assertThatThrownBy(() -> service.consumeRequestBudget(userId, 100, 1, 800))
-                .isInstanceOfSatisfying(ApiException.class, exception -> {
-                    assertThat(exception.status()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
-                    assertThat(exception.code()).isEqualTo("FAMILY_AI_BUDGET_REACHED");
-                });
+                .isInstanceOfSatisfying(ApiException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("FAMILY_AI_ACCESS_LIMIT_REACHED"));
     }
 
     @Test
-    void rejectsRequestsThatWouldCrossTheUsersDynamicShare() {
-        when(grantRepository.countActiveAt(any())).thenReturn(50L);
-        grant.setAiPeriodKey(currentPeriod());
-        grant.setAiSpentMicrorupees(100L * 1_000_000L - 1L);
-        when(grantRepository.sumAiSpentMicrorupeesForPeriod(anyString()))
-                .thenReturn(grant.getAiSpentMicrorupees());
-
-        assertThatThrownBy(() -> service.consumeRequestBudget(userId, 100, 1, 800))
-                .isInstanceOfSatisfying(ApiException.class, exception -> {
-                    assertThat(exception.status()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
-                    assertThat(exception.code()).isEqualTo("FAMILY_AI_BUDGET_REACHED");
-                });
-    }
-
-    @Test
-    void resetsTheUsersCounterWhenTheMonthChanges() {
+    void resetsMonthlyCountersWhenMonthChangesButKeepsIndependentRollingWindows() {
         when(grantRepository.countActiveAt(any())).thenReturn(1L);
         grant.setAiPeriodKey(YearMonth.now(ZoneOffset.UTC).minusMonths(1).toString());
-        grant.setAiSpentMicrorupees(4_999L * 1_000_000L);
+        grant.setAiSpentMicrorupees(4_999L * RUPEE);
+        grant.setAiPeriodRequestCount(500L);
+        grant.setAiPeriodInputTokens(500_000L);
         when(grantRepository.sumAiSpentMicrorupeesForPeriod(anyString())).thenReturn(0L);
 
         assertThat(service.consumeRequestBudget(userId, 100, 1, 800)).isTrue();
 
         assertThat(grant.getAiPeriodKey()).isEqualTo(currentPeriod());
-        assertThat(grant.getAiSpentMicrorupees()).isPositive();
-        assertThat(grant.getAiSpentMicrorupees()).isLessThan(4_999L * 1_000_000L);
-    }
-
-    @Test
-    void previouslySpentGlobalBudgetStillBlocksLaterRequests() {
-        when(grantRepository.countActiveAt(any())).thenReturn(5L);
-        when(grantRepository.sumAiSpentMicrorupeesForPeriod(anyString()))
-                .thenReturn(5_000L * 1_000_000L);
-
-        assertThatThrownBy(() -> service.consumeRequestBudget(userId, 100, 1, 800))
-                .isInstanceOfSatisfying(ApiException.class, exception ->
-                        assertThat(exception.code()).isEqualTo("FAMILY_AI_BUDGET_REACHED"));
+        assertThat(grant.getAiSpentMicrorupees()).isLessThan(4_999L * RUPEE);
+        assertThat(grant.getAiPeriodRequestCount()).isEqualTo(1L);
+        assertThat(grant.getAiPeriodInputTokens()).isEqualTo(100L);
     }
 
     @Test
     void expiredSpecialAccessDoesNotConsumeOrCapTheRequest() {
         grant.setValidUntil(Instant.now().minusSeconds(60));
-
         assertThat(service.consumeRequestBudget(userId, 50_000, 4, 1_200)).isFalse();
-
         verify(planRepository, never()).findByCodeForUpdate(any());
         verify(grantRepository, never()).findByUserIdForUpdate(any());
     }
 
     @Test
-    void leavesNormalPaidUsersOutsideTheFamilyBudgetAndRequestCap() {
+    void leavesNormalPaidUsersOutsideAllFamilyLimits() {
         when(grantRepository.findByUserId(userId)).thenReturn(Optional.empty());
-
         assertThat(service.consumeRequestBudget(userId, 50_000, 4, 1_200)).isFalse();
-
         verify(planRepository, never()).findByCodeForUpdate(any());
         verify(grantRepository, never()).findByUserIdForUpdate(any());
     }
