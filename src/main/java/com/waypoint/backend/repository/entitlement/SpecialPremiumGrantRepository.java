@@ -28,6 +28,14 @@ public interface SpecialPremiumGrantRepository
     @Query("""
             select grant
             from SpecialPremiumGrantEntity grant
+            join fetch grant.user user
+            order by grant.grantedAt desc
+            """)
+    List<SpecialPremiumGrantEntity> findAllWithUserForFamilyAiAdmin();
+
+    @Query("""
+            select grant
+            from SpecialPremiumGrantEntity grant
             where grant.user.id in :userIds
               and grant.active = true
               and (grant.validUntil is null or grant.validUntil > :now)
