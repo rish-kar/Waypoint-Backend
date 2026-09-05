@@ -31,7 +31,7 @@ Authentication is split by flow.
 **02 - Microsoft Login**
 1. Start Login
 2. Exchange Session
-3. Refresh Token
+3. Refresh Token — optional manual rotation test
 
 **03 - Session**
 1. Current Session
@@ -42,6 +42,8 @@ Authentication is split by flow.
 2. Disconnect Account
 
 Google Complete Login and Microsoft Exchange Session populate the shared Waypoint session variables such as `jwt`, `waypointRefreshToken`, `userId`, and `userEmail`.
+
+The access JWT remains intentionally short-lived. For normal Bearer-authenticated Postman requests, the collection now detects an expiring JWT and automatically calls `/api/v1/auth/session/refresh`, rotates `waypointRefreshToken`, stores the new `jwt`, and sends the original request with the refreshed token. You should not need to sign in again every 15 minutes while the refresh token is still valid.
 
 ### 02 - Account and Entitlements
 
@@ -215,7 +217,7 @@ Then run:
 3. Complete Microsoft sign-in
 4. Copy the returned `exchange_code` into `microsoftExchangeCode`
 5. Run Exchange Session
-6. Run Refresh Token when required
+6. `Refresh Token` is only needed when you specifically want to test refresh-token rotation manually; ordinary Bearer requests auto-refresh the session.
 
 ## Premium Special body
 
