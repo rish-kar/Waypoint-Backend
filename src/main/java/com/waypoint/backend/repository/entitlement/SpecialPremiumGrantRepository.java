@@ -28,7 +28,7 @@ public interface SpecialPremiumGrantRepository
     @Query("""
             select grant
             from SpecialPremiumGrantEntity grant
-            join fetch grant.user user
+            join fetch grant.user u
             order by grant.grantedAt desc
             """)
     List<SpecialPremiumGrantEntity> findAllWithUserForFamilyAiAdmin();
