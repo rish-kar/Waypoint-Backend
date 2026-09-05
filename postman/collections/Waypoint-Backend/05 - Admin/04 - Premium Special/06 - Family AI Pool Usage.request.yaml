@@ -1,0 +1,66 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/admin/family-ai"
+method: GET
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+  X-Request-ID: postman-admin-family-ai-usage
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      if (!adminId || !adminPassword) {
+          throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      }
+      const raw = `${adminId}:${adminPassword}`;
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(raw)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test('Full Family AI pool stats are exposed to admin', () => {
+          pm.expect(body.monthlyPoolMicrorupees).to.be.a('number').and.above(0);
+          pm.expect(body.poolSpentMicrorupees).to.be.a('number').and.at.least(0);
+          pm.expect(body.poolRemainingMicrorupees).to.be.a('number').and.at.least(0);
+          pm.expect(body.poolUsagePercent).to.be.a('number').and.within(0, 100);
+          pm.expect(body.activeSpecialUsers).to.be.a('number').and.at.least(0);
+          pm.expect(body.requestTokenLimit).to.eql(5000);
+          pm.expect(body.periodKey).to.match(/^\d{4}-\d{2}$/);
+          pm.expect(body.resetsAt).to.be.a('string').and.not.empty;
+          pm.expect(body.users).to.be.an('array');
+      });
+      pm.test('Per-user admin stats contain identity, grant and quota details', () => {
+          body.users.forEach(user => {
+              pm.expect(user.userId).to.be.a('string').and.not.empty;
+              pm.expect(user.grantId).to.be.a('string').and.not.empty;
+              pm.expect(user.email).to.be.a('string').and.not.empty;
+              pm.expect(user.provider).to.be.a('string').and.not.empty;
+              pm.expect(user.active).to.be.a('boolean');
+              pm.expect(user.monthlyAllowanceMicrorupees).to.be.a('number').and.at.least(0);
+              pm.expect(user.spentMicrorupees).to.be.a('number').and.at.least(0);
+              pm.expect(user.remainingMicrorupees).to.be.a('number').and.at.least(0);
+              pm.expect(user.usagePercent).to.be.a('number').and.within(0, 100);
+              pm.expect(['ACTIVE', 'LIMIT_REACHED', 'EXPIRED', 'REVOKED']).to.include(user.status);
+              pm.expect(user).to.have.property('grantedBy');
+              pm.expect(user).to.have.property('grantedAt');
+              pm.expect(user).to.have.property('reason');
+              pm.expect(user).to.have.property('revokedBy');
+              pm.expect(user).to.have.property('revokedAt');
+          });
+      });
+      pm.environment.set('familyAiAdminPoolRupees', String(body.monthlyPoolMicrorupees / 1000000));
+      pm.environment.set('familyAiAdminPoolSpentRupees', String(body.poolSpentMicrorupees / 1000000));
+      pm.environment.set('familyAiAdminPoolRemainingRupees', String(body.poolRemainingMicrorupees / 1000000));
+      pm.environment.set('familyAiAdminActiveUsers', String(body.activeSpecialUsers));
+      pm.environment.set('familyAiAdminUserCount', String(body.users.length));
+      pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-admin-family-ai-usage'));
+    language: text/javascript
+description: "Admin-only complete Friends & Family AI view: configured monthly pool, pool usage, active-user count, reset, request cap and every Special grant user's identity, grant metadata and usage stats."
+order: 4400
