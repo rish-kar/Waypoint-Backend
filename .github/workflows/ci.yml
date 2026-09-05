@@ -14,24 +14,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Validate Postman collection safety
+        run: python3 postman/validate_collection.py
+
       - name: Set up Java 21
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: Verify Postman collection is synchronized
-        shell: bash
-        run: |
-          python -m pip install --disable-pip-version-check PyYAML==6.0.2
-          python scripts/sync_postman_collection.py
-          git diff --exit-code -- postman/Waypoint-Backend.postman_collection.json
 
       - name: Unit and application integration tests
         run: mvn -B clean verify
@@ -58,6 +49,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
 
       - name: Check dependency graph availability
         id: dependency-graph

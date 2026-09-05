@@ -36,7 +36,8 @@ class PostgresMigrationIT {
                         FROM information_schema.tables
                         WHERE table_schema = 'public'
                         """), "table_name");
-                assertThat(tables).contains("users", "subscriptions", "webhook_events", "admin_accounts");
+                assertThat(tables).contains("users", "subscriptions", "webhook_events");
+                assertThat(tables).doesNotContain("admin_accounts");
 
                 Set<String> indexes = values(statement.executeQuery("""
                         SELECT indexname

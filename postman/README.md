@@ -1,153 +1,225 @@
 # Testing Waypoint-Backend with Postman
 
-## Files
+The Git-synced Postman source is the single source of truth:
 
-- `Waypoint-Backend.postman_collection.json` — importable main collection
-- `Waypoint-AI.postman_collection.json` — focused importable GPT-5 nano AI smoke collection
-- `Waypoint-Local.postman_environment.json` — importable local environment
-- `collections/Waypoint-Backend/` — Git-synced Postman source
-- `environments/Waypoint Local.environment.yaml` — Git-synced environment source
+- `collections/Waypoint-Backend/` — collection used by the connected Postman workspace
+- `environments/Waypoint Local.environment.yaml` — connected environment source
+- `Waypoint-Local.postman_environment.json` — optional environment export
+- `Waypoint-AI.postman_collection.json` — optional focused AI-only export
 
-## Collection layout
+The old generated main collection JSON has been removed because the workspace reads the Git-synced collection directly.
 
-- `01 - Authentication` contains Google authentication, Microsoft OAuth/session flows, refresh-token rotation/replay checks and bearer-token hardening tests.
-- `03 - Billing` contains only Waypoint backend billing endpoints.
-- `04 - Webhooks` contains Waypoint webhook endpoint and hardening tests.
-- `05 - Admin` contains only Waypoint admin API operations.
-- `06 - Lemon Squeezy Test Mode` contains the direct Lemon Squeezy provider lifecycle tests and the small E2E helpers needed to compare provider state with Waypoint.
-- `07 - AI` contains GPT-5 nano model discovery, browser-intent routing and page-context chat tests.
+## Collection flow
 
-Lemon Squeezy test variables are owned by `06 - Lemon Squeezy Test Mode`; normal Waypoint folders must not overwrite the selected provider-test subscription.
+Run the folders in order where applicable.
 
-## GPT-5 nano AI tests
+### 00 - Health and Configuration
 
-Start the backend with:
+1. Health
+2. Liveness
+3. Readiness
+
+### 01 - Authentication
+
+Authentication is split by flow.
+
+**01 - Google**
+1. Start Login — asks the Waypoint backend to create the Google authorization URL and one-time exchange handle
+2. Open `googleAuthorizationUrl` in a browser and complete Google sign-in
+3. Complete Login — exchanges the one-time handle for the Waypoint JWT and refresh token
+
+**02 - Microsoft Login**
+1. Start Login
+2. Exchange Session
+3. Refresh Token — optional manual rotation test
+
+**03 - Session**
+1. Current Session
+2. Logout
+
+**04 - Microsoft Account**
+1. Link Account
+2. Disconnect Account
+
+Google Complete Login and Microsoft Exchange Session populate the shared Waypoint session variables such as `jwt`, `waypointRefreshToken`, `userId`, and `userEmail`.
+
+The access JWT remains intentionally short-lived. For normal Bearer-authenticated Postman requests, the collection now detects an expiring JWT and automatically calls `/api/v1/auth/session/refresh`, rotates `waypointRefreshToken`, stores the new `jwt`, and sends the original request with the refreshed token. You should not need to sign in again every 15 minutes while the refresh token is still valid.
+
+### 02 - Account and Entitlements
+
+1. Account Details
+2. Current Entitlements
+3. Current Subscription
+4. Instant Tab Search Access
+5. AI Summary Access
+
+### 03 - Billing
+
+1. Available Plans
+2. Billing Status
+3. Checkout
+   - Monthly Checkout
+   - Annual Checkout
+
+Choose one checkout branch.
+
+### 04 - Webhooks
+
+**01 - Subscription Events**
+1. Activate Monthly Subscription
+2. Refund Subscription
+
+These requests are only for local/manual subscription-event testing. Invalid-signature, duplicate-delivery and other hardening cases are covered by automated backend tests instead of the operational Postman collection.
+
+### 05 - Admin
+
+Admin requests use HTTP Basic authentication generated from the selected environment values:
 
 ```text
-AI_OPENAI_ENABLED=true
-OPENAI_API_KEY=<your-openai-api-key>
-AI_OPENAI_MODEL=gpt-5-nano
+adminId
+adminPassword
 ```
 
-The OpenAI API key stays on the backend and is never stored in the Postman environment or sent by the extension.
+The generated Base64 value is stored in:
 
-For a focused AI-only test run, import `Waypoint-AI.postman_collection.json` together with `Waypoint-Local.postman_environment.json` and run:
+```text
+adminBasicAuth
+```
 
-1. `AI - Models`
-2. `AI - Intent - Group Tabs`
-3. `AI - Chat - Page Context`
+Production admin requests also require Microsoft Authenticator TOTP. Configure the same Base32 `ADMIN_TOTP_SECRET` in Microsoft Authenticator as a standard OATH-TOTP account using SHA-1, 6 digits and the normal 30-second period. Put the currently displayed code in:
 
-The Git-synced source for the same requests is under `collections/Waypoint-Backend/07 - AI/`.
+```text
+adminTotp
+```
+
+The Postman collection automatically sends it as `X-Admin-TOTP` for admin requests. Microsoft Authenticator will continue to display a new code every 30 seconds, but the backend accepts the entered code for up to five minutes.
+
+**01 - Overview**
+- Overall admin summary
+
+**02 - Users**
+1. List Users
+2. Find User by Email — stores the returned ID in `userId`
+3. Get User
+
+**03 - Subscriptions**
+1. List Subscriptions — stores the selected subscription in `adminSubscriptionId`
+2. Update Subscription
+
+**04 - Premium Special**
+1. Grant Premium Special
+2. Premium Special Count
+3. List Special Grants
+4. Get Special Grant
+5. Revoke Premium Special
+
+**05 - Webhook Events**
+1. List Webhook Events
+2. Get Webhook Event
+3. Update Webhook Event
+
+**06 - Plans**
+1. List Plans
+
+**07 - Audit**
+1. Audit Events
+
+### 06 - Lemon Squeezy Test Mode
+
+Provider testing is split into clear branches.
+
+**01 - Setup**
+1. Bootstrap Test Context
+2. Retrieve Provider Subscription
+3. Create Paid No-Trial Checkout
+4. Capture New Paid Subscription
+5. Verify New Active Subscription
+
+**02 - Lifecycle**
+1. Cancel Paid Subscription
+2. Resume Paid Subscription
+3. Pause Subscription
+4. Verify Waypoint Sync State
+5. Unpause Subscription
+
+**03 - Refund**
+1. List Subscription Invoices
+2. Refund Selected Invoice
+3. Verify Refund Sync
+4. Verify Refund Webhook
+
+**04 - Recovery**
+1. Recover Lifecycle Subscription
+
+Use Recovery only when a lifecycle test was interrupted and the selected Lemon Squeezy subscription needs to be restored into the environment.
+
+### 07 - AI
+
+1. Models
+2. Usage
+3. Intent - Group Tabs
+4. Chat - Page Context
 
 ## Local setup
 
-Run the backend with the normal local configuration plus:
+Start the backend with the normal local configuration. For admin requests configure matching values in the backend and Postman environment:
 
 ```text
 ADMIN_ID=<your-admin-id>
 ADMIN_PASSWORD=<your-admin-password>
 ```
 
-`ADMIN_PASSWORD` only needs to be non-empty. There is no application character-count limit.
-
-In Postman, set:
+Postman environment:
 
 ```text
 adminId = same value as ADMIN_ID
 adminPassword = same value as ADMIN_PASSWORD
+adminTotp = current Microsoft Authenticator code when testing production
 webhookSecret = same value as LEMON_SQUEEZY_WEBHOOK_SECRET
 ```
 
-`webhookSecret` is the long-lived signing secret, not a webhook signature. The webhook requests generate `webhookBody` and the matching HMAC-SHA256 `webhookSignature` automatically for each payload.
+## Google OAuth local flow
 
-For Google auth, run `Google Login` once to populate `jwt`, `userId`, and `userEmail`.
-
-## Microsoft OAuth local E2E
-
-Microsoft OAuth is part of the main `01 - Authentication` folder and uses the same `Waypoint Local` environment.
-
-Configure the backend with a real development Microsoft Entra app registration:
+Google OAuth is backend-controlled. Keep these values only in the backend/IntelliJ run configuration:
 
 ```text
-MICROSOFT_CLIENT_ID=<development-client-id>
-MICROSOFT_CLIENT_SECRET=<development-client-secret>
-MICROSOFT_TENANT=common
-MICROSOFT_CALLBACK_URL=http://localhost:8080/api/v1/auth/microsoft/callback
-MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS=https://<extension-id>.chromiumapp.org/microsoft
+GOOGLE_CLIENT_ID=<google-web-client-id>
+GOOGLE_CLIENT_SECRET=<google-web-client-secret>
+APP_BASE_URL=http://localhost:8080
 ```
 
-Set the Postman environment variable:
+Google Cloud must authorize the backend callback once:
 
 ```text
-microsoftRedirectUri = same HTTPS chromiumapp.org URI as MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS
+http://localhost:8080/api/v1/auth/google/callback
 ```
 
-Then:
+Postman does **not** need the Google client ID, client secret, authorization code, access token, or Google refresh token.
 
-1. Run `Microsoft Start`.
-2. Read `microsoftAuthorizationUrl` from the environment or Postman console and open it through the extension's `chrome.identity.launchWebAuthFlow` flow.
-3. Complete Microsoft sign-in/consent.
-4. The backend callback redirects to the extension URI with `waypoint_auth=success&exchange_code=...`. Copy that `exchange_code` value into `microsoftExchangeCode`.
-5. Run `Microsoft Session Exchange`. It stores `jwt`, `waypointRefreshToken`, `userId`, and `userEmail` in `Waypoint Local`.
-6. Run `Current Session`, then `Refresh Waypoint Session`, then `Refresh Replay Rejected`.
-7. `Microsoft Link Start` is the explicit cross-provider linking test for an already authenticated Waypoint account.
-8. `Logout` revokes Waypoint sessions but preserves the Microsoft account link. Sign in again with the same Microsoft identity and verify the same `userId` is returned.
-9. `Microsoft Disconnect` is the explicit unlink operation and requires a currently valid Waypoint JWT.
+Run:
 
-The Microsoft sign-in/consent screen is intentionally not automated by Postman because the browser/Chrome identity redirect is part of the actual extension OAuth flow. Everything before and after that interactive provider step is covered by the main Postman collection and backend integration tests.
+1. Authentication → Google → `01 - Start Login`.
+2. Open the generated `googleAuthorizationUrl` in a browser and sign in with Google.
+3. The browser returns to the Waypoint backend callback and shows that sign-in is complete.
+4. Run `02 - Complete Login`.
+5. Postman stores the Waypoint `jwt`, `waypointRefreshToken`, `userId`, and `userEmail`.
 
-## Webhook hardening smoke tests
+The only Google-specific Postman variables are `googleAuthorizationUrl` and `googleExchangeCode`, and both are generated automatically by the backend flow rather than configured by you.
 
-`04 - Webhooks` includes focused receiver checks in addition to normal subscription-state smoke tests:
+## Microsoft OAuth local flow
 
-- `Invalid Signature` -> malformed signature returns `401`.
-- `Verify Invalid Signature Not Stored` -> rejected payload never reaches `webhook_events`.
-- `Unsupported Signed Event` -> valid HMAC but unsupported event is acknowledged.
-- `Verify Unsupported Event Ignored` -> event is stored as `IGNORED`.
-- `Duplicate Idempotency` -> sends the same signed payload twice.
-- `Verify Duplicate Idempotency` -> only one persisted event row exists for the identical body hash.
-- `Unexpected Store Failure` -> valid HMAC from a deliberately wrong store is rejected.
-- `Verify Unexpected Store Failed` -> event remains visible as `FAILED` with a safe error.
+Configure the backend with the development Microsoft Entra values and set `microsoftRedirectUri` in Postman to the same allowed Chromium extension redirect URI.
 
-Stale `RECEIVED` recovery and `FAILED` retry reclamation require internal timing/state control, so those cases are covered by Maven integration tests rather than manual Postman mutation.
+Then run:
 
-## Lemon Squeezy lifecycle tests
+1. Authentication → Microsoft Login → Start Login
+2. Open `microsoftAuthorizationUrl` through the extension web-auth flow
+3. Complete Microsoft sign-in
+4. Copy the returned `exchange_code` into `microsoftExchangeCode`
+5. Run Exchange Session
+6. `Refresh Token` is only needed when you specifically want to test refresh-token rotation manually; ordinary Bearer requests auto-refresh the session.
 
-Run direct provider lifecycle work only under `06 - Lemon Squeezy Test Mode`.
-
-The lifecycle collection covers paid/no-trial creation, active-state verification, cancellation, resume, pause, unpause, invoice discovery, full refund, exact Waypoint subscription synchronization and strict refund-webhook verification.
-
-`14 - Verify Refund Webhook` filters the admin webhook store for the selected invoice and requires a matching `subscription_payment_refunded` event with `processingStatus = PROCESSED`.
-
-## Admin management
-
-The `05 - Admin` folder is the operational admin surface. Admin requests use HTTP Basic authentication and are separate from normal Waypoint JWT authentication.
-
-### Read and filter data
-
-- `Admin - Overview` — aggregate counts for users, premium users, subscriptions, active special grants and webhook processing.
-- `Admin - List Users` — paged users. Supports `q`, `provider`, `plan`, `premium`, created-date and last-login filters.
-- `Admin - Find User by Email` — exact email lookup.
-- `Admin - List Subscriptions` — paged subscriptions. Supports user, email, provider, plan, status, external IDs and date filters.
-- `Admin - List Special Grants` — all active, expired and revoked Premium Special grants with filters.
-- `Admin - List Webhook Events` — paged webhook records. Raw payloads are omitted by default; use `includePayload=true` only when required.
-- `Admin - List Plans` — complete local plan catalogue.
-- `Admin - Audit Events` — audit trail for admin mutations.
-
-All list endpoints default to 50 rows per page and allow at most 500 rows per request. Use `page`, `size`, `sort`, and `direction` to navigate the entire data set.
-
-### Manage data
-
-- `PUT /api/v1/admin/users/{userId}/premium-special` — grant or replace Premium Special access.
-- `DELETE /api/v1/admin/users/{userId}/premium-special` — revoke Premium Special access.
-- `PATCH /api/v1/admin/subscriptions/{subscriptionId}` — controlled internal correction of subscription status and renewal/end timestamps.
-- `PATCH /api/v1/admin/webhook-events/{eventId}` — controlled correction of webhook processing metadata.
-
-The admin API intentionally does not expose arbitrary SQL or unrestricted table mutation. Billing-provider IDs, raw plan mappings, authentication identities and schema-level data are not blindly writable through one generic endpoint.
-
-Every admin mutation writes an `admin_audit_events` record containing the admin ID, action, resource type, resource ID, details and timestamp.
-
-## Premium Special grant body
+## Premium Special body
 
 Lifetime:
 
@@ -168,13 +240,15 @@ Time-limited:
 
 ## Subscription update body
 
-Examples:
+Example:
 
 ```json
 {
   "status": "ACTIVE"
 }
 ```
+
+Or:
 
 ```json
 {
@@ -183,18 +257,4 @@ Examples:
 }
 ```
 
-Use `clearRenewsAt` or `clearEndsAt` to explicitly clear those timestamps.
-
-## Webhook metadata update body
-
-Example:
-
-```json
-{
-  "processingStatus": "PROCESSED",
-  "clearErrorMessage": true,
-  "processedAt": "2026-08-13T12:00:00Z"
-}
-```
-
-This changes stored processing metadata only. It does not replay a webhook.
+Use `clearRenewsAt` or `clearEndsAt` when those timestamps must be cleared.

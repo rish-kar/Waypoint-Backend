@@ -1,0 +1,3 @@
+$kind: collection
+description: Manual webhook events used to exercise subscription state changes locally.
+order: 1000

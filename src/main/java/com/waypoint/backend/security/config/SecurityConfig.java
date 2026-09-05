@@ -1,12 +1,13 @@
 package com.waypoint.backend.security.config;
 
+import com.waypoint.backend.config.admin.AdminProperties;
 import com.waypoint.backend.config.application.CorsProperties;
 import com.waypoint.backend.model.common.ApiErrorResponse;
 import com.waypoint.backend.security.admin.AdminTotpFilter;
+import com.waypoint.backend.security.admin.AdminTotpVerifier;
 import com.waypoint.backend.security.jwt.JwtAuthenticationFilter;
 import com.waypoint.backend.security.ratelimit.DistributedRateLimiter;
 import com.waypoint.backend.security.ratelimit.RequestRateLimitFilter;
-import com.waypoint.backend.service.admin.AdminAccountService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -20,8 +21,12 @@ import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
@@ -33,6 +38,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 
 @Configuration
@@ -43,25 +49,39 @@ public class SecurityConfig {
     }
 
     @Bean
+    UserDetailsService adminUserDetailsService(
+            AdminProperties adminProperties,
+            PasswordEncoder adminPasswordEncoder
+    ) {
+        UserDetails admin = User.withUsername(adminProperties.id())
+                .password(adminPasswordEncoder.encode(adminProperties.password()))
+                .authorities(Collections.emptyList())
+                .build();
+        return new InMemoryUserDetailsManager(admin);
+    }
+
+    @Bean
     @Order(1)
     SecurityFilterChain adminSecurityFilterChain(
             HttpSecurity http,
             ObjectMapper objectMapper,
-            AdminAccountService adminAccountService,
+            UserDetailsService adminUserDetailsService,
+            AdminProperties adminProperties,
+            AdminTotpVerifier adminTotpVerifier,
             DistributedRateLimiter distributedRateLimiter,
             Environment environment
     ) throws Exception {
         http
                 .securityMatcher("/api/v1/admin/**")
                 .csrf(csrf -> csrf.ignoringRequestMatchers(request ->
-                        environment.acceptsProfiles(Profiles.of("test"))
+                        environment.acceptsProfiles(Profiles.of("dev", "test"))
                                 || request.getHeader("X-Admin-TOTP") != null))
                 .cors(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
                 .requestCache(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .userDetailsService(adminAccountService)
+                .userDetailsService(adminUserDetailsService)
                 .httpBasic(basic -> basic.authenticationEntryPoint((request, response, authException) ->
                         writeSecurityError(
                                 objectMapper,
@@ -71,13 +91,7 @@ public class SecurityConfig {
                                 "UNAUTHORIZED",
                                 "Invalid admin credentials"
                         )))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/admin/accounts/**").hasRole("SUPER_ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/**").hasRole("SUPER_ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/admin/**").hasRole("SUPER_ADMIN")
-                        .requestMatchers(HttpMethod.PATCH, "/api/v1/admin/**").hasRole("SUPER_ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/**").hasRole("SUPER_ADMIN")
-                        .anyRequest().hasAnyRole("ADMIN", "SUPER_ADMIN"))
+                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, authException) -> writeSecurityError(
                                 objectMapper,
@@ -99,7 +113,7 @@ public class SecurityConfig {
 
         if (environment.acceptsProfiles(Profiles.of("prod"))) {
             http.requiresChannel(channels -> channels.anyRequest().requiresSecure());
-            http.addFilterAfter(new AdminTotpFilter(adminAccountService), BasicAuthenticationFilter.class);
+            http.addFilterAfter(new AdminTotpFilter(adminProperties, adminTotpVerifier), BasicAuthenticationFilter.class);
         }
         return http.build();
     }

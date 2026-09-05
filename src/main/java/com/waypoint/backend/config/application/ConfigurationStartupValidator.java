@@ -108,7 +108,6 @@ public class ConfigurationStartupValidator implements ApplicationRunner {
             throw new IllegalStateException("ADMIN_PASSWORD must be at least 16 characters in production");
         }
         rejectPlaceholder("ADMIN_TOTP_SECRET", adminProperties.totpSecret());
-        rejectPlaceholder("ADMIN_TOTP_ENCRYPTION_KEY", adminProperties.totpEncryptionKey());
         rejectPlaceholder("JWT_SECRET", jwtProperties.secret());
         rejectPlaceholder("GOOGLE_CLIENT_ID", googleProperties.clientId());
         rejectPlaceholder("MICROSOFT_CLIENT_ID", microsoftProperties.clientId());

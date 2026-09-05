@@ -4,6 +4,8 @@ import com.waypoint.backend.model.auth.GoogleProfile;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.auth.WaypointRefreshSessionRepository;
 import com.waypoint.backend.repository.user.UserRepository;
+import com.waypoint.backend.security.jwt.JwtProperties;
+import com.waypoint.backend.security.jwt.JwtService;
 import com.waypoint.backend.utilities.client.google.GoogleProfileClient;
 import com.waypoint.backend.utilities.exception.UnauthorizedException;
 
@@ -20,6 +22,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.UUID;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -33,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=none",
         "jwt.secret=test-secret-that-is-long-enough-for-hmac",
-        "jwt.expiration-seconds=1",
+        "jwt.expiration-seconds=60",
         "waypoint-session.refresh-token-ttl-seconds=2592000",
         "waypoint-session.cleanup-ms=3600000",
         "google.client-id=test-google-client",
@@ -47,6 +51,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 @AutoConfigureMockMvc
 class WaypointSessionIntegrationTests {
+    private static final String TEST_JWT_SECRET = "test-secret-that-is-long-enough-for-hmac";
+
     private final MockMvc mockMvc;
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
@@ -87,7 +93,7 @@ class WaypointSessionIntegrationTests {
     @Test
     void refreshesExpiredAccessTokenThenPersistsPhoneAndRevokesSessionOnLogout() throws Exception {
         JsonNode login = login();
-        String expiredAccessToken = login.get("accessToken").asText();
+        String expiredAccessToken = issueShortLivedAccessToken(login);
         String firstRefreshToken = login.get("refreshToken").asText();
         assertThat(refreshSessionRepository.findAll()).hasSize(1);
 
@@ -131,6 +137,18 @@ class WaypointSessionIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new RefreshRequest(logoutRefreshToken))))
                 .andExpect(status().isUnauthorized());
+    }
+
+    private String issueShortLivedAccessToken(JsonNode login) {
+        JwtService shortLivedJwtService = new JwtService(
+                new JwtProperties(TEST_JWT_SECRET, 1),
+                objectMapper
+        );
+        JsonNode user = login.get("user");
+        return shortLivedJwtService.issueToken(
+                UUID.fromString(user.get("id").asText()),
+                user.get("email").asText()
+        );
     }
 
     private JsonNode login() throws Exception {
