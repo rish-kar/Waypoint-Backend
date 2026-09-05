@@ -2,7 +2,6 @@ package com.waypoint.backend.service.ai;
 
 import com.waypoint.backend.model.ai.ByokModelCatalogResponse;
 import com.waypoint.backend.model.ai.ByokProvider;
-import com.waypoint.backend.model.ai.ByokProviderResponse;
 import com.waypoint.backend.model.ai.ByokStatusResponse;
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
@@ -32,13 +31,6 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ByokServiceTests {
     private static final String USER_API_KEY = "sk-project-test-12345678901234567890";
-    private static final List<ByokProviderResponse> PROVIDERS = List.of(
-            new ByokProviderResponse("openai", "OpenAI"),
-            new ByokProviderResponse("anthropic", "Anthropic Claude"),
-            new ByokProviderResponse("google", "Google Gemini"),
-            new ByokProviderResponse("xai", "xAI Grok"),
-            new ByokProviderResponse("openrouter", "OpenRouter")
-    );
 
     @Mock
     private UserRepository userRepository;
@@ -62,7 +54,6 @@ class ByokServiceTests {
         user.setProvider("GOOGLE");
         user.setProviderUserId("provider-user");
         service = new ByokService(userRepository, subscriptionService, apiKeyCipher, providerRegistry);
-        when(providerRegistry.providers()).thenReturn(PROVIDERS);
     }
 
     @Test
