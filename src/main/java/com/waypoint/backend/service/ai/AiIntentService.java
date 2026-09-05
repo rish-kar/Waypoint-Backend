@@ -7,7 +7,6 @@ import com.waypoint.backend.model.ai.AiIntentResponse;
 import com.waypoint.backend.model.ai.AiModelCatalogResponse;
 import com.waypoint.backend.model.ai.AiModelDescriptorResponse;
 import com.waypoint.backend.utilities.client.ai.AiModelClient;
-import com.waypoint.backend.utilities.client.ai.OpenAiClient;
 import com.waypoint.backend.utilities.exception.AiUnavailableException;
 import com.waypoint.backend.utilities.exception.ExternalServiceException;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
@@ -51,23 +50,32 @@ public class AiIntentService {
 
     private final AiModelClient aiClient;
     private final ByokService byokService;
+    private final ByokProviderRegistry providerRegistry;
 
     @Autowired
-    public AiIntentService(AiModelClient aiClient, ByokService byokService) {
+    public AiIntentService(
+            AiModelClient aiClient,
+            ByokService byokService,
+            ByokProviderRegistry providerRegistry
+    ) {
         this.aiClient = aiClient;
         this.byokService = byokService;
+        this.providerRegistry = providerRegistry;
     }
 
     AiIntentService(AiModelClient aiClient) {
-        this(aiClient, null);
+        this(aiClient, null, null);
     }
 
     public AiIntentResponse route(UUID userId, AiIntentRequest request) {
-        if (byokService != null && aiClient instanceof OpenAiClient openAiClient) {
+        if (byokService != null && providerRegistry != null) {
             var credentials = byokService.credentialsFor(userId);
             if (credentials.isPresent()) {
                 ByokService.ByokCredentials value = credentials.get();
-                return normalize(openAiClient.routeWithCredentials(request, value.apiKey(), value.model()), request);
+                return normalize(
+                        providerRegistry.route(value.provider(), request, value.apiKey(), value.model()),
+                        request
+                );
             }
         }
         return route(request);
@@ -80,11 +88,13 @@ public class AiIntentService {
     }
 
     public AiChatResponse chat(UUID userId, AiChatRequest request) {
-        if (byokService != null && aiClient instanceof OpenAiClient openAiClient) {
+        if (byokService != null && providerRegistry != null) {
             var credentials = byokService.credentialsFor(userId);
             if (credentials.isPresent()) {
                 ByokService.ByokCredentials value = credentials.get();
-                return validateChatResponse(openAiClient.chatWithCredentials(request, value.apiKey(), value.model()));
+                return validateChatResponse(
+                        providerRegistry.chat(value.provider(), request, value.apiKey(), value.model())
+                );
             }
         }
         return chat(request);
