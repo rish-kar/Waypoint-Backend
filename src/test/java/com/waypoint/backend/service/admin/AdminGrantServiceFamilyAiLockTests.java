@@ -57,7 +57,13 @@ class AdminGrantServiceFamilyAiLockTests {
         when(planRepository.findByCodeForUpdate(PlanCode.PREMIUM_SPECIAL))
                 .thenReturn(Optional.of(new PlanEntity()));
         when(grantRepository.saveAndFlush(any(SpecialPremiumGrantEntity.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+                .thenAnswer(invocation -> {
+                    SpecialPremiumGrantEntity grant = invocation.getArgument(0);
+                    if (grant.getId() == null) {
+                        grant.setId(UUID.randomUUID());
+                    }
+                    return grant;
+                });
     }
 
     @Test
