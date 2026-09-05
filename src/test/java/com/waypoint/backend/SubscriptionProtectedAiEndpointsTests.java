@@ -65,7 +65,7 @@ class SubscriptionProtectedAiEndpointsTests {
     }
 
     @Test
-    void freeUserGetsZeroedNotSpecialFamilyUsage() throws Exception {
+    void freeUserGetsOnlyZeroedPersonalFamilyUsage() throws Exception {
         UserEntity user = createUser();
 
         mockMvc.perform(get("/api/v1/ai/family-usage")
@@ -73,12 +73,23 @@ class SubscriptionProtectedAiEndpointsTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.specialAccess").value(false))
                 .andExpect(jsonPath("$.status").value("NOT_SPECIAL"))
-                .andExpect(jsonPath("$.activeSpecialUsers").value(0))
                 .andExpect(jsonPath("$.requestTokenLimit").value(0))
-                .andExpect(jsonPath("$.monthlyPoolMicrorupees").value(0))
                 .andExpect(jsonPath("$.monthlyAllowanceMicrorupees").value(0))
                 .andExpect(jsonPath("$.spentMicrorupees").value(0))
-                .andExpect(jsonPath("$.remainingMicrorupees").value(0));
+                .andExpect(jsonPath("$.remainingMicrorupees").value(0))
+                .andExpect(jsonPath("$.monthlyPoolMicrorupees").doesNotExist())
+                .andExpect(jsonPath("$.activeSpecialUsers").doesNotExist())
+                .andExpect(jsonPath("$.users").doesNotExist());
+    }
+
+    @Test
+    void normalUserCannotReadFamilyAdminUsage() throws Exception {
+        UserEntity user = createUser();
+
+        mockMvc.perform(get("/api/v1/ai/family-admin-usage")
+                        .header("Authorization", bearer(user)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ADMIN_ACCESS_DENIED"));
     }
 
     @Test
