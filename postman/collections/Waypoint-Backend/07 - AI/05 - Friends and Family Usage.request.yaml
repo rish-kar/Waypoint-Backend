@@ -9,46 +9,33 @@ scripts:
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const body = pm.response.json();
-      pm.test('Personal Family AI quota shape is valid', () => {
+      pm.test('Personal Family AI rolling quota shape is valid', () => {
           pm.expect(body.specialAccess).to.be.a('boolean');
           pm.expect(body.requestTokenLimit).to.be.a('number');
-          pm.expect(body.monthlyAllowanceRupees).to.be.a('number');
-          pm.expect(body.spentRupees).to.be.a('number');
-          pm.expect(body.remainingRupees).to.be.a('number');
-          pm.expect(body.usagePercent).to.be.a('number');
-          pm.expect(body.periodKey).to.match(/^\d{4}-\d{2}$/);
-          pm.expect(body.resetsAt).to.be.a('string').and.not.empty;
-          pm.expect(['ACTIVE', 'LIMIT_REACHED', 'NOT_SPECIAL']).to.include(body.status);
+          pm.expect(body.sessionWindowHours).to.eql(5);
+          pm.expect(body.sessionUsagePercent).to.be.a('number').and.within(0, 100);
+          pm.expect(body.weeklyWindowDays).to.eql(7);
+          pm.expect(body.weeklyUsagePercent).to.be.a('number').and.within(0, 100);
+          pm.expect(['ACTIVE', 'SESSION_LIMIT_REACHED', 'WEEKLY_LIMIT_REACHED', 'ACCOUNT_LIMIT_REACHED', 'NOT_SPECIAL']).to.include(body.status);
       });
-      pm.test('Internal accounting units are not exposed', () => {
-          pm.expect(body).to.not.have.property('monthlyAllowanceMicrorupees');
-          pm.expect(body).to.not.have.property('spentMicrorupees');
-          pm.expect(body).to.not.have.property('remainingMicrorupees');
-      });
-      pm.test('User response does not expose the shared pool or other users', () => {
-          pm.expect(body).to.not.have.property('monthlyPoolRupees');
-          pm.expect(body).to.not.have.property('activeSpecialUsers');
-          pm.expect(body).to.not.have.property('users');
+      pm.test('User response exposes no money, pool or other-user details', () => {
+          ['monthlyAllowanceRupees','spentRupees','remainingRupees','monthlyPoolRupees','poolSpentRupees','poolRemainingRupees','activeSpecialUsers','periodKey','resetsAt','users'].forEach(key => pm.expect(body).to.not.have.property(key));
       });
       if (body.specialAccess) {
-          pm.test('Premium Special personal quota is usable', () => {
+          pm.test('Premium Special rolling windows are active', () => {
               pm.expect(body.requestTokenLimit).to.eql(5000);
-              pm.expect(body.monthlyAllowanceRupees).to.be.above(0);
-              pm.expect(body.spentRupees).to.be.at.least(0);
-              pm.expect(body.remainingRupees).to.be.at.least(0);
-              pm.expect(body.usagePercent).to.be.within(0, 100);
+              pm.expect(body.sessionResetsAt).to.be.a('string').and.not.empty;
+              pm.expect(body.weeklyResetsAt).to.be.a('string').and.not.empty;
           });
       }
       pm.environment.set('familyAiSpecialAccess', String(body.specialAccess));
       pm.environment.set('familyAiRequestTokenLimit', String(body.requestTokenLimit));
-      pm.environment.set('familyAiAllowanceRupees', String(body.monthlyAllowanceRupees));
-      pm.environment.set('familyAiSpentRupees', String(body.spentRupees));
-      pm.environment.set('familyAiRemainingRupees', String(body.remainingRupees));
-      pm.environment.set('familyAiUsagePercent', String(body.usagePercent));
-      pm.environment.set('familyAiPeriodKey', String(body.periodKey));
-      pm.environment.set('familyAiResetsAt', String(body.resetsAt));
+      pm.environment.set('familyAiSessionUsagePercent', String(body.sessionUsagePercent));
+      pm.environment.set('familyAiSessionResetsAt', String(body.sessionResetsAt || ''));
+      pm.environment.set('familyAiWeeklyUsagePercent', String(body.weeklyUsagePercent));
+      pm.environment.set('familyAiWeeklyResetsAt', String(body.weeklyResetsAt || ''));
       pm.environment.set('familyAiStatus', String(body.status));
       pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-family-ai-usage'));
     language: text/javascript
-description: "Returns only the authenticated user's abstract Friends & Family AI quota in rupees: per-request cap, monthly quota, used amount, remaining amount, percentage and reset. It intentionally does not expose internal accounting units, the shared pool size, active-user count or other users."
+description: "Returns only the authenticated user's abstract Friends & Family Cloud AI limits: Session (5hr), Weekly (7 day), reset times and the 5,000-token per-request cap. Monetary pool and other-user details are admin-only."
 order: 8180
