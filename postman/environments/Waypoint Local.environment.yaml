@@ -2,21 +2,9 @@ name: Waypoint Local
 values:
   - key: baseUrl
     value: 'http://localhost:8080'
-  - key: googleClientId
-    value: ''
-  - key: googleClientSecret
-    value: ''
-  - key: googleOAuthRedirectUri
-    value: 'https://oauth.pstmn.io/v1/browser-callback'
   - key: googleAuthorizationUrl
     value: ''
-  - key: googleAuthorizationCode
-    value: ''
-  - key: googleRefreshToken
-    value: ''
-  - key: googleAccessToken
-    value: ''
-  - key: googleAccessTokenExpiresAt
+  - key: googleExchangeCode
     value: ''
   - key: microsoftRedirectUri
     value: 'https://your-extension-id.chromiumapp.org/microsoft'

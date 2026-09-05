@@ -4,6 +4,7 @@ import com.waypoint.backend.config.application.AppProperties;
 import com.waypoint.backend.config.auth.GoogleOAuthProperties;
 import com.waypoint.backend.config.auth.GoogleProperties;
 import com.waypoint.backend.model.auth.AuthResponse;
+import com.waypoint.backend.model.auth.GoogleAuthStartResponse;
 import com.waypoint.backend.utilities.exception.UnauthorizedException;
 import com.waypoint.backend.utilities.exception.UpstreamServiceException;
 
@@ -30,6 +31,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class GoogleOAuthWebService {
     private static final Duration STATE_TTL = Duration.ofMinutes(5);
+    private static final Duration COMPLETED_LOGIN_TTL = Duration.ofMinutes(5);
+    private static final String MANUAL_EXCHANGE_PREFIX = "g_";
 
     private final GoogleProperties googleProperties;
     private final GoogleOAuthProperties oauthProperties;
@@ -38,6 +41,7 @@ public class GoogleOAuthWebService {
     private final RestClient restClient;
     private final SecureRandom secureRandom = new SecureRandom();
     private final Map<String, PendingLogin> pendingLogins = new ConcurrentHashMap<>();
+    private final Map<String, CompletedLogin> completedLogins = new ConcurrentHashMap<>();
 
     public GoogleOAuthWebService(
             GoogleProperties googleProperties,
@@ -55,12 +59,92 @@ public class GoogleOAuthWebService {
     public URI authorizationUri(String returnUrl) {
         requireConfigured();
         String safeReturnUrl = validateReturnUrl(returnUrl);
-        removeExpiredStates();
+        removeExpiredEntries();
 
         String state = randomToken(32);
         String codeVerifier = randomToken(48);
-        pendingLogins.put(state, new PendingLogin(safeReturnUrl, codeVerifier, Instant.now().plus(STATE_TTL)));
+        pendingLogins.put(
+                state,
+                new PendingLogin(safeReturnUrl, null, codeVerifier, Instant.now().plus(STATE_TTL))
+        );
+        return buildAuthorizationUri(state, codeVerifier);
+    }
 
+    public GoogleAuthStartResponse startManualLogin() {
+        requireConfigured();
+        removeExpiredEntries();
+
+        String state = randomToken(32);
+        String exchangeCode = MANUAL_EXCHANGE_PREFIX + randomToken(32);
+        String codeVerifier = randomToken(48);
+        pendingLogins.put(
+                state,
+                new PendingLogin(null, exchangeCode, codeVerifier, Instant.now().plus(STATE_TTL))
+        );
+
+        return new GoogleAuthStartResponse(
+                buildAuthorizationUri(state, codeVerifier).toASCIIString(),
+                exchangeCode,
+                STATE_TTL.toSeconds()
+        );
+    }
+
+    public boolean supportsManualExchangeCode(String exchangeCode) {
+        return StringUtils.hasText(exchangeCode) && exchangeCode.startsWith(MANUAL_EXCHANGE_PREFIX);
+    }
+
+    public AuthResponse exchangeManualLogin(String exchangeCode) {
+        if (!supportsManualExchangeCode(exchangeCode)) {
+            throw new UnauthorizedException("Invalid, expired, or replayed session exchange code");
+        }
+
+        removeExpiredEntries();
+        CompletedLogin completed = completedLogins.remove(exchangeCode);
+        if (completed == null || !completed.expiresAt().isAfter(Instant.now())) {
+            boolean stillPending = pendingLogins.values().stream()
+                    .anyMatch(pending -> exchangeCode.equals(pending.exchangeCode())
+                            && pending.expiresAt().isAfter(Instant.now()));
+            if (stillPending) {
+                throw new UnauthorizedException("Google sign-in has not completed");
+            }
+            throw new UnauthorizedException("Invalid, expired, or replayed session exchange code");
+        }
+        if (completed.authResponse() == null) {
+            throw new UnauthorizedException("Google authentication failed");
+        }
+        return completed.authResponse();
+    }
+
+    public CallbackResult callback(String code, String state, String providerError) {
+        PendingLogin pending = consumeState(state);
+        if (pending == null) {
+            throw new UnauthorizedException("Google sign-in state is invalid or expired");
+        }
+
+        if (StringUtils.hasText(providerError)) {
+            return completeWithError(pending, providerError);
+        }
+        if (!StringUtils.hasText(code)) {
+            return completeWithError(pending, "missing_code");
+        }
+
+        try {
+            String googleAccessToken = exchangeCode(code, pending.codeVerifier());
+            AuthResponse authResponse = googleAuthService.login(googleAccessToken);
+            if (pending.exchangeCode() != null) {
+                completedLogins.put(
+                        pending.exchangeCode(),
+                        new CompletedLogin(authResponse, Instant.now().plus(COMPLETED_LOGIN_TTL))
+                );
+                return new CallbackResult(null, true, true);
+            }
+            return new CallbackResult(successRedirect(pending.returnUrl(), authResponse), false, true);
+        } catch (RuntimeException exception) {
+            return completeWithError(pending, "authentication_failed");
+        }
+    }
+
+    private URI buildAuthorizationUri(String state, String codeVerifier) {
         return UriComponentsBuilder.fromUriString(oauthProperties.authorizationUrl())
                 .queryParam("client_id", googleProperties.clientId())
                 .queryParam("redirect_uri", callbackUrl())
@@ -75,26 +159,15 @@ public class GoogleOAuthWebService {
                 .toUri();
     }
 
-    public URI callbackUri(String code, String state, String providerError) {
-        PendingLogin pending = consumeState(state);
-        if (pending == null) {
-            throw new UnauthorizedException("Google sign-in state is invalid or expired");
+    private CallbackResult completeWithError(PendingLogin pending, String error) {
+        if (pending.exchangeCode() != null) {
+            completedLogins.put(
+                    pending.exchangeCode(),
+                    new CompletedLogin(null, Instant.now().plus(COMPLETED_LOGIN_TTL))
+            );
+            return new CallbackResult(null, true, false);
         }
-
-        if (StringUtils.hasText(providerError)) {
-            return errorRedirect(pending.returnUrl(), providerError);
-        }
-        if (!StringUtils.hasText(code)) {
-            return errorRedirect(pending.returnUrl(), "missing_code");
-        }
-
-        try {
-            String googleAccessToken = exchangeCode(code, pending.codeVerifier());
-            AuthResponse authResponse = googleAuthService.login(googleAccessToken);
-            return successRedirect(pending.returnUrl(), authResponse);
-        } catch (RuntimeException exception) {
-            return errorRedirect(pending.returnUrl(), "authentication_failed");
-        }
+        return new CallbackResult(errorRedirect(pending.returnUrl(), error), false, false);
     }
 
     private String exchangeCode(String code, String codeVerifier) {
@@ -173,9 +246,10 @@ public class GoogleOAuthWebService {
         return pending != null && pending.expiresAt().isAfter(Instant.now()) ? pending : null;
     }
 
-    private void removeExpiredStates() {
+    private void removeExpiredEntries() {
         Instant now = Instant.now();
         pendingLogins.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(now));
+        completedLogins.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(now));
     }
 
     private String randomToken(int byteCount) {
@@ -198,6 +272,12 @@ public class GoogleOAuthWebService {
         return java.net.URLEncoder.encode(String.valueOf(value), StandardCharsets.UTF_8);
     }
 
-    private record PendingLogin(String returnUrl, String codeVerifier, Instant expiresAt) {
+    public record CallbackResult(URI redirectUri, boolean manual, boolean success) {
+    }
+
+    private record PendingLogin(String returnUrl, String exchangeCode, String codeVerifier, Instant expiresAt) {
+    }
+
+    private record CompletedLogin(AuthResponse authResponse, Instant expiresAt) {
     }
 }

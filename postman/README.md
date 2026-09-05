@@ -24,10 +24,9 @@ Run the folders in order where applicable.
 Authentication is split by flow.
 
 **01 - Google**
-1. Google OAuth - 1 Prepare Authorization URL
-2. Google OAuth - 2 Exchange Authorization Code
-3. Google OAuth - 3 Refresh Access Token — optional manual refresh
-4. Google Login — automatically refreshes the Google access token when needed after the one-time bootstrap
+1. Start Login — asks the Waypoint backend to create the Google authorization URL and one-time exchange handle
+2. Open `googleAuthorizationUrl` in a browser and complete Google sign-in
+3. Complete Login — exchanges the one-time handle for the Waypoint JWT and refresh token
 
 **02 - Microsoft Login**
 1. Start Login
@@ -42,7 +41,7 @@ Authentication is split by flow.
 1. Link Account
 2. Disconnect Account
 
-Google Login and Microsoft Exchange Session populate the shared Waypoint session variables such as `jwt`, `userId`, and `userEmail`. Microsoft Exchange Session also stores `waypointRefreshToken`.
+Google Complete Login and Microsoft Exchange Session populate the shared Waypoint session variables such as `jwt`, `waypointRefreshToken`, `userId`, and `userEmail`.
 
 ### 02 - Account and Entitlements
 
@@ -179,25 +178,31 @@ webhookSecret = same value as LEMON_SQUEEZY_WEBHOOK_SECRET
 
 ## Google OAuth local flow
 
-In the `Waypoint Local` environment set:
+Google OAuth is backend-controlled. Keep these values only in the backend/IntelliJ run configuration:
 
 ```text
-googleClientId = same value as GOOGLE_CLIENT_ID
-googleClientSecret = same value as GOOGLE_CLIENT_SECRET
-googleOAuthRedirectUri = https://oauth.pstmn.io/v1/browser-callback
+GOOGLE_CLIENT_ID=<google-web-client-id>
+GOOGLE_CLIENT_SECRET=<google-web-client-secret>
+APP_BASE_URL=http://localhost:8080
 ```
 
-Add `googleOAuthRedirectUri` once to the authorized redirect URIs for the same Google OAuth client used by the backend.
+Google Cloud must authorize the backend callback once:
 
-One-time bootstrap:
+```text
+http://localhost:8080/api/v1/auth/google/callback
+```
 
-1. Run Authentication → Google → Google OAuth - 1 Prepare Authorization URL.
-2. Open `googleAuthorizationUrl` in your browser and complete Google consent. The request uses `openid email profile` and requests offline access.
-3. Copy the `code` query parameter from the callback into `googleAuthorizationCode`.
-4. Run Google OAuth - 2 Exchange Authorization Code. This stores `googleAccessToken`, `googleRefreshToken`, and `googleAccessTokenExpiresAt`.
-5. Run Google Login. This stores the Waypoint `jwt`, `waypointRefreshToken`, `userId`, and `userEmail`.
+Postman does **not** need the Google client ID, client secret, authorization code, access token, or Google refresh token.
 
-After that, just run Google Login. Its pre-request script refreshes `googleAccessToken` from `googleRefreshToken` automatically when the token is missing or near expiry. Google OAuth - 3 Refresh Access Token is available only when you want to force a refresh manually.
+Run:
+
+1. Authentication → Google → `01 - Start Login`.
+2. Open the generated `googleAuthorizationUrl` in a browser and sign in with Google.
+3. The browser returns to the Waypoint backend callback and shows that sign-in is complete.
+4. Run `02 - Complete Login`.
+5. Postman stores the Waypoint `jwt`, `waypointRefreshToken`, `userId`, and `userEmail`.
+
+The only Google-specific Postman variables are `googleAuthorizationUrl` and `googleExchangeCode`, and both are generated automatically by the backend flow rather than configured by you.
 
 ## Microsoft OAuth local flow
 

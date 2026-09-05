@@ -86,14 +86,34 @@ for text, name in [(activate, "activate monthly"), (refund, "refund")]:
     if "2030-01-01T00:00:00Z" in text:
         errors.append(f"{name}: hardcoded provider timestamp must not be used")
 
-# Google login must retain the backend-issued refresh token; otherwise JWT expiry breaks
-# later authenticated Postman requests even though the backend session can be refreshed.
+# Google manual/API login must be backend-controlled. Postman must never own the Google
+# client secret, exchange provider authorization codes, or persist Google provider tokens.
+google_start_rel = "collections/Waypoint-Backend/01 - Authentication/01 - Google/01 - Start Login.request.yaml"
+google_complete_rel = "collections/Waypoint-Backend/01 - Authentication/01 - Google/02 - Complete Login.request.yaml"
 require(
-    "collections/Waypoint-Backend/01 - Authentication/01 - Google/01 - Google Login.request.yaml",
+    google_start_rel,
+    "/api/v1/auth/google/start",
+    "body.authorizationUrl",
+    "body.exchangeCode",
+    "pm.environment.set('googleExchangeCode', body.exchangeCode)",
+)
+require(
+    google_complete_rel,
+    "/api/v1/auth/session/exchange",
+    '"exchangeCode": "{{googleExchangeCode}}"',
     "body.refreshToken",
     "body.refreshExpiresIn",
     "pm.environment.set('waypointRefreshToken', body.refreshToken)",
 )
+for rel in [google_start_rel, google_complete_rel]:
+    forbid(
+        rel,
+        "googleClientId",
+        "googleClientSecret",
+        "googleAccessToken",
+        "googleRefreshToken",
+        "oauth2.googleapis.com/token",
+    )
 
 # Current Subscription should identify stale credentials before calling the backend.
 require(
@@ -133,7 +153,7 @@ require(
 
 # Auth flows must not preserve credentials/IDs from a failed new login attempt.
 for rel in [
-    "collections/Waypoint-Backend/01 - Authentication/01 - Google/01 - Google Login.request.yaml",
+    google_complete_rel,
     "collections/Waypoint-Backend/01 - Authentication/02 - Microsoft Login/02 - Exchange Session.request.yaml",
 ]:
     require(rel, "pm.environment.unset('jwt')", "pm.environment.unset('userId')")
@@ -167,6 +187,20 @@ if re.search(r"- key: subscriptionId\s+value:\s*[^'\"\n]*postman-subscription", 
     errors.append("Waypoint Local.environment.yaml: subscriptionId must start empty")
 if "value: local-monthly-variant-id" in yaml_env:
     errors.append("Waypoint Local.environment.yaml: monthlyVariantId must come from Admin > Plans, not a fixed default")
+for forbidden_google_key in [
+    "googleClientId",
+    "googleClientSecret",
+    "googleOAuthRedirectUri",
+    "googleAuthorizationCode",
+    "googleRefreshToken",
+    "googleAccessToken",
+    "googleAccessTokenExpiresAt",
+]:
+    if f"- key: {forbidden_google_key}" in yaml_env:
+        errors.append(f"Waypoint Local.environment.yaml: {forbidden_google_key} belongs to the backend/provider flow, not Postman")
+for required_google_key in ["googleAuthorizationUrl", "googleExchangeCode"]:
+    if f"- key: {required_google_key}" not in yaml_env:
+        errors.append(f"Waypoint Local.environment.yaml: {required_google_key} is required for the backend-controlled Google flow")
 
 json_env_path = ROOT / "Waypoint-Local.postman_environment.json"
 try:
@@ -180,15 +214,41 @@ try:
         errors.append("Waypoint-Local.postman_environment.json: annualVariantId must start empty and be populated from Admin > Plans")
     if "adminSubscriptionUserId" not in values:
         errors.append("Waypoint-Local.postman_environment.json: adminSubscriptionUserId is required")
+    for forbidden_google_key in [
+        "googleClientId",
+        "googleClientSecret",
+        "googleOAuthRedirectUri",
+        "googleAuthorizationCode",
+        "googleRefreshToken",
+        "googleAccessToken",
+        "googleAccessTokenExpiresAt",
+    ]:
+        if forbidden_google_key in values:
+            errors.append(f"Waypoint-Local.postman_environment.json: {forbidden_google_key} belongs to the backend/provider flow, not Postman")
+    for required_google_key in ["googleAuthorizationUrl", "googleExchangeCode"]:
+        if required_google_key not in values:
+            errors.append(f"Waypoint-Local.postman_environment.json: {required_google_key} is required for the backend-controlled Google flow")
 except Exception as exc:
     errors.append(f"Waypoint-Local.postman_environment.json: invalid JSON: {exc}")
 
-# Catch the fixed ID that caused cross-run webhook collisions anywhere in maintained Postman sources.
+# Catch fixed IDs and provider-owned Google credentials/tokens anywhere in maintained Postman data files.
 for path in ROOT.rglob("*"):
     if path.is_file() and path.suffix in {".yaml", ".json"}:
         text = path.read_text(encoding="utf-8")
         if "postman-subscription-001" in text:
             errors.append(f"{path.relative_to(ROOT)}: contains forbidden fixed subscription ID")
+        for forbidden_google_marker in [
+            "googleClientId",
+            "googleClientSecret",
+            "googleOAuthRedirectUri",
+            "googleAuthorizationCode",
+            "googleRefreshToken",
+            "googleAccessToken",
+            "googleAccessTokenExpiresAt",
+            "oauth2.googleapis.com/token",
+        ]:
+            if forbidden_google_marker in text:
+                errors.append(f"{path.relative_to(ROOT)}: contains provider-owned Google OAuth marker {forbidden_google_marker}")
 
 if errors:
     print("Postman collection safety validation FAILED:")

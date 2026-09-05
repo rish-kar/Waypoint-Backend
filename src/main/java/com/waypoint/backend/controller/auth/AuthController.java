@@ -2,6 +2,7 @@ package com.waypoint.backend.controller.auth;
 
 import com.waypoint.backend.model.auth.AuthResponse;
 import com.waypoint.backend.model.auth.GoogleAuthRequest;
+import com.waypoint.backend.model.auth.GoogleAuthStartResponse;
 import com.waypoint.backend.model.auth.MicrosoftAuthStartRequest;
 import com.waypoint.backend.model.auth.MicrosoftAuthStartResponse;
 import com.waypoint.backend.model.auth.SessionExchangeRequest;
@@ -19,9 +20,11 @@ import com.waypoint.backend.utilities.exception.UnauthorizedException;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -66,19 +69,33 @@ public class AuthController {
     }
 
     @GetMapping("/google/start")
-    public ResponseEntity<Void> googleStart(@RequestParam String returnUrl) {
+    public ResponseEntity<?> googleStart(@RequestParam(required = false) String returnUrl) {
+        if (!StringUtils.hasText(returnUrl)) {
+            GoogleAuthStartResponse response = googleOAuthWebService.startManualLogin();
+            return ResponseEntity.ok(response);
+        }
         URI location = googleOAuthWebService.authorizationUri(returnUrl);
         return ResponseEntity.status(HttpStatus.FOUND).location(location).build();
     }
 
     @GetMapping("/google/callback")
-    public ResponseEntity<Void> googleCallback(
+    public ResponseEntity<?> googleCallback(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String state,
             @RequestParam(required = false) String error
     ) {
-        URI location = googleOAuthWebService.callbackUri(code, state, error);
-        return ResponseEntity.status(HttpStatus.FOUND).location(location).build();
+        GoogleOAuthWebService.CallbackResult result = googleOAuthWebService.callback(code, state, error);
+        if (!result.manual()) {
+            return ResponseEntity.status(HttpStatus.FOUND).location(result.redirectUri()).build();
+        }
+        if (result.success()) {
+            return ResponseEntity.ok()
+                    .contentType(MediaType.TEXT_PLAIN)
+                    .body("Google sign-in complete. Return to Postman and run Complete Login.");
+        }
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .contentType(MediaType.TEXT_PLAIN)
+                .body("Google sign-in failed. Return to Postman and start Google login again.");
     }
 
     @PostMapping("/microsoft/start")
@@ -108,6 +125,9 @@ public class AuthController {
 
     @PostMapping("/session/exchange")
     public AuthResponse exchange(@Valid @RequestBody SessionExchangeRequest request) {
+        if (googleOAuthWebService.supportsManualExchangeCode(request.exchangeCode())) {
+            return googleOAuthWebService.exchangeManualLogin(request.exchangeCode());
+        }
         return microsoftOAuthService.exchange(request.exchangeCode());
     }
 
