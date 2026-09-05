@@ -70,7 +70,7 @@ public class AiController {
             @AuthenticationPrincipal UUID userId,
             @Valid @RequestBody ByokApiKeyRequest request
     ) {
-        return byokService.saveApiKey(userId, request.apiKey());
+        return byokService.saveApiKey(userId, request.provider(), request.apiKey());
     }
 
     @GetMapping("/byok/models")
