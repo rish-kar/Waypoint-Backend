@@ -142,12 +142,17 @@
               "    pm.expect(body.poolUsagePercent).to.be.a('number').and.within(0, 100);",
               "    pm.expect(body.activeSpecialUsers).to.be.a('number').and.at.least(0);",
               "    pm.expect(body.requestTokenLimit).to.eql(5000);",
+              "    pm.expect(body.periodKey).to.match(/^\\d{4}-\\d{2}$/);",
+              "    pm.expect(body.resetsAt).to.be.a('string').and.not.empty;",
               "    pm.expect(body.users).to.be.an('array');",
               "});",
               "pm.test('Admin receives complete per-user and grant details', () => {",
               "    body.users.forEach(user => {",
-              "        ['grantId','userId','email','provider','providerUserId','persistedPlan','userCreatedAt','userUpdatedAt','lastLoginAt','active','reason','grantedBy','grantedAt','monthlyAllowanceMicrorupees','spentMicrorupees','remainingMicrorupees','usagePercent','status'].forEach(key => pm.expect(user).to.have.property(key));",
+              "        ['grantId','userId','email','displayName','pictureUrl','phoneNumber','phoneCountryCode','provider','providerUserId','persistedPlan','userCreatedAt','userUpdatedAt','lastLoginAt','active','validUntil','reason','grantedBy','grantedAt','revokedBy','revokedAt','monthlyAllowanceMicrorupees','spentMicrorupees','remainingMicrorupees','usagePercent','status'].forEach(key => pm.expect(user).to.have.property(key));",
               "        pm.expect(['ACTIVE', 'LIMIT_REACHED', 'EXPIRED', 'REVOKED']).to.include(user.status);",
+              "        pm.expect(user.spentMicrorupees).to.be.a('number').and.at.least(0);",
+              "        pm.expect(user.remainingMicrorupees).to.be.a('number').and.at.least(0);",
+              "        pm.expect(user.usagePercent).to.be.a('number').and.within(0, 100);",
               "    });",
               "});",
               "pm.environment.set('familyAiAdminPoolRupees', String(body.monthlyPoolMicrorupees / 1000000));",
@@ -167,7 +172,7 @@
           { "key": "X-Request-ID", "value": "postman-admin-family-ai-usage" }
         ],
         "url": "{{baseUrl}}/api/v1/admin/family-ai",
-        "description": "Admin-only complete pool view: configured pool, total usage, remaining budget, active user count and every Special grant user's account, grant and usage details. Production also uses the collection's existing admin TOTP setup."
+        "description": "Admin-only complete pool view: configured pool, total usage, remaining budget, active user count and every Special grant user's account, grant and usage details. Set adminTotp in production; this collection automatically sends it as X-Admin-TOTP on /api/v1/admin/** requests."
       }
     }
   ],
@@ -177,7 +182,14 @@
       "script": {
         "type": "text/javascript",
         "exec": [
-          "if (!pm.environment.get('baseUrl')) throw new Error('Select the Waypoint Local environment.');"
+          "if (!pm.environment.get('baseUrl')) throw new Error('Select the Waypoint Local environment.');",
+          "const requestUrl = pm.request.url.toString();",
+          "const adminTotp = String(pm.environment.get('adminTotp') || '').trim();",
+          "if (adminTotp && requestUrl.includes('/api/v1/admin/')) {",
+          "    pm.request.headers.upsert({ key: 'X-Admin-TOTP', value: adminTotp });",
+          "} else {",
+          "    pm.request.headers.remove('X-Admin-TOTP');",
+          "}"
         ]
       }
     }
