@@ -33,6 +33,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class FamilyAiAdminAccessIntegrationTests {
+    private static final Instant USER_CREATED_AT = Instant.parse("2025-01-01T00:00:00Z");
+    private static final Instant USER_UPDATED_AT = Instant.parse("2025-06-01T12:00:00Z");
+    private static final Instant LAST_LOGIN_AT = Instant.parse("2026-08-31T08:30:00Z");
     private static final Instant GRANTED_AT = Instant.parse("2026-01-01T00:00:00Z");
     private static final Instant VALID_UNTIL = Instant.parse("2099-01-01T00:00:00Z");
     private static final Instant REVOKED_AT = Instant.parse("2026-02-01T00:00:00Z");
@@ -114,9 +117,9 @@ class FamilyAiAdminAccessIntegrationTests {
                 .andExpect(jsonPath("$.users[0].provider").value("GOOGLE"))
                 .andExpect(jsonPath("$.users[0].providerUserId").value("google-special-family@example.com"))
                 .andExpect(jsonPath("$.users[0].persistedPlan").value("FREE"))
-                .andExpect(jsonPath("$.users[0].userCreatedAt").value(special.getCreatedAt().toString()))
-                .andExpect(jsonPath("$.users[0].userUpdatedAt").value(special.getUpdatedAt().toString()))
-                .andExpect(jsonPath("$.users[0].lastLoginAt").value(special.getLastLoginAt().toString()))
+                .andExpect(jsonPath("$.users[0].userCreatedAt").value(USER_CREATED_AT.toString()))
+                .andExpect(jsonPath("$.users[0].userUpdatedAt").value(USER_UPDATED_AT.toString()))
+                .andExpect(jsonPath("$.users[0].lastLoginAt").value(LAST_LOGIN_AT.toString()))
                 .andExpect(jsonPath("$.users[0].active").value(true))
                 .andExpect(jsonPath("$.users[0].validUntil").value(VALID_UNTIL.toString()))
                 .andExpect(jsonPath("$.users[0].reason").value("Friends and family"))
@@ -199,6 +202,9 @@ class FamilyAiAdminAccessIntegrationTests {
         user.setProvider("GOOGLE");
         user.setProviderUserId("google-" + email);
         user.setPlan(planRepository.findById(PlanCode.FREE).orElseThrow());
+        user.setCreatedAt(USER_CREATED_AT);
+        user.setUpdatedAt(USER_UPDATED_AT);
+        user.setLastLoginAt(LAST_LOGIN_AT);
         return userRepository.saveAndFlush(user);
     }
 
