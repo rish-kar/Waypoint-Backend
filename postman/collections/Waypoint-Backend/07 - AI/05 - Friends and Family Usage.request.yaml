@@ -9,11 +9,9 @@ scripts:
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       const body = pm.response.json();
-      pm.test('Family AI usage shape is valid', () => {
+      pm.test('Personal Family AI quota shape is valid', () => {
           pm.expect(body.specialAccess).to.be.a('boolean');
-          pm.expect(body.activeSpecialUsers).to.be.a('number');
           pm.expect(body.requestTokenLimit).to.be.a('number');
-          pm.expect(body.monthlyPoolMicrorupees).to.be.a('number');
           pm.expect(body.monthlyAllowanceMicrorupees).to.be.a('number');
           pm.expect(body.spentMicrorupees).to.be.a('number');
           pm.expect(body.remainingMicrorupees).to.be.a('number');
@@ -22,11 +20,14 @@ scripts:
           pm.expect(body.resetsAt).to.be.a('string').and.not.empty;
           pm.expect(['ACTIVE', 'LIMIT_REACHED', 'NOT_SPECIAL']).to.include(body.status);
       });
+      pm.test('User response does not expose the shared pool or other users', () => {
+          pm.expect(body).to.not.have.property('monthlyPoolMicrorupees');
+          pm.expect(body).to.not.have.property('activeSpecialUsers');
+          pm.expect(body).to.not.have.property('users');
+      });
       if (body.specialAccess) {
-          pm.test('Premium Special budget values are usable', () => {
-              pm.expect(body.activeSpecialUsers).to.be.above(0);
+          pm.test('Premium Special personal quota is usable', () => {
               pm.expect(body.requestTokenLimit).to.eql(5000);
-              pm.expect(body.monthlyPoolMicrorupees).to.be.above(0);
               pm.expect(body.monthlyAllowanceMicrorupees).to.be.above(0);
               pm.expect(body.spentMicrorupees).to.be.at.least(0);
               pm.expect(body.remainingMicrorupees).to.be.at.least(0);
@@ -34,9 +35,7 @@ scripts:
           });
       }
       pm.environment.set('familyAiSpecialAccess', String(body.specialAccess));
-      pm.environment.set('familyAiActiveUsers', String(body.activeSpecialUsers));
       pm.environment.set('familyAiRequestTokenLimit', String(body.requestTokenLimit));
-      pm.environment.set('familyAiMonthlyPoolRupees', String(body.monthlyPoolMicrorupees / 1000000));
       pm.environment.set('familyAiAllowanceRupees', String(body.monthlyAllowanceMicrorupees / 1000000));
       pm.environment.set('familyAiSpentRupees', String(body.spentMicrorupees / 1000000));
       pm.environment.set('familyAiRemainingRupees', String(body.remainingMicrorupees / 1000000));
@@ -46,5 +45,5 @@ scripts:
       pm.environment.set('familyAiStatus', String(body.status));
       pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-family-ai-usage'));
     language: text/javascript
-description: "Returns the exact Friends & Family AI stats displayed in Profile: shared monthly pool, active special users, per-request token cap, individual allowance, used amount, remaining amount, usage percentage, reset period and status. Only active Premium Special accounts receive Family AI budget values."
+description: "Returns only the authenticated user's abstract Friends & Family AI quota: per-request cap, monthly quota, used amount, remaining amount, percentage and reset. It intentionally does not expose the shared pool size, active-user count or other users."
 order: 8180
