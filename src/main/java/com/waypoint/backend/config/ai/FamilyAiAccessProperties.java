@@ -14,7 +14,9 @@ public record FamilyAiAccessProperties(
         BigDecimal outputUsdPerMillionTokens
 ) {
     public FamilyAiAccessProperties {
-        if (monthlyBudgetRupees <= 0) monthlyBudgetRupees = 5_000;
+        if (monthlyBudgetRupees <= 0) {
+            throw new IllegalArgumentException("AI_FAMILY_MONTHLY_BUDGET_RUPEES must be set to a positive value");
+        }
         if (sessionBudgetPercent <= 0 || sessionBudgetPercent > 100) sessionBudgetPercent = 5;
         if (weeklyBudgetPercent <= 0 || weeklyBudgetPercent > 100) weeklyBudgetPercent = 25;
         if (sessionBudgetPercent > weeklyBudgetPercent) sessionBudgetPercent = weeklyBudgetPercent;
