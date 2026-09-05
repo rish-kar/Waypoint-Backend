@@ -74,10 +74,13 @@ class SubscriptionProtectedAiEndpointsTests {
                 .andExpect(jsonPath("$.specialAccess").value(false))
                 .andExpect(jsonPath("$.status").value("NOT_SPECIAL"))
                 .andExpect(jsonPath("$.requestTokenLimit").value(0))
-                .andExpect(jsonPath("$.monthlyAllowanceMicrorupees").value(0))
-                .andExpect(jsonPath("$.spentMicrorupees").value(0))
-                .andExpect(jsonPath("$.remainingMicrorupees").value(0))
-                .andExpect(jsonPath("$.monthlyPoolMicrorupees").doesNotExist())
+                .andExpect(jsonPath("$.monthlyAllowanceRupees").value(0.0))
+                .andExpect(jsonPath("$.spentRupees").value(0.0))
+                .andExpect(jsonPath("$.remainingRupees").value(0.0))
+                .andExpect(jsonPath("$.monthlyAllowanceMicrorupees").doesNotExist())
+                .andExpect(jsonPath("$.spentMicrorupees").doesNotExist())
+                .andExpect(jsonPath("$.remainingMicrorupees").doesNotExist())
+                .andExpect(jsonPath("$.monthlyPoolRupees").doesNotExist())
                 .andExpect(jsonPath("$.activeSpecialUsers").doesNotExist())
                 .andExpect(jsonPath("$.users").doesNotExist());
     }
