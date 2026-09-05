@@ -62,6 +62,7 @@ class FamilyAiBudgetServiceTests {
         grant = grant(userId, "special@example.com", "Special User", true);
         when(grantRepository.findByUserId(userId)).thenReturn(Optional.of(grant));
         when(grantRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(grant));
+        when(grantRepository.findActiveAt(any())).thenReturn(List.of(grant));
         when(grantRepository.sumAiSpentMicrorupeesForPeriod(anyString())).thenReturn(0L);
         when(planRepository.findByCodeForUpdate(PlanCode.PREMIUM_SPECIAL)).thenReturn(Optional.of(new PlanEntity()));
     }
@@ -74,7 +75,6 @@ class FamilyAiBudgetServiceTests {
 
     @Test
     void userViewExposesFiveHourAndWeeklyPercentagesInsteadOfMoney() {
-        when(grantRepository.countActiveAt(any())).thenReturn(1L);
         grant.setAiSessionStartedAt(Instant.now().minusSeconds(60));
         grant.setAiSessionSpentMicrorupees(25L * RUPEE);
         grant.setAiWeeklyStartedAt(Instant.now().minusSeconds(60));
@@ -90,6 +90,29 @@ class FamilyAiBudgetServiceTests {
         assertThat(usage.weeklyWindowDays()).isEqualTo(7);
         assertThat(usage.weeklyUsagePercent()).isEqualTo(10.0);
         assertThat(usage.weeklyResetsAt()).isAfter(Instant.now());
+        assertThat(usage.status()).isEqualTo("ACTIVE");
+    }
+
+    @Test
+    void heavyRecentUserBorrowsUnusedQuotaFromIdleUser() {
+        Instant now = Instant.now();
+        SpecialPremiumGrantEntity idle = grant(UUID.randomUUID(), "idle@example.com", "Idle User", true);
+
+        grant.setAiPeriodKey(currentPeriod());
+        grant.setAiSpentMicrorupees(2_500L * RUPEE);
+        grant.setAiWeeklyStartedAt(now.minusSeconds(60));
+        grant.setAiWeeklySpentMicrorupees(625L * RUPEE);
+        idle.setAiPeriodKey(currentPeriod());
+        idle.setAiSpentMicrorupees(0L);
+
+        when(grantRepository.findActiveAt(any())).thenReturn(List.of(grant, idle));
+        when(grantRepository.sumAiSpentMicrorupeesForPeriod(anyString())).thenReturn(2_500L * RUPEE);
+
+        FamilyAiUsageResponse usage = service.current(userId);
+
+        // A fixed equal split would make 625 rupees equal 100% of this user's weekly limit.
+        // Adaptive borrowing increases the heavy user's allowance while keeping part of the idle user's share protected.
+        assertThat(usage.weeklyUsagePercent()).isLessThan(100.0);
         assertThat(usage.status()).isEqualTo("ACTIVE");
     }
 
@@ -114,7 +137,6 @@ class FamilyAiBudgetServiceTests {
         revoked.setRevokedBy("test-admin");
         revoked.setRevokedAt(now.minusSeconds(60));
 
-        when(grantRepository.countActiveAt(any())).thenReturn(1L);
         when(grantRepository.sumAiSpentMicrorupeesForPeriod(anyString())).thenReturn(600L * RUPEE);
         when(grantRepository.findAllWithUserForFamilyAiAdmin()).thenReturn(List.of(grant, revoked));
 
@@ -153,14 +175,12 @@ class FamilyAiBudgetServiceTests {
         assertThat(usage.requestTokenLimit()).isZero();
         assertThat(usage.sessionUsagePercent()).isZero();
         assertThat(usage.weeklyUsagePercent()).isZero();
-        verify(grantRepository, never()).countActiveAt(any());
+        verify(grantRepository, never()).findActiveAt(any());
         verify(grantRepository, never()).sumAiSpentMicrorupeesForPeriod(anyString());
     }
 
     @Test
     void debitUpdatesMonthlySessionAndWeeklyCountersAtomically() {
-        when(grantRepository.countActiveAt(any())).thenReturn(1L);
-
         assertThat(service.consumeRequestBudget(userId, 1_000, 1, 800)).isTrue();
 
         assertThat(grant.getAiPeriodKey()).isEqualTo(currentPeriod());
@@ -192,7 +212,6 @@ class FamilyAiBudgetServiceTests {
 
     @Test
     void rejectsRequestsThatWouldCrossTheFiveHourLimit() {
-        when(grantRepository.countActiveAt(any())).thenReturn(1L);
         grant.setAiSessionStartedAt(Instant.now().minusSeconds(60));
         grant.setAiSessionSpentMicrorupees(250L * RUPEE - 1L);
 
@@ -205,7 +224,6 @@ class FamilyAiBudgetServiceTests {
 
     @Test
     void expiredFiveHourWindowStartsFreshOnNextRequest() {
-        when(grantRepository.countActiveAt(any())).thenReturn(1L);
         grant.setAiSessionStartedAt(Instant.now().minusSeconds(5 * 60 * 60 + 5));
         grant.setAiSessionSpentMicrorupees(250L * RUPEE);
         grant.setAiSessionRequestCount(99L);
@@ -221,7 +239,6 @@ class FamilyAiBudgetServiceTests {
 
     @Test
     void rejectsRequestsThatWouldCrossTheWeeklyLimit() {
-        when(grantRepository.countActiveAt(any())).thenReturn(1L);
         grant.setAiWeeklyStartedAt(Instant.now().minusSeconds(60));
         grant.setAiWeeklySpentMicrorupees(1_250L * RUPEE - 1L);
 
@@ -234,7 +251,6 @@ class FamilyAiBudgetServiceTests {
 
     @Test
     void expiredWeeklyWindowStartsFreshOnNextRequest() {
-        when(grantRepository.countActiveAt(any())).thenReturn(1L);
         grant.setAiWeeklyStartedAt(Instant.now().minusSeconds(7 * 24 * 60 * 60 + 5));
         grant.setAiWeeklySpentMicrorupees(1_250L * RUPEE);
         grant.setAiWeeklyRequestCount(999L);
@@ -250,7 +266,6 @@ class FamilyAiBudgetServiceTests {
 
     @Test
     void sharedMonthlyPoolStillActsAsTheHardSafetyCap() {
-        when(grantRepository.countActiveAt(any())).thenReturn(1L);
         when(grantRepository.sumAiSpentMicrorupeesForPeriod(anyString()))
                 .thenReturn(5_000L * RUPEE - 1L);
 
@@ -261,7 +276,6 @@ class FamilyAiBudgetServiceTests {
 
     @Test
     void resetsMonthlyCountersWhenMonthChangesButKeepsIndependentRollingWindows() {
-        when(grantRepository.countActiveAt(any())).thenReturn(1L);
         grant.setAiPeriodKey(YearMonth.now(ZoneOffset.UTC).minusMonths(1).toString());
         grant.setAiSpentMicrorupees(4_999L * RUPEE);
         grant.setAiPeriodRequestCount(500L);
