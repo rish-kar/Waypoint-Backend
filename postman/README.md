@@ -6,6 +6,7 @@ The Git-synced Postman source is the single source of truth:
 - `environments/Waypoint Local.environment.yaml` — connected environment source
 - `Waypoint-Local.postman_environment.json` — optional environment export
 - `Waypoint-AI.postman_collection.json` — optional focused AI-only export
+- `Waypoint-Family-AI.postman_collection.json` — focused personal + admin Friends & Family AI checks
 
 The old generated main collection JSON has been removed because the workspace reads the Git-synced collection directly.
 
@@ -112,6 +113,7 @@ The Postman collection automatically sends it as `X-Admin-TOTP` for admin reques
 3. List Special Grants
 4. Get Special Grant
 5. Revoke Premium Special
+6. Family AI Pool Usage — complete admin-only pool plus monthly, 5-hour and weekly per-user usage/details
 
 **05 - Webhook Events**
 1. List Webhook Events
@@ -159,6 +161,47 @@ Use Recovery only when a lifecycle test was interrupted and the selected Lemon S
 2. Usage
 3. Intent - Group Tabs
 4. Chat - Page Context
+5. Friends and Family Usage — authenticated user's abstract 5-hour + weekly usage only
+
+## Friends & Family AI visibility
+
+The Family AI APIs intentionally have separate user and admin views.
+
+**Premium Special user**
+
+```text
+GET /api/v1/ai/family-usage
+Authorization: Bearer <Waypoint JWT>
+```
+
+Returns only:
+
+- Session (`5hr`) usage percentage and reset time
+- Weekly (`7 day`) usage percentage and reset time
+- 5,000-token per-request cap
+- Current limit status
+
+It does **not** return any rupee values, the configured monthly pool, the user's monetary allocation, active Special-user count, monthly accounting period, or any other user.
+
+The backend enforces the 5-hour limit, weekly limit and hidden monthly hard pool before the OpenAI provider call. A request that would cross any enforced limit is rejected before Cloud AI is invoked.
+
+**Admin**
+
+```text
+GET /api/v1/admin/family-ai
+Authorization: Basic <admin credentials>
+```
+
+Returns the complete configured monthly pool, total pool usage/remaining, active Special-user count, 5-hour/weekly configuration and every Special grant user's account details, grant metadata, monetary usage, request counts and input-token counts for monthly/session/weekly windows. The extension uses the equivalent JWT-protected admin view at `/api/v1/ai/family-admin-usage` after verifying the signed-in account resolves to `ADMIN`.
+
+Default backend rolling-limit configuration:
+
+```text
+AI_FAMILY_SESSION_BUDGET_PERCENT=5
+AI_FAMILY_WEEKLY_BUDGET_PERCENT=25
+```
+
+The percentages are applied to each active Special user's current dynamic monthly share. The shared monthly pool remains the final hard safety cap.
 
 ## Local setup
 

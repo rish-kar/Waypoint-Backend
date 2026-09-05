@@ -1,5 +1,6 @@
 package com.waypoint.backend.controller.ai;
 
+import com.waypoint.backend.model.admin.AdminFamilyAiUsageResponse;
 import com.waypoint.backend.model.ai.AiChatRequest;
 import com.waypoint.backend.model.ai.AiChatResponse;
 import com.waypoint.backend.model.ai.AiIntentRequest;
@@ -10,10 +11,13 @@ import com.waypoint.backend.model.ai.ByokApiKeyRequest;
 import com.waypoint.backend.model.ai.ByokModelCatalogResponse;
 import com.waypoint.backend.model.ai.ByokModelRequest;
 import com.waypoint.backend.model.ai.ByokStatusResponse;
+import com.waypoint.backend.model.ai.FamilyAiUsageResponse;
 import com.waypoint.backend.model.entitlement.FeatureCode;
+import com.waypoint.backend.service.admin.FamilyAiAdminService;
 import com.waypoint.backend.service.ai.AiIntentService;
 import com.waypoint.backend.service.ai.AiUsageService;
 import com.waypoint.backend.service.ai.ByokService;
+import com.waypoint.backend.service.ai.FamilyAiBudgetService;
 import com.waypoint.backend.service.entitlement.EntitlementService;
 
 import jakarta.validation.Valid;
@@ -34,17 +38,23 @@ import java.util.UUID;
 public class AiController {
     private final AiIntentService aiIntentService;
     private final AiUsageService aiUsageService;
+    private final FamilyAiBudgetService familyAiBudgetService;
+    private final FamilyAiAdminService familyAiAdminService;
     private final EntitlementService entitlementService;
     private final ByokService byokService;
 
     public AiController(
             AiIntentService aiIntentService,
             AiUsageService aiUsageService,
+            FamilyAiBudgetService familyAiBudgetService,
+            FamilyAiAdminService familyAiAdminService,
             EntitlementService entitlementService,
             ByokService byokService
     ) {
         this.aiIntentService = aiIntentService;
         this.aiUsageService = aiUsageService;
+        this.familyAiBudgetService = familyAiBudgetService;
+        this.familyAiAdminService = familyAiAdminService;
         this.entitlementService = entitlementService;
         this.byokService = byokService;
     }
@@ -58,6 +68,16 @@ public class AiController {
     public AiUsageResponse usage(@AuthenticationPrincipal UUID userId) {
         requireAiAccess(userId);
         return aiUsageService.current(userId);
+    }
+
+    @GetMapping("/family-usage")
+    public FamilyAiUsageResponse familyUsage(@AuthenticationPrincipal UUID userId) {
+        return familyAiBudgetService.current(userId);
+    }
+
+    @GetMapping("/family-admin-usage")
+    public AdminFamilyAiUsageResponse familyAdminUsage(@AuthenticationPrincipal UUID userId) {
+        return familyAiAdminService.currentForAuthenticatedAdmin(userId);
     }
 
     @GetMapping("/byok")
@@ -97,6 +117,7 @@ public class AiController {
             @Valid @RequestBody AiIntentRequest request
     ) {
         requireAiAccess(userId);
+        familyAiBudgetService.consumeRequestBudget(userId, request, 2, 800);
         return aiIntentService.route(userId, request);
     }
 
@@ -106,6 +127,7 @@ public class AiController {
             @Valid @RequestBody AiChatRequest request
     ) {
         requireAiAccess(userId);
+        familyAiBudgetService.consumeRequestBudget(userId, request, 4, 1_200);
         return aiIntentService.chat(userId, request);
     }
 
