@@ -1,6 +1,7 @@
 package com.waypoint.backend.service.ai;
 
 import com.waypoint.backend.model.ai.ByokModelCatalogResponse;
+import com.waypoint.backend.model.ai.ByokProvider;
 import com.waypoint.backend.model.ai.ByokStatusResponse;
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
@@ -9,7 +10,6 @@ import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.security.ai.ByokApiKeyCipher;
 import com.waypoint.backend.service.subscription.SubscriptionService;
-import com.waypoint.backend.utilities.client.ai.OpenAiClient;
 import com.waypoint.backend.utilities.exception.ApiException;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
 import com.waypoint.backend.utilities.exception.NotFoundException;
@@ -33,87 +33,103 @@ public class ByokService {
     private final UserRepository userRepository;
     private final SubscriptionService subscriptionService;
     private final ByokApiKeyCipher apiKeyCipher;
-    private final OpenAiClient openAiClient;
+    private final ByokProviderRegistry providerRegistry;
 
     public ByokService(
             UserRepository userRepository,
             SubscriptionService subscriptionService,
             ByokApiKeyCipher apiKeyCipher,
-            OpenAiClient openAiClient
+            ByokProviderRegistry providerRegistry
     ) {
         this.userRepository = userRepository;
         this.subscriptionService = subscriptionService;
         this.apiKeyCipher = apiKeyCipher;
-        this.openAiClient = openAiClient;
+        this.providerRegistry = providerRegistry;
     }
 
     public ByokStatusResponse status(UUID userId) {
         UserEntity user = requireUser(userId);
         boolean eligible = eligible(userId);
-        boolean configured = StringUtils.hasText(user.getOpenAiApiKeyCiphertext());
-        String selectedModel = cleanModel(user.getOpenAiModel());
+        boolean configured = StringUtils.hasText(ciphertext(user));
+        String provider = configured ? providerFor(user).id() : "";
+        String selectedModel = configured ? selectedModel(user) : "";
         return new ByokStatusResponse(
                 eligible,
                 configured,
                 eligible && configured && StringUtils.hasText(selectedModel),
-                selectedModel
+                provider,
+                selectedModel,
+                providerRegistry.providers()
         );
     }
 
-    public ByokModelCatalogResponse saveApiKey(UUID userId, String apiKey) {
+    public ByokModelCatalogResponse saveApiKey(UUID userId, String providerId, String apiKey) {
         requireEligible(userId);
+        ByokProvider provider = requireProvider(providerId);
         String normalizedKey = normalizeApiKey(apiKey);
-        List<String> models = openAiClient.availableModels(normalizedKey);
+        List<String> models = providerRegistry.availableModels(provider, normalizedKey);
         if (models.isEmpty()) {
-            throw new InvalidRequestException("No compatible OpenAI text models are available for this API key");
+            throw new InvalidRequestException("No compatible text models are available for this " + provider.displayName() + " API key");
         }
 
         UserEntity user = requireUser(userId);
-        String selectedModel = cleanModel(user.getOpenAiModel());
-        if (!models.contains(selectedModel)) {
-            selectedModel = "";
+        String selectedModel = "";
+        if (StringUtils.hasText(ciphertext(user)) && providerFor(user) == provider) {
+            selectedModel = selectedModel(user);
+            if (!models.contains(selectedModel)) {
+                selectedModel = "";
+            }
         }
-        user.setOpenAiApiKeyCiphertext(apiKeyCipher.encrypt(normalizedKey));
-        user.setOpenAiModel(selectedModel.isBlank() ? null : selectedModel);
+
+        user.setByokProvider(provider.id());
+        user.setByokApiKeyCiphertext(apiKeyCipher.encrypt(normalizedKey));
+        user.setByokModel(selectedModel.isBlank() ? null : selectedModel);
+        clearLegacyOpenAiSettings(user);
         userRepository.save(user);
-        return new ByokModelCatalogResponse(models, selectedModel);
+        return new ByokModelCatalogResponse(provider.id(), models, selectedModel);
     }
 
     public ByokModelCatalogResponse models(UUID userId) {
         requireEligible(userId);
         UserEntity user = requireConfiguredUser(userId);
-        List<String> models = openAiClient.availableModels(apiKeyCipher.decrypt(user.getOpenAiApiKeyCiphertext()));
-        String selectedModel = cleanModel(user.getOpenAiModel());
+        ByokProvider provider = providerFor(user);
+        List<String> models = providerRegistry.availableModels(provider, apiKeyCipher.decrypt(ciphertext(user)));
+        String selectedModel = selectedModel(user);
         if (StringUtils.hasText(selectedModel) && !models.contains(selectedModel)) {
+            user.setByokModel(null);
             user.setOpenAiModel(null);
             userRepository.save(user);
             selectedModel = "";
         }
-        return new ByokModelCatalogResponse(models, selectedModel);
+        return new ByokModelCatalogResponse(provider.id(), models, selectedModel);
     }
 
     public ByokStatusResponse selectModel(UUID userId, String model) {
         requireEligible(userId);
         UserEntity user = requireConfiguredUser(userId);
-        String requestedModel = cleanModel(model);
+        ByokProvider provider = providerFor(user);
+        String requestedModel = clean(model);
         if (!StringUtils.hasText(requestedModel)) {
-            throw new InvalidRequestException("OpenAI model is required");
+            throw new InvalidRequestException("AI model is required");
         }
 
-        String apiKey = apiKeyCipher.decrypt(user.getOpenAiApiKeyCiphertext());
-        List<String> models = openAiClient.availableModels(apiKey);
+        String apiKey = apiKeyCipher.decrypt(ciphertext(user));
+        List<String> models = providerRegistry.availableModels(provider, apiKey);
         if (!models.contains(requestedModel)) {
-            throw new InvalidRequestException("That OpenAI model is not available for this API key");
+            throw new InvalidRequestException("That model is not available for this " + provider.displayName() + " API key");
         }
-        user.setOpenAiModel(requestedModel);
+        user.setByokModel(requestedModel);
+        user.setOpenAiModel(null);
         userRepository.save(user);
         return status(userId);
     }
 
     public ByokStatusResponse remove(UUID userId) {
         UserEntity user = requireUser(userId);
-        user.setOpenAiApiKeyCiphertext(null);
-        user.setOpenAiModel(null);
+        user.setByokProvider(null);
+        user.setByokApiKeyCiphertext(null);
+        user.setByokModel(null);
+        clearLegacyOpenAiSettings(user);
         userRepository.save(user);
         return status(userId);
     }
@@ -123,12 +139,15 @@ public class ByokService {
             return Optional.empty();
         }
         UserEntity user = requireUser(userId);
-        if (!StringUtils.hasText(user.getOpenAiApiKeyCiphertext()) || !StringUtils.hasText(user.getOpenAiModel())) {
+        String encryptedKey = ciphertext(user);
+        String model = selectedModel(user);
+        if (!StringUtils.hasText(encryptedKey) || !StringUtils.hasText(model)) {
             return Optional.empty();
         }
         return Optional.of(new ByokCredentials(
-                apiKeyCipher.decrypt(user.getOpenAiApiKeyCiphertext()),
-                cleanModel(user.getOpenAiModel())
+                providerFor(user),
+                apiKeyCipher.decrypt(encryptedKey),
+                model
         ));
     }
 
@@ -152,9 +171,10 @@ public class ByokService {
 
     private UserEntity requireConfiguredUser(UUID userId) {
         UserEntity user = requireUser(userId);
-        if (!StringUtils.hasText(user.getOpenAiApiKeyCiphertext())) {
-            throw new InvalidRequestException("Add an OpenAI API key first");
+        if (!StringUtils.hasText(ciphertext(user))) {
+            throw new InvalidRequestException("Add an AI provider API key first");
         }
+        providerFor(user);
         return user;
     }
 
@@ -163,18 +183,51 @@ public class ByokService {
                 .orElseThrow(() -> new NotFoundException("User not found"));
     }
 
+    private ByokProvider requireProvider(String providerId) {
+        return ByokProvider.find(providerId)
+                .orElseThrow(() -> new InvalidRequestException("Choose a supported AI provider"));
+    }
+
+    private ByokProvider providerFor(UserEntity user) {
+        String providerId = clean(user.getByokProvider());
+        if (!StringUtils.hasText(providerId) && StringUtils.hasText(user.getOpenAiApiKeyCiphertext())) {
+            return ByokProvider.OPENAI;
+        }
+        return ByokProvider.find(providerId)
+                .orElseThrow(() -> new InvalidRequestException("The saved AI provider is no longer supported"));
+    }
+
+    private String ciphertext(UserEntity user) {
+        if (StringUtils.hasText(user.getByokApiKeyCiphertext())) {
+            return user.getByokApiKeyCiphertext().trim();
+        }
+        return clean(user.getOpenAiApiKeyCiphertext());
+    }
+
+    private String selectedModel(UserEntity user) {
+        if (StringUtils.hasText(user.getByokModel())) {
+            return user.getByokModel().trim();
+        }
+        return clean(user.getOpenAiModel());
+    }
+
     private String normalizeApiKey(String apiKey) {
-        String normalized = apiKey == null ? "" : apiKey.trim();
+        String normalized = clean(apiKey);
         if (normalized.length() < 20 || normalized.length() > 512 || normalized.chars().anyMatch(Character::isWhitespace)) {
-            throw new InvalidRequestException("Enter a valid OpenAI API key");
+            throw new InvalidRequestException("Enter a valid API key");
         }
         return normalized;
     }
 
-    private String cleanModel(String model) {
-        return model == null ? "" : model.trim();
+    private void clearLegacyOpenAiSettings(UserEntity user) {
+        user.setOpenAiApiKeyCiphertext(null);
+        user.setOpenAiModel(null);
     }
 
-    public record ByokCredentials(String apiKey, String model) {
+    private String clean(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    public record ByokCredentials(ByokProvider provider, String apiKey, String model) {
     }
 }
