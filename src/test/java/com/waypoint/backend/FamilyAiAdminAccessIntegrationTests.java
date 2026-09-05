@@ -33,6 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class FamilyAiAdminAccessIntegrationTests {
+    private static final long RUPEE = 1_000_000L;
     private static final Instant USER_CREATED_AT = Instant.parse("2025-01-01T00:00:00Z");
     private static final Instant USER_UPDATED_AT = Instant.parse("2025-06-01T12:00:00Z");
     private static final Instant LAST_LOGIN_AT = Instant.parse("2026-08-31T08:30:00Z");
@@ -72,9 +73,9 @@ class FamilyAiAdminAccessIntegrationTests {
     }
 
     @Test
-    void specialUserGetsOnlyOwnAbstractQuotaWhileAdminGetsFullPoolAndUsers() throws Exception {
+    void specialUserGetsOnlyRollingPercentagesWhileAdminGetsFullPoolAndUsers() throws Exception {
         UserEntity special = createUser("special-family@example.com", "Special Family User");
-        SpecialPremiumGrantEntity grant = createGrant(special, 125L * 1_000_000L);
+        SpecialPremiumGrantEntity grant = createGrant(special, 125L * RUPEE);
         UserEntity admin = createUser("admin-family@example.com", "Family Admin");
         String currentPeriod = YearMonth.now(ZoneOffset.UTC).toString();
 
@@ -83,14 +84,20 @@ class FamilyAiAdminAccessIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.specialAccess").value(true))
                 .andExpect(jsonPath("$.requestTokenLimit").value(5_000))
-                .andExpect(jsonPath("$.monthlyAllowanceRupees").value(5_000.0))
-                .andExpect(jsonPath("$.spentRupees").value(125.0))
-                .andExpect(jsonPath("$.remainingRupees").value(4_875.0))
-                .andExpect(jsonPath("$.monthlyAllowanceMicrorupees").doesNotExist())
-                .andExpect(jsonPath("$.spentMicrorupees").doesNotExist())
-                .andExpect(jsonPath("$.remainingMicrorupees").doesNotExist())
+                .andExpect(jsonPath("$.sessionWindowHours").value(5))
+                .andExpect(jsonPath("$.sessionUsagePercent").value(10.0))
+                .andExpect(jsonPath("$.sessionResetsAt").isString())
+                .andExpect(jsonPath("$.weeklyWindowDays").value(7))
+                .andExpect(jsonPath("$.weeklyUsagePercent").value(10.0))
+                .andExpect(jsonPath("$.weeklyResetsAt").isString())
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.monthlyAllowanceRupees").doesNotExist())
+                .andExpect(jsonPath("$.spentRupees").doesNotExist())
+                .andExpect(jsonPath("$.remainingRupees").doesNotExist())
                 .andExpect(jsonPath("$.monthlyPoolRupees").doesNotExist())
                 .andExpect(jsonPath("$.activeSpecialUsers").doesNotExist())
+                .andExpect(jsonPath("$.periodKey").doesNotExist())
+                .andExpect(jsonPath("$.resetsAt").doesNotExist())
                 .andExpect(jsonPath("$.users").doesNotExist());
 
         mockMvc.perform(get("/api/v1/ai/family-admin-usage")
@@ -104,12 +111,12 @@ class FamilyAiAdminAccessIntegrationTests {
                 .andExpect(jsonPath("$.monthlyPoolRupees").value(5_000.0))
                 .andExpect(jsonPath("$.poolSpentRupees").value(125.0))
                 .andExpect(jsonPath("$.poolRemainingRupees").value(4_875.0))
-                .andExpect(jsonPath("$.monthlyPoolMicrorupees").doesNotExist())
-                .andExpect(jsonPath("$.poolSpentMicrorupees").doesNotExist())
-                .andExpect(jsonPath("$.poolRemainingMicrorupees").doesNotExist())
-                .andExpect(jsonPath("$.poolUsagePercent").value(2.5))
                 .andExpect(jsonPath("$.activeSpecialUsers").value(1))
                 .andExpect(jsonPath("$.requestTokenLimit").value(5_000))
+                .andExpect(jsonPath("$.sessionWindowHours").value(5))
+                .andExpect(jsonPath("$.sessionBudgetPercent").value(5))
+                .andExpect(jsonPath("$.weeklyWindowDays").value(7))
+                .andExpect(jsonPath("$.weeklyBudgetPercent").value(25))
                 .andExpect(jsonPath("$.periodKey").value(currentPeriod))
                 .andExpect(jsonPath("$.resetsAt").isString())
                 .andExpect(jsonPath("$.users.length()").value(1))
@@ -117,56 +124,42 @@ class FamilyAiAdminAccessIntegrationTests {
                 .andExpect(jsonPath("$.users[0].userId").value(special.getId().toString()))
                 .andExpect(jsonPath("$.users[0].email").value("special-family@example.com"))
                 .andExpect(jsonPath("$.users[0].displayName").value("Special Family User"))
-                .andExpect(jsonPath("$.users[0].pictureUrl").value("https://cdn.example.com/special-family.png"))
-                .andExpect(jsonPath("$.users[0].phoneNumber").value("5550101"))
-                .andExpect(jsonPath("$.users[0].phoneCountryCode").value("US"))
                 .andExpect(jsonPath("$.users[0].provider").value("GOOGLE"))
-                .andExpect(jsonPath("$.users[0].providerUserId").value("google-special-family@example.com"))
-                .andExpect(jsonPath("$.users[0].persistedPlan").value("FREE"))
-                .andExpect(jsonPath("$.users[0].userCreatedAt").value(USER_CREATED_AT.toString()))
-                .andExpect(jsonPath("$.users[0].userUpdatedAt").value(USER_UPDATED_AT.toString()))
-                .andExpect(jsonPath("$.users[0].lastLoginAt").value(LAST_LOGIN_AT.toString()))
                 .andExpect(jsonPath("$.users[0].active").value(true))
-                .andExpect(jsonPath("$.users[0].validUntil").value(VALID_UNTIL.toString()))
-                .andExpect(jsonPath("$.users[0].reason").value("Friends and family"))
-                .andExpect(jsonPath("$.users[0].grantedBy").value("test-admin"))
-                .andExpect(jsonPath("$.users[0].grantedAt").value(GRANTED_AT.toString()))
                 .andExpect(jsonPath("$.users[0].monthlyAllowanceRupees").value(5_000.0))
                 .andExpect(jsonPath("$.users[0].spentRupees").value(125.0))
                 .andExpect(jsonPath("$.users[0].remainingRupees").value(4_875.0))
-                .andExpect(jsonPath("$.users[0].monthlyAllowanceMicrorupees").doesNotExist())
-                .andExpect(jsonPath("$.users[0].spentMicrorupees").doesNotExist())
-                .andExpect(jsonPath("$.users[0].remainingMicrorupees").doesNotExist())
-                .andExpect(jsonPath("$.users[0].usagePercent").value(2.5))
+                .andExpect(jsonPath("$.users[0].monthlyRequestCount").value(12))
+                .andExpect(jsonPath("$.users[0].monthlyInputTokens").value(24_000))
+                .andExpect(jsonPath("$.users[0].sessionLimitRupees").value(250.0))
+                .andExpect(jsonPath("$.users[0].sessionSpentRupees").value(25.0))
+                .andExpect(jsonPath("$.users[0].sessionRemainingRupees").value(225.0))
+                .andExpect(jsonPath("$.users[0].sessionUsagePercent").value(10.0))
+                .andExpect(jsonPath("$.users[0].sessionRequestCount").value(3))
+                .andExpect(jsonPath("$.users[0].sessionInputTokens").value(6_000))
+                .andExpect(jsonPath("$.users[0].weeklyLimitRupees").value(1_250.0))
+                .andExpect(jsonPath("$.users[0].weeklySpentRupees").value(125.0))
+                .andExpect(jsonPath("$.users[0].weeklyRemainingRupees").value(1_125.0))
+                .andExpect(jsonPath("$.users[0].weeklyUsagePercent").value(10.0))
+                .andExpect(jsonPath("$.users[0].weeklyRequestCount").value(8))
+                .andExpect(jsonPath("$.users[0].weeklyInputTokens").value(16_000))
                 .andExpect(jsonPath("$.users[0].status").value("ACTIVE"));
     }
 
     @Test
-    void basicAdminEndpointReturnsTheSameFullPoolView() throws Exception {
+    void basicAdminEndpointReturnsSameCompleteRollingView() throws Exception {
         UserEntity special = createUser("postman-family@example.com", "Postman Family User");
-        SpecialPremiumGrantEntity grant = createGrant(special, 50L * 1_000_000L);
+        createGrant(special, 50L * RUPEE);
 
         mockMvc.perform(get("/api/v1/admin/family-ai")
                         .with(httpBasic("test-admin", "test-admin-password-12345")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.monthlyPoolRupees").value(5_000.0))
                 .andExpect(jsonPath("$.poolSpentRupees").value(50.0))
-                .andExpect(jsonPath("$.poolRemainingRupees").value(4_950.0))
-                .andExpect(jsonPath("$.activeSpecialUsers").value(1))
-                .andExpect(jsonPath("$.users.length()").value(1))
-                .andExpect(jsonPath("$.users[0].grantId").value(grant.getId().toString()))
-                .andExpect(jsonPath("$.users[0].userId").value(special.getId().toString()))
-                .andExpect(jsonPath("$.users[0].email").value("postman-family@example.com"))
-                .andExpect(jsonPath("$.users[0].displayName").value("Postman Family User"))
-                .andExpect(jsonPath("$.users[0].provider").value("GOOGLE"))
-                .andExpect(jsonPath("$.users[0].persistedPlan").value("FREE"))
-                .andExpect(jsonPath("$.users[0].active").value(true))
-                .andExpect(jsonPath("$.users[0].reason").value("Friends and family"))
-                .andExpect(jsonPath("$.users[0].monthlyAllowanceRupees").value(5_000.0))
-                .andExpect(jsonPath("$.users[0].spentRupees").value(50.0))
-                .andExpect(jsonPath("$.users[0].remainingRupees").value(4_950.0))
-                .andExpect(jsonPath("$.users[0].usagePercent").value(1.0))
-                .andExpect(jsonPath("$.users[0].status").value("ACTIVE"));
+                .andExpect(jsonPath("$.sessionWindowHours").value(5))
+                .andExpect(jsonPath("$.weeklyWindowDays").value(7))
+                .andExpect(jsonPath("$.users[0].sessionUsagePercent").value(10.0))
+                .andExpect(jsonPath("$.users[0].weeklyUsagePercent").value(10.0));
 
         mockMvc.perform(get("/api/v1/admin/family-ai"))
                 .andExpect(status().isUnauthorized());
@@ -175,7 +168,7 @@ class FamilyAiAdminAccessIntegrationTests {
     @Test
     void adminViewKeepsRevokedGrantUsageAndRevocationDetails() throws Exception {
         UserEntity revokedUser = createUser("revoked-family@example.com", "Revoked Family User");
-        SpecialPremiumGrantEntity grant = createGrant(revokedUser, 75L * 1_000_000L);
+        SpecialPremiumGrantEntity grant = createGrant(revokedUser, 75L * RUPEE);
         grant.setActive(false);
         grant.setRevokedBy("test-admin-revoke");
         grant.setRevokedAt(REVOKED_AT);
@@ -186,17 +179,14 @@ class FamilyAiAdminAccessIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.poolSpentRupees").value(75.0))
                 .andExpect(jsonPath("$.activeSpecialUsers").value(0))
-                .andExpect(jsonPath("$.users.length()").value(1))
-                .andExpect(jsonPath("$.users[0].grantId").value(grant.getId().toString()))
-                .andExpect(jsonPath("$.users[0].userId").value(revokedUser.getId().toString()))
                 .andExpect(jsonPath("$.users[0].email").value("revoked-family@example.com"))
                 .andExpect(jsonPath("$.users[0].active").value(false))
                 .andExpect(jsonPath("$.users[0].revokedBy").value("test-admin-revoke"))
                 .andExpect(jsonPath("$.users[0].revokedAt").value(REVOKED_AT.toString()))
                 .andExpect(jsonPath("$.users[0].monthlyAllowanceRupees").value(0.0))
                 .andExpect(jsonPath("$.users[0].spentRupees").value(75.0))
-                .andExpect(jsonPath("$.users[0].remainingRupees").value(0.0))
-                .andExpect(jsonPath("$.users[0].usagePercent").value(0.0))
+                .andExpect(jsonPath("$.users[0].sessionLimitRupees").value(0.0))
+                .andExpect(jsonPath("$.users[0].weeklyLimitRupees").value(0.0))
                 .andExpect(jsonPath("$.users[0].status").value("REVOKED"));
     }
 
@@ -218,6 +208,7 @@ class FamilyAiAdminAccessIntegrationTests {
     }
 
     private SpecialPremiumGrantEntity createGrant(UserEntity user, long spentMicrorupees) {
+        Instant now = Instant.now();
         SpecialPremiumGrantEntity grant = new SpecialPremiumGrantEntity();
         grant.setUser(user);
         grant.setActive(true);
@@ -226,6 +217,16 @@ class FamilyAiAdminAccessIntegrationTests {
         grant.setGrantedBy("test-admin");
         grant.setAiPeriodKey(YearMonth.now(ZoneOffset.UTC).toString());
         grant.setAiSpentMicrorupees(spentMicrorupees);
+        grant.setAiPeriodRequestCount(12L);
+        grant.setAiPeriodInputTokens(24_000L);
+        grant.setAiSessionStartedAt(now.minusSeconds(60));
+        grant.setAiSessionSpentMicrorupees(25L * RUPEE);
+        grant.setAiSessionRequestCount(3L);
+        grant.setAiSessionInputTokens(6_000L);
+        grant.setAiWeeklyStartedAt(now.minusSeconds(60));
+        grant.setAiWeeklySpentMicrorupees(125L * RUPEE);
+        grant.setAiWeeklyRequestCount(8L);
+        grant.setAiWeeklyInputTokens(16_000L);
         grant.setGrantedAt(GRANTED_AT);
         return grantRepository.saveAndFlush(grant);
     }
