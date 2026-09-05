@@ -65,7 +65,7 @@ class SubscriptionProtectedAiEndpointsTests {
     }
 
     @Test
-    void freeUserGetsOnlyZeroedPersonalFamilyUsage() throws Exception {
+    void freeUserGetsOnlyZeroedAbstractFamilyUsage() throws Exception {
         UserEntity user = createUser();
 
         mockMvc.perform(get("/api/v1/ai/family-usage")
@@ -74,12 +74,15 @@ class SubscriptionProtectedAiEndpointsTests {
                 .andExpect(jsonPath("$.specialAccess").value(false))
                 .andExpect(jsonPath("$.status").value("NOT_SPECIAL"))
                 .andExpect(jsonPath("$.requestTokenLimit").value(0))
-                .andExpect(jsonPath("$.monthlyAllowanceRupees").value(0.0))
-                .andExpect(jsonPath("$.spentRupees").value(0.0))
-                .andExpect(jsonPath("$.remainingRupees").value(0.0))
-                .andExpect(jsonPath("$.monthlyAllowanceMicrorupees").doesNotExist())
-                .andExpect(jsonPath("$.spentMicrorupees").doesNotExist())
-                .andExpect(jsonPath("$.remainingMicrorupees").doesNotExist())
+                .andExpect(jsonPath("$.sessionWindowHours").value(5))
+                .andExpect(jsonPath("$.sessionUsagePercent").value(0.0))
+                .andExpect(jsonPath("$.sessionResetsAt").doesNotExist())
+                .andExpect(jsonPath("$.weeklyWindowDays").value(7))
+                .andExpect(jsonPath("$.weeklyUsagePercent").value(0.0))
+                .andExpect(jsonPath("$.weeklyResetsAt").doesNotExist())
+                .andExpect(jsonPath("$.monthlyAllowanceRupees").doesNotExist())
+                .andExpect(jsonPath("$.spentRupees").doesNotExist())
+                .andExpect(jsonPath("$.remainingRupees").doesNotExist())
                 .andExpect(jsonPath("$.monthlyPoolRupees").doesNotExist())
                 .andExpect(jsonPath("$.activeSpecialUsers").doesNotExist())
                 .andExpect(jsonPath("$.users").doesNotExist());
