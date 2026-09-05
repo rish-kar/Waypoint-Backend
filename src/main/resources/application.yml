@@ -122,6 +122,8 @@ ai:
     request-timeout: ${AI_OPENAI_REQUEST_TIMEOUT:30s}
   family-access:
     monthly-budget-rupees: ${AI_FAMILY_MONTHLY_BUDGET_RUPEES:5000}
+    session-budget-percent: ${AI_FAMILY_SESSION_BUDGET_PERCENT:5}
+    weekly-budget-percent: ${AI_FAMILY_WEEKLY_BUDGET_PERCENT:25}
     usd-inr-accounting-rate: ${AI_FAMILY_USD_INR_ACCOUNTING_RATE:100}
     input-usd-per-million-tokens: ${AI_FAMILY_INPUT_USD_PER_MILLION_TOKENS:0.05}
     output-usd-per-million-tokens: ${AI_FAMILY_OUTPUT_USD_PER_MILLION_TOKENS:0.40}
