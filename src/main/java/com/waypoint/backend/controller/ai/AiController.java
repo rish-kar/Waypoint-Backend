@@ -1,5 +1,6 @@
 package com.waypoint.backend.controller.ai;
 
+import com.waypoint.backend.model.admin.AdminFamilyAiUsageResponse;
 import com.waypoint.backend.model.ai.AiChatRequest;
 import com.waypoint.backend.model.ai.AiChatResponse;
 import com.waypoint.backend.model.ai.AiIntentRequest;
@@ -8,6 +9,7 @@ import com.waypoint.backend.model.ai.AiModelCatalogResponse;
 import com.waypoint.backend.model.ai.AiUsageResponse;
 import com.waypoint.backend.model.ai.FamilyAiUsageResponse;
 import com.waypoint.backend.model.entitlement.FeatureCode;
+import com.waypoint.backend.service.admin.FamilyAiAdminService;
 import com.waypoint.backend.service.ai.AiIntentService;
 import com.waypoint.backend.service.ai.AiUsageService;
 import com.waypoint.backend.service.ai.FamilyAiBudgetService;
@@ -29,17 +31,20 @@ public class AiController {
     private final AiIntentService aiIntentService;
     private final AiUsageService aiUsageService;
     private final FamilyAiBudgetService familyAiBudgetService;
+    private final FamilyAiAdminService familyAiAdminService;
     private final EntitlementService entitlementService;
 
     public AiController(
             AiIntentService aiIntentService,
             AiUsageService aiUsageService,
             FamilyAiBudgetService familyAiBudgetService,
+            FamilyAiAdminService familyAiAdminService,
             EntitlementService entitlementService
     ) {
         this.aiIntentService = aiIntentService;
         this.aiUsageService = aiUsageService;
         this.familyAiBudgetService = familyAiBudgetService;
+        this.familyAiAdminService = familyAiAdminService;
         this.entitlementService = entitlementService;
     }
 
@@ -57,6 +62,11 @@ public class AiController {
     @GetMapping("/family-usage")
     public FamilyAiUsageResponse familyUsage(@AuthenticationPrincipal UUID userId) {
         return familyAiBudgetService.current(userId);
+    }
+
+    @GetMapping("/family-admin-usage")
+    public AdminFamilyAiUsageResponse familyAdminUsage(@AuthenticationPrincipal UUID userId) {
+        return familyAiAdminService.currentForAuthenticatedAdmin(userId);
     }
 
     @PostMapping("/intent")
