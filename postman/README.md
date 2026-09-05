@@ -24,7 +24,10 @@ Run the folders in order where applicable.
 Authentication is split by flow.
 
 **01 - Google**
-1. Google Login
+1. Google OAuth - 1 Prepare Authorization URL
+2. Google OAuth - 2 Exchange Authorization Code
+3. Google OAuth - 3 Refresh Access Token — optional manual refresh
+4. Google Login — automatically refreshes the Google access token when needed after the one-time bootstrap
 
 **02 - Microsoft Login**
 1. Start Login
@@ -173,6 +176,28 @@ adminPassword = same value as ADMIN_PASSWORD
 adminTotp = current Microsoft Authenticator code when testing production
 webhookSecret = same value as LEMON_SQUEEZY_WEBHOOK_SECRET
 ```
+
+## Google OAuth local flow
+
+In the `Waypoint Local` environment set:
+
+```text
+googleClientId = same value as GOOGLE_CLIENT_ID
+googleClientSecret = same value as GOOGLE_CLIENT_SECRET
+googleOAuthRedirectUri = https://oauth.pstmn.io/v1/browser-callback
+```
+
+Add `googleOAuthRedirectUri` once to the authorized redirect URIs for the same Google OAuth client used by the backend.
+
+One-time bootstrap:
+
+1. Run Authentication → Google → Google OAuth - 1 Prepare Authorization URL.
+2. Open `googleAuthorizationUrl` in your browser and complete Google consent. The request uses `openid email profile` and requests offline access.
+3. Copy the `code` query parameter from the callback into `googleAuthorizationCode`.
+4. Run Google OAuth - 2 Exchange Authorization Code. This stores `googleAccessToken`, `googleRefreshToken`, and `googleAccessTokenExpiresAt`.
+5. Run Google Login. This stores the Waypoint `jwt`, `waypointRefreshToken`, `userId`, and `userEmail`.
+
+After that, just run Google Login. Its pre-request script refreshes `googleAccessToken` from `googleRefreshToken` automatically when the token is missing or near expiry. Google OAuth - 3 Refresh Access Token is available only when you want to force a refresh manually.
 
 ## Microsoft OAuth local flow
 

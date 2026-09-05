@@ -1,0 +1,41 @@
+$kind: http-request
+description: Exchanges the one-time Google authorization code for googleAccessToken and googleRefreshToken. Run after Google OAuth - 1 Prepare Authorization URL and set googleAuthorizationCode from the browser callback.
+url: https://oauth2.googleapis.com/token
+method: POST
+headers:
+  Content-Type: application/x-www-form-urlencoded
+body:
+  type: text
+  content: "{{googleOAuthTokenRequestBody}}"
+scripts:
+  - type: beforeRequest
+    code: |-
+      const required = ['googleClientId', 'googleClientSecret', 'googleOAuthRedirectUri', 'googleAuthorizationCode'];
+      required.forEach(key => {
+          if (!String(pm.environment.get(key) || '').trim()) {
+              throw new Error(`Set ${key} in the Waypoint Local environment.`);
+          }
+      });
+      const fields = [
+          ['code', pm.environment.get('googleAuthorizationCode')],
+          ['client_id', pm.environment.get('googleClientId')],
+          ['client_secret', pm.environment.get('googleClientSecret')],
+          ['redirect_uri', pm.environment.get('googleOAuthRedirectUri')],
+          ['grant_type', 'authorization_code']
+      ];
+      pm.variables.set('googleOAuthTokenRequestBody', fields.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&'));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Google token exchange succeeded', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) return;
+      const body = pm.response.json();
+      pm.test('Google access token returned', () => pm.expect(body.access_token).to.be.a('string').and.not.empty);
+      pm.test('Google refresh token returned', () => pm.expect(body.refresh_token).to.be.a('string').and.not.empty);
+      pm.test('Google token expiry returned', () => pm.expect(Number(body.expires_in)).to.be.above(0));
+      pm.environment.set('googleAccessToken', body.access_token);
+      pm.environment.set('googleRefreshToken', body.refresh_token);
+      pm.environment.set('googleAccessTokenExpiresAt', String(Date.now() + Number(body.expires_in) * 1000));
+      pm.environment.unset('googleAuthorizationCode');
+    language: text/javascript
+order: 2000

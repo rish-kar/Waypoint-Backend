@@ -1,0 +1,37 @@
+$kind: http-request
+description: Explicitly refreshes googleAccessToken from googleRefreshToken without reopening Google consent or OAuth Playground. Google Login performs the same refresh automatically when the access token is missing or near expiry.
+url: https://oauth2.googleapis.com/token
+method: POST
+headers:
+  Content-Type: application/x-www-form-urlencoded
+body:
+  type: text
+  content: "{{googleOAuthTokenRequestBody}}"
+scripts:
+  - type: beforeRequest
+    code: |-
+      const required = ['googleClientId', 'googleClientSecret', 'googleRefreshToken'];
+      required.forEach(key => {
+          if (!String(pm.environment.get(key) || '').trim()) {
+              throw new Error(`Set ${key} in the Waypoint Local environment.`);
+          }
+      });
+      const fields = [
+          ['client_id', pm.environment.get('googleClientId')],
+          ['client_secret', pm.environment.get('googleClientSecret')],
+          ['refresh_token', pm.environment.get('googleRefreshToken')],
+          ['grant_type', 'refresh_token']
+      ];
+      pm.variables.set('googleOAuthTokenRequestBody', fields.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&'));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Google token refresh succeeded', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) return;
+      const body = pm.response.json();
+      pm.test('Fresh Google access token returned', () => pm.expect(body.access_token).to.be.a('string').and.not.empty);
+      pm.test('Google token expiry returned', () => pm.expect(Number(body.expires_in)).to.be.above(0));
+      pm.environment.set('googleAccessToken', body.access_token);
+      pm.environment.set('googleAccessTokenExpiresAt', String(Date.now() + Number(body.expires_in) * 1000));
+    language: text/javascript
+order: 3000
