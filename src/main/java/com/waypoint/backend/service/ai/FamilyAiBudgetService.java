@@ -4,12 +4,15 @@ import com.knuddels.jtokkit.Encodings;
 import com.knuddels.jtokkit.api.Encoding;
 import com.knuddels.jtokkit.api.EncodingType;
 import com.waypoint.backend.config.ai.FamilyAiAccessProperties;
+import com.waypoint.backend.model.admin.AdminFamilyAiUsageResponse;
+import com.waypoint.backend.model.admin.AdminFamilyAiUserUsageResponse;
 import com.waypoint.backend.model.ai.AiChatMessage;
 import com.waypoint.backend.model.ai.AiChatRequest;
 import com.waypoint.backend.model.ai.AiIntentRequest;
 import com.waypoint.backend.model.ai.FamilyAiUsageResponse;
 import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
 import com.waypoint.backend.model.plan.PlanCode;
+import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
 import com.waypoint.backend.repository.plan.PlanRepository;
 import com.waypoint.backend.utilities.exception.ApiException;
@@ -23,6 +26,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.IntSupplier;
@@ -82,8 +86,6 @@ public class FamilyAiBudgetService {
             return new FamilyAiUsageResponse(
                     false,
                     0,
-                    0,
-                    0L,
                     0L,
                     0L,
                     0L,
@@ -94,32 +96,53 @@ public class FamilyAiBudgetService {
             );
         }
 
-        int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
         String period = periodKey(now);
+        int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
         long poolBudget = monthlyBudgetMicrorupees();
-        long allowance = activeUsers == 0 ? 0 : poolBudget / activeUsers;
+        long allowance = activeUsers <= 0 ? 0L : poolBudget / activeUsers;
         long poolSpent = normalizeSpent(grantRepository.sumAiSpentMicrorupeesForPeriod(period));
-        long globalRemaining = Math.max(0L, poolBudget - Math.min(poolBudget, poolSpent));
-        long spent = specialGrant
-                .filter(grant -> period.equals(grant.getAiPeriodKey()))
-                .map(SpecialPremiumGrantEntity::getAiSpentMicrorupees)
-                .map(value -> Math.max(0L, value))
-                .orElse(0L);
-        long individualRemaining = Math.max(0L, allowance - spent);
-        long remaining = Math.min(individualRemaining, globalRemaining);
-        double percent = allowance <= 0 ? 0.0 : Math.min(100.0, (spent * 100.0) / allowance);
+        long poolRemaining = remaining(poolBudget, poolSpent);
+        long spent = currentPeriodSpend(specialGrant.get(), period);
+        long userRemaining = Math.min(remaining(allowance, spent), poolRemaining);
+        double percent = percentage(spent, allowance);
+
         return new FamilyAiUsageResponse(
                 true,
-                activeUsers,
                 MAX_SPECIAL_REQUEST_INPUT_TOKENS,
-                poolBudget,
                 allowance,
                 spent,
-                remaining,
+                userRemaining,
                 percent,
                 period,
                 resetsAt(now),
-                remaining > 0 ? "ACTIVE" : "LIMIT_REACHED"
+                userRemaining > 0 ? "ACTIVE" : "LIMIT_REACHED"
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public AdminFamilyAiUsageResponse adminCurrent() {
+        Instant now = Instant.now();
+        String period = periodKey(now);
+        int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
+        long poolBudget = monthlyBudgetMicrorupees();
+        long poolSpent = normalizeSpent(grantRepository.sumAiSpentMicrorupeesForPeriod(period));
+        long poolRemaining = remaining(poolBudget, poolSpent);
+        long activeAllowance = activeUsers <= 0 ? 0L : poolBudget / activeUsers;
+
+        List<AdminFamilyAiUserUsageResponse> users = grantRepository.findAllWithUserForFamilyAiAdmin().stream()
+                .map(grant -> adminUserUsage(grant, now, period, activeAllowance, poolRemaining))
+                .toList();
+
+        return new AdminFamilyAiUsageResponse(
+                poolBudget,
+                poolSpent,
+                poolRemaining,
+                percentage(poolSpent, poolBudget),
+                activeUsers,
+                MAX_SPECIAL_REQUEST_INPUT_TOKENS,
+                period,
+                resetsAt(now),
+                users
         );
     }
 
@@ -210,9 +233,7 @@ public class FamilyAiBudgetService {
         long totalBudget = monthlyBudgetMicrorupees();
         long userAllowance = totalBudget / activeUsers;
         long globalSpent = normalizeSpent(grantRepository.sumAiSpentMicrorupeesForPeriod(period));
-        long userSpent = period.equals(grant.getAiPeriodKey())
-                ? Math.max(0L, grant.getAiSpentMicrorupees())
-                : 0L;
+        long userSpent = currentPeriodSpend(grant, period);
         long debit = requestBudgetMicrorupees(estimatedInputTokens, maxProviderCalls, maxOutputTokensPerCall);
 
         if (safeAdd(globalSpent, debit) > totalBudget
@@ -224,6 +245,46 @@ public class FamilyAiBudgetService {
         grant.setAiSpentMicrorupees(safeAdd(userSpent, debit));
         grantRepository.save(grant);
         return true;
+    }
+
+    private AdminFamilyAiUserUsageResponse adminUserUsage(
+            SpecialPremiumGrantEntity grant,
+            Instant now,
+            String period,
+            long activeAllowance,
+            long poolRemaining
+    ) {
+        UserEntity user = grant.getUser();
+        boolean active = isActiveSpecialGrant(grant, now);
+        long spent = currentPeriodSpend(grant, period);
+        long allowance = active ? activeAllowance : 0L;
+        long userRemaining = active ? Math.min(remaining(allowance, spent), poolRemaining) : 0L;
+        String status;
+        if (!grant.isActive()) status = "REVOKED";
+        else if (grant.getValidUntil() != null && !grant.getValidUntil().isAfter(now)) status = "EXPIRED";
+        else status = userRemaining > 0 ? "ACTIVE" : "LIMIT_REACHED";
+
+        return new AdminFamilyAiUserUsageResponse(
+                grant.getId(),
+                user.getId(),
+                user.getEmail(),
+                user.getDisplayName(),
+                user.getProvider(),
+                user.getCreatedAt(),
+                user.getLastLoginAt(),
+                active,
+                grant.getValidUntil(),
+                grant.getReason(),
+                grant.getGrantedBy(),
+                grant.getGrantedAt(),
+                grant.getRevokedBy(),
+                grant.getRevokedAt(),
+                allowance,
+                spent,
+                userRemaining,
+                percentage(spent, allowance),
+                status
+        );
     }
 
     private int countTokens(String value) {
@@ -245,8 +306,22 @@ public class FamilyAiBudgetService {
                 && (grant.getValidUntil() == null || grant.getValidUntil().isAfter(now));
     }
 
+    private long currentPeriodSpend(SpecialPremiumGrantEntity grant, String period) {
+        if (!period.equals(grant.getAiPeriodKey())) return 0L;
+        return Math.max(0L, grant.getAiSpentMicrorupees());
+    }
+
     private long normalizeSpent(Long value) {
         return value == null ? 0L : Math.max(0L, value);
+    }
+
+    private long remaining(long allowance, long spent) {
+        return Math.max(0L, Math.max(0L, allowance) - Math.min(Math.max(0L, allowance), Math.max(0L, spent)));
+    }
+
+    private double percentage(long spent, long allowance) {
+        if (allowance <= 0L) return spent > 0L ? 100.0 : 0.0;
+        return Math.min(100.0, (Math.max(0L, spent) * 100.0) / allowance);
     }
 
     private long requestBudgetMicrorupees(int inputTokens, int maxProviderCalls, int maxOutputTokensPerCall) {
