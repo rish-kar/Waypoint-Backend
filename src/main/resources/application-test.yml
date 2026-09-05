@@ -51,6 +51,10 @@ lemon-squeezy:
   annual-variant-id: "222"
   webhook-secret: test-webhook-secret
 
+ai:
+  family-access:
+    monthly-budget-rupees: 5000
+
 cors:
   allowed-origins:
     - http://localhost:5173
