@@ -1,0 +1,155 @@
+{
+  "info": {
+    "_postman_id": "c8116d78-8d31-49a5-a2d7-6420f97d7730",
+    "name": "Waypoint Backend - Friends & Family AI",
+    "description": "Focused read-only checks for Premium Special / Friends & Family AI access and budget statistics. Use the Waypoint Local environment with baseUrl and jwt populated.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Current Subscription",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Subscription payload is present', () => pm.expect(body).to.be.an('object'));",
+              "pm.environment.set('familyAiCurrentPlan', String(body.plan || ''));",
+              "pm.environment.set('familyAiSubscriptionStatus', String(body.status || ''));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwt}}"
+          },
+          {
+            "key": "X-Request-ID",
+            "value": "postman-family-ai-subscription"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/subscriptions/current",
+        "description": "Confirms which subscription/plan the authenticated account currently receives. Premium Special should be returned for an active Friends & Family grant."
+      }
+    },
+    {
+      "name": "02 - Friends & Family AI Usage",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('Family AI usage shape is valid', () => {",
+              "    pm.expect(body.specialAccess).to.be.a('boolean');",
+              "    pm.expect(body.activeSpecialUsers).to.be.a('number');",
+              "    pm.expect(body.requestTokenLimit).to.be.a('number');",
+              "    pm.expect(body.monthlyPoolMicrorupees).to.be.a('number');",
+              "    pm.expect(body.monthlyAllowanceMicrorupees).to.be.a('number');",
+              "    pm.expect(body.spentMicrorupees).to.be.a('number');",
+              "    pm.expect(body.remainingMicrorupees).to.be.a('number');",
+              "    pm.expect(body.usagePercent).to.be.a('number');",
+              "    pm.expect(body.periodKey).to.match(/^\\d{4}-\\d{2}$/);",
+              "    pm.expect(body.resetsAt).to.be.a('string').and.not.empty;",
+              "    pm.expect(['ACTIVE', 'LIMIT_REACHED', 'NOT_SPECIAL']).to.include(body.status);",
+              "});",
+              "if (body.specialAccess) {",
+              "    pm.test('Premium Special budget values are usable', () => {",
+              "        pm.expect(body.activeSpecialUsers).to.be.above(0);",
+              "        pm.expect(body.requestTokenLimit).to.eql(5000);",
+              "        pm.expect(body.monthlyPoolMicrorupees).to.be.above(0);",
+              "        pm.expect(body.monthlyAllowanceMicrorupees).to.be.above(0);",
+              "        pm.expect(body.spentMicrorupees).to.be.at.least(0);",
+              "        pm.expect(body.remainingMicrorupees).to.be.at.least(0);",
+              "        pm.expect(body.usagePercent).to.be.within(0, 100);",
+              "    });",
+              "}",
+              "pm.environment.set('familyAiSpecialAccess', String(body.specialAccess));",
+              "pm.environment.set('familyAiActiveUsers', String(body.activeSpecialUsers));",
+              "pm.environment.set('familyAiRequestTokenLimit', String(body.requestTokenLimit));",
+              "pm.environment.set('familyAiMonthlyPoolRupees', String(body.monthlyPoolMicrorupees / 1000000));",
+              "pm.environment.set('familyAiAllowanceRupees', String(body.monthlyAllowanceMicrorupees / 1000000));",
+              "pm.environment.set('familyAiSpentRupees', String(body.spentMicrorupees / 1000000));",
+              "pm.environment.set('familyAiRemainingRupees', String(body.remainingMicrorupees / 1000000));",
+              "pm.environment.set('familyAiUsagePercent', String(body.usagePercent));",
+              "pm.environment.set('familyAiPeriodKey', String(body.periodKey));",
+              "pm.environment.set('familyAiResetsAt', String(body.resetsAt));",
+              "pm.environment.set('familyAiStatus', String(body.status));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwt}}"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Request-ID",
+            "value": "postman-family-ai-usage"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/ai/family-usage",
+        "description": "Returns the exact values used by the Profile Friends & Family AI usage panel. Values are also copied to familyAi* environment variables for quick inspection."
+      }
+    },
+    {
+      "name": "03 - General AI Usage",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('General AI entitlement is exposed', () => pm.expect(body.cloudAiAllowed).to.be.a('boolean'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{jwt}}"
+          },
+          {
+            "key": "X-Request-ID",
+            "value": "postman-general-ai-usage"
+          }
+        ],
+        "url": "{{baseUrl}}/api/v1/ai/usage",
+        "description": "Shows the normal Cloud AI entitlement/trial usage alongside the separate Friends & Family budget endpoint."
+      }
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.environment.get('baseUrl')) throw new Error('Select the Waypoint Local environment.');",
+          "if (!pm.environment.get('jwt')) throw new Error('Authenticate first so the jwt environment variable is populated.');"
+        ]
+      }
+    }
+  ]
+}
