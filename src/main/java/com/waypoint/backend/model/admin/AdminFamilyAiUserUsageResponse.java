@@ -1,5 +1,7 @@
 package com.waypoint.backend.model.admin;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.waypoint.backend.model.plan.PlanCode;
 
 import java.time.Instant;
@@ -26,10 +28,28 @@ public record AdminFamilyAiUserUsageResponse(
         Instant grantedAt,
         String revokedBy,
         Instant revokedAt,
-        long monthlyAllowanceMicrorupees,
-        long spentMicrorupees,
-        long remainingMicrorupees,
+        @JsonIgnore long monthlyAllowanceMicrorupees,
+        @JsonIgnore long spentMicrorupees,
+        @JsonIgnore long remainingMicrorupees,
         double usagePercent,
         String status
 ) {
+    @JsonProperty("monthlyAllowanceRupees")
+    public double monthlyAllowanceRupees() {
+        return toRupees(monthlyAllowanceMicrorupees);
+    }
+
+    @JsonProperty("spentRupees")
+    public double spentRupees() {
+        return toRupees(spentMicrorupees);
+    }
+
+    @JsonProperty("remainingRupees")
+    public double remainingRupees() {
+        return toRupees(remainingMicrorupees);
+    }
+
+    private static double toRupees(long microrupees) {
+        return microrupees / 1_000_000.0;
+    }
 }
