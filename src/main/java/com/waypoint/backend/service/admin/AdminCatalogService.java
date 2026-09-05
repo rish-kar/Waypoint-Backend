@@ -1,9 +1,11 @@
 package com.waypoint.backend.service.admin;
 
+import com.waypoint.backend.config.billing.LemonSqueezyProperties;
 import com.waypoint.backend.model.admin.AdminAuditEventEntity;
 import com.waypoint.backend.model.admin.AdminAuditEventResponse;
 import com.waypoint.backend.model.admin.AdminPageResponse;
 import com.waypoint.backend.model.admin.AdminPlanResponse;
+import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.plan.PlanEntity;
 import com.waypoint.backend.repository.admin.AdminAuditEventRepository;
 import com.waypoint.backend.repository.plan.PlanRepository;
@@ -28,10 +30,16 @@ public class AdminCatalogService {
 
     private final PlanRepository planRepository;
     private final AdminAuditEventRepository auditEventRepository;
+    private final LemonSqueezyProperties lemonSqueezyProperties;
 
-    public AdminCatalogService(PlanRepository planRepository, AdminAuditEventRepository auditEventRepository) {
+    public AdminCatalogService(
+            PlanRepository planRepository,
+            AdminAuditEventRepository auditEventRepository,
+            LemonSqueezyProperties lemonSqueezyProperties
+    ) {
         this.planRepository = planRepository;
         this.auditEventRepository = auditEventRepository;
+        this.lemonSqueezyProperties = lemonSqueezyProperties;
     }
 
     @Transactional(readOnly = true)
@@ -76,8 +84,16 @@ public class AdminCatalogService {
     private AdminPlanResponse toPlanResponse(PlanEntity plan) {
         return new AdminPlanResponse(
                 plan.getCode(), plan.getDisplayName(), plan.getBillingInterval(), plan.getPriceCents(), plan.getCurrency(),
-                plan.isPremium(), plan.isActive(), plan.getCreatedAt(), plan.getUpdatedAt()
+                plan.isPremium(), plan.isActive(), providerVariantId(plan.getCode()), plan.getCreatedAt(), plan.getUpdatedAt()
         );
+    }
+
+    private String providerVariantId(PlanCode planCode) {
+        return switch (planCode) {
+            case PREMIUM_MONTHLY -> lemonSqueezyProperties.monthlyVariantId();
+            case PREMIUM_ANNUAL -> lemonSqueezyProperties.annualVariantId();
+            default -> null;
+        };
     }
 
     private AdminAuditEventResponse toAuditResponse(AdminAuditEventEntity event) {

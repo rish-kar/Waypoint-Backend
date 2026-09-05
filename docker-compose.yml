@@ -41,7 +41,6 @@ services:
       ADMIN_ID: ${ADMIN_ID:-local-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-local-admin-password-change-me}
       ADMIN_TOTP_SECRET: ${ADMIN_TOTP_SECRET:-}
-      ADMIN_TOTP_ENCRYPTION_KEY: ${ADMIN_TOTP_ENCRYPTION_KEY:-waypoint-local-admin-totp-encryption-key-change-before-production}
       WAYPOINT_ADMIN_EMAIL: ${WAYPOINT_ADMIN_EMAIL:-}
       JWT_SECRET: ${JWT_SECRET:-waypoint-local-development-secret-change-before-production}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}

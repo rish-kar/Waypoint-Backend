@@ -13,6 +13,7 @@ public record AdminPlanResponse(
         String currency,
         boolean premium,
         boolean active,
+        String providerVariantId,
         Instant createdAt,
         Instant updatedAt
 ) {

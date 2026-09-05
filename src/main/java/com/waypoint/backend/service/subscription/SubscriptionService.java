@@ -14,7 +14,7 @@ import com.waypoint.backend.repository.user.UserRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -180,14 +180,20 @@ public class SubscriptionService {
                 SubscriptionStatus.ON_TRIAL,
                 RENEWING_STATUSES,
                 SubscriptionStatus.CANCELLED,
-                PageRequest.of(0, 1)
+                Pageable.unpaged()
         );
-        if (!premiumCandidates.isEmpty()) {
-            SubscriptionEntity subscription = premiumCandidates.getFirst();
+
+        Candidate bestPremium = null;
+        for (SubscriptionEntity subscription : premiumCandidates) {
             SubscriptionAccessDecision decision = subscriptionAccessPolicy.evaluate(subscription, now);
-            if (decision.premium()) {
-                return premiumSnapshot(subscription, decision, now);
+            if (!decision.premium()) {
+                continue;
             }
+            Candidate candidate = new Candidate(subscription, decision);
+            bestPremium = bestPremium == null ? candidate : betterCandidate(bestPremium, candidate);
+        }
+        if (bestPremium != null) {
+            return premiumSnapshot(bestPremium.subscription(), bestPremium.decision(), now);
         }
 
         SubscriptionEntity latest = subscriptionRepository.findFirstByUserIdOrderByUpdatedAtDesc(userId).orElse(null);
