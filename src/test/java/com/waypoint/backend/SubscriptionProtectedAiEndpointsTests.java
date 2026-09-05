@@ -58,6 +58,47 @@ class SubscriptionProtectedAiEndpointsTests {
     }
 
     @Test
+    void anonymousUserCannotReadFamilyUsage() throws Exception {
+        mockMvc.perform(get("/api/v1/ai/family-usage"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void freeUserGetsOnlyZeroedAbstractFamilyUsage() throws Exception {
+        UserEntity user = createUser();
+
+        mockMvc.perform(get("/api/v1/ai/family-usage")
+                        .header("Authorization", bearer(user)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.specialAccess").value(false))
+                .andExpect(jsonPath("$.status").value("NOT_SPECIAL"))
+                .andExpect(jsonPath("$.requestTokenLimit").value(0))
+                .andExpect(jsonPath("$.sessionWindowHours").value(5))
+                .andExpect(jsonPath("$.sessionUsagePercent").value(0.0))
+                .andExpect(jsonPath("$.sessionResetsAt").doesNotExist())
+                .andExpect(jsonPath("$.weeklyWindowDays").value(7))
+                .andExpect(jsonPath("$.weeklyUsagePercent").value(0.0))
+                .andExpect(jsonPath("$.weeklyResetsAt").doesNotExist())
+                .andExpect(jsonPath("$.monthlyAllowanceRupees").doesNotExist())
+                .andExpect(jsonPath("$.spentRupees").doesNotExist())
+                .andExpect(jsonPath("$.remainingRupees").doesNotExist())
+                .andExpect(jsonPath("$.monthlyPoolRupees").doesNotExist())
+                .andExpect(jsonPath("$.activeSpecialUsers").doesNotExist())
+                .andExpect(jsonPath("$.users").doesNotExist());
+    }
+
+    @Test
+    void normalUserCannotReadFamilyAdminUsage() throws Exception {
+        UserEntity user = createUser();
+
+        mockMvc.perform(get("/api/v1/ai/family-admin-usage")
+                        .header("Authorization", bearer(user)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ADMIN_ACCESS_DENIED"));
+    }
+
+    @Test
     void anonymousUserCannotCallPremiumAi() throws Exception {
         mockMvc.perform(post("/api/v1/ai/intent")
                         .contentType("application/json")
