@@ -58,6 +58,15 @@ public class UserEntity {
     @Column(name = "openai_model", length = 200)
     private String openAiModel;
 
+    @Column(name = "byok_provider", length = 40)
+    private String byokProvider;
+
+    @Column(name = "byok_api_key_ciphertext", length = 4096)
+    private String byokApiKeyCiphertext;
+
+    @Column(name = "byok_model", length = 200)
+    private String byokModel;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -183,6 +192,30 @@ public class UserEntity {
 
     public void setOpenAiModel(String openAiModel) {
         this.openAiModel = openAiModel;
+    }
+
+    public String getByokProvider() {
+        return byokProvider;
+    }
+
+    public void setByokProvider(String byokProvider) {
+        this.byokProvider = byokProvider;
+    }
+
+    public String getByokApiKeyCiphertext() {
+        return byokApiKeyCiphertext;
+    }
+
+    public void setByokApiKeyCiphertext(String byokApiKeyCiphertext) {
+        this.byokApiKeyCiphertext = byokApiKeyCiphertext;
+    }
+
+    public String getByokModel() {
+        return byokModel;
+    }
+
+    public void setByokModel(String byokModel) {
+        this.byokModel = byokModel;
     }
 
     public Instant getCreatedAt() {
