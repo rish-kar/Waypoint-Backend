@@ -106,7 +106,7 @@ public class BillingService {
     }
 
     public BillingStatusResponse billingStatus(UUID userId) {
-        SubscriptionSnapshot subscription = subscriptionService.currentBilling(userId);
+        SubscriptionSnapshot subscription = subscriptionService.current(userId);
         return new BillingStatusResponse(
                 subscription.premium() ? "PREMIUM" : "FREE",
                 subscription.planCode(),

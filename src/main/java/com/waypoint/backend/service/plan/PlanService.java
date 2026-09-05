@@ -42,7 +42,11 @@ public class PlanService {
 
     @Transactional
     public PlanEntity synchronizeUserPlan(UserEntity user) {
-        SubscriptionSnapshot snapshot = subscriptionService.current(user.getId());
+        return synchronizeUserPlan(user, subscriptionService.current(user.getId()));
+    }
+
+    @Transactional
+    public PlanEntity synchronizeUserPlan(UserEntity user, SubscriptionSnapshot snapshot) {
         PlanCode targetCode = snapshot.planCode();
 
         if (user.getPlan() != null && user.getPlan().getCode() == targetCode) {

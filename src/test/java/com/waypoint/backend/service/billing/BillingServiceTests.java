@@ -170,7 +170,7 @@ class BillingServiceTests {
     @Test
     void exposesExactMonthlyPlanCodeForActiveSubscription() {
         UserEntity user = user();
-        when(subscriptionService.currentBilling(user.getId())).thenReturn(snapshot(
+        when(subscriptionService.current(user.getId())).thenReturn(snapshot(
                 PlanCode.PREMIUM_MONTHLY,
                 SubscriptionStatus.ACTIVE,
                 true,
@@ -186,6 +186,23 @@ class BillingServiceTests {
     }
 
     @Test
+    void exposesSpecialPremiumFromEffectiveSubscription() {
+        UserEntity user = user();
+        when(subscriptionService.current(user.getId())).thenReturn(snapshot(
+                PlanCode.PREMIUM_SPECIAL,
+                SubscriptionStatus.PREMIUM_SPECIAL,
+                true,
+                null
+        ));
+
+        BillingStatusResponse result = billingService.billingStatus(user.getId());
+
+        assertThat(result.plan()).isEqualTo("PREMIUM");
+        assertThat(result.planCode()).isEqualTo(PlanCode.PREMIUM_SPECIAL);
+        assertThat(result.status()).isEqualTo("PREMIUM_SPECIAL");
+    }
+
+    @Test
     void exposesOnTrialBillingSubscriptionAndLemonSqueezyTrialEndDate() {
         UserEntity user = user();
         SubscriptionSnapshot snapshot = snapshot(
@@ -194,7 +211,7 @@ class BillingServiceTests {
                 true,
                 "sub_trial"
         );
-        when(subscriptionService.currentBilling(user.getId())).thenReturn(snapshot);
+        when(subscriptionService.current(user.getId())).thenReturn(snapshot);
 
         BillingStatusResponse result = billingService.billingStatus(user.getId());
 
@@ -206,7 +223,7 @@ class BillingServiceTests {
     @Test
     void returnsFreePlanCodeWithoutPaidPremiumAccess() {
         UserEntity user = user();
-        when(subscriptionService.currentBilling(user.getId())).thenReturn(snapshot(
+        when(subscriptionService.current(user.getId())).thenReturn(snapshot(
                 PlanCode.FREE,
                 SubscriptionStatus.INACTIVE,
                 false,

@@ -6,6 +6,7 @@ import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.user.UserRepository;
+import com.waypoint.backend.service.plan.PlanService;
 import com.waypoint.backend.service.subscription.SubscriptionService;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
 import com.waypoint.backend.utilities.exception.NotFoundException;
@@ -34,13 +35,19 @@ public class AdminUserService {
 
     private final UserRepository userRepository;
     private final SubscriptionService subscriptionService;
+    private final PlanService planService;
 
-    public AdminUserService(UserRepository userRepository, SubscriptionService subscriptionService) {
+    public AdminUserService(
+            UserRepository userRepository,
+            SubscriptionService subscriptionService,
+            PlanService planService
+    ) {
         this.userRepository = userRepository;
         this.subscriptionService = subscriptionService;
+        this.planService = planService;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AdminPageResponse<AdminUserResponse> users(
             String q,
             String provider,
@@ -109,13 +116,13 @@ public class AdminUserService {
         );
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AdminUserResponse user(UUID userId) {
         UserEntity user = requireUser(userId);
         return toResponse(user, subscriptionService.current(userId));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AdminUserResponse userByEmail(String email) {
         if (!StringUtils.hasText(email)) {
             throw new InvalidRequestException("email is required");
@@ -137,6 +144,7 @@ public class AdminUserService {
     }
 
     private AdminUserResponse toResponse(UserEntity user, SubscriptionSnapshot subscription) {
+        PlanCode persistedPlan = planService.synchronizeUserPlan(user, subscription).getCode();
         return new AdminUserResponse(
                 user.getId(),
                 user.getEmail(),
@@ -146,7 +154,7 @@ public class AdminUserService {
                 user.getPhoneCountryCode(),
                 user.getProvider(),
                 user.getProviderUserId(),
-                user.getPlan() == null ? null : user.getPlan().getCode(),
+                persistedPlan,
                 subscription.planCode(),
                 subscription.status(),
                 subscription.premium(),
