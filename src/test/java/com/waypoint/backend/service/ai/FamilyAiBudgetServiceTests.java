@@ -1,11 +1,13 @@
 package com.waypoint.backend.service.ai;
 
 import com.waypoint.backend.config.ai.FamilyAiAccessProperties;
+import com.waypoint.backend.model.admin.AdminFamilyAiUsageResponse;
 import com.waypoint.backend.model.ai.AiChatRequest;
 import com.waypoint.backend.model.ai.FamilyAiUsageResponse;
 import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.plan.PlanEntity;
+import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
 import com.waypoint.backend.repository.plan.PlanRepository;
 import com.waypoint.backend.utilities.exception.ApiException;
@@ -53,8 +55,7 @@ class FamilyAiBudgetServiceTests {
                 planRepository
         );
         userId = UUID.randomUUID();
-        grant = new SpecialPremiumGrantEntity();
-        grant.setActive(true);
+        grant = grant(userId, "special@example.com", "Special User", true);
         when(grantRepository.findByUserId(userId)).thenReturn(Optional.of(grant));
         when(grantRepository.findByUserIdForUpdate(userId)).thenReturn(Optional.of(grant));
         when(grantRepository.sumAiSpentMicrorupeesForPeriod(anyString())).thenReturn(0L);
@@ -68,18 +69,49 @@ class FamilyAiBudgetServiceTests {
     }
 
     @Test
-    void dividesTheFiveThousandRupeePoolAcrossCurrentSpecialUsers() {
+    void dividesTheFiveThousandRupeePoolWithoutExposingPoolDetailsToTheUser() {
         when(grantRepository.countActiveAt(any())).thenReturn(50L, 5L);
 
         FamilyAiUsageResponse fiftyUsers = service.current(userId);
         FamilyAiUsageResponse fiveUsers = service.current(userId);
 
-        assertThat(fiftyUsers.activeSpecialUsers()).isEqualTo(50);
+        assertThat(fiftyUsers.specialAccess()).isTrue();
         assertThat(fiftyUsers.requestTokenLimit()).isEqualTo(5_000);
-        assertThat(fiftyUsers.monthlyPoolMicrorupees()).isEqualTo(5_000L * 1_000_000L);
         assertThat(fiftyUsers.monthlyAllowanceMicrorupees()).isEqualTo(100L * 1_000_000L);
-        assertThat(fiveUsers.activeSpecialUsers()).isEqualTo(5);
         assertThat(fiveUsers.monthlyAllowanceMicrorupees()).isEqualTo(1_000L * 1_000_000L);
+    }
+
+    @Test
+    void adminViewExposesFullPoolAndEverySpecialGrantUsage() {
+        SpecialPremiumGrantEntity revoked = grant(UUID.randomUUID(), "revoked@example.com", "Revoked User", false);
+        grant.setAiPeriodKey(currentPeriod());
+        grant.setAiSpentMicrorupees(100L * 1_000_000L);
+        revoked.setAiPeriodKey(currentPeriod());
+        revoked.setAiSpentMicrorupees(500L * 1_000_000L);
+        revoked.setRevokedBy("test-admin");
+        revoked.setRevokedAt(Instant.now().minusSeconds(60));
+
+        when(grantRepository.countActiveAt(any())).thenReturn(1L);
+        when(grantRepository.sumAiSpentMicrorupeesForPeriod(anyString())).thenReturn(600L * 1_000_000L);
+        when(grantRepository.findAllWithUserForFamilyAiAdmin()).thenReturn(List.of(grant, revoked));
+
+        AdminFamilyAiUsageResponse usage = service.adminCurrent();
+
+        assertThat(usage.monthlyPoolMicrorupees()).isEqualTo(5_000L * 1_000_000L);
+        assertThat(usage.poolSpentMicrorupees()).isEqualTo(600L * 1_000_000L);
+        assertThat(usage.poolRemainingMicrorupees()).isEqualTo(4_400L * 1_000_000L);
+        assertThat(usage.activeSpecialUsers()).isEqualTo(1);
+        assertThat(usage.requestTokenLimit()).isEqualTo(5_000);
+        assertThat(usage.users()).hasSize(2);
+        assertThat(usage.users().get(0).email()).isEqualTo("special@example.com");
+        assertThat(usage.users().get(0).monthlyAllowanceMicrorupees()).isEqualTo(5_000L * 1_000_000L);
+        assertThat(usage.users().get(0).spentMicrorupees()).isEqualTo(100L * 1_000_000L);
+        assertThat(usage.users().get(0).remainingMicrorupees()).isEqualTo(4_400L * 1_000_000L);
+        assertThat(usage.users().get(0).status()).isEqualTo("ACTIVE");
+        assertThat(usage.users().get(1).email()).isEqualTo("revoked@example.com");
+        assertThat(usage.users().get(1).monthlyAllowanceMicrorupees()).isZero();
+        assertThat(usage.users().get(1).spentMicrorupees()).isEqualTo(500L * 1_000_000L);
+        assertThat(usage.users().get(1).status()).isEqualTo("REVOKED");
     }
 
     @Test
@@ -90,9 +122,7 @@ class FamilyAiBudgetServiceTests {
 
         assertThat(usage.specialAccess()).isFalse();
         assertThat(usage.status()).isEqualTo("NOT_SPECIAL");
-        assertThat(usage.activeSpecialUsers()).isZero();
         assertThat(usage.requestTokenLimit()).isZero();
-        assertThat(usage.monthlyPoolMicrorupees()).isZero();
         assertThat(usage.monthlyAllowanceMicrorupees()).isZero();
         assertThat(usage.spentMicrorupees()).isZero();
         assertThat(usage.remainingMicrorupees()).isZero();
@@ -196,6 +226,25 @@ class FamilyAiBudgetServiceTests {
 
         verify(planRepository, never()).findByCodeForUpdate(any());
         verify(grantRepository, never()).findByUserIdForUpdate(any());
+    }
+
+    private SpecialPremiumGrantEntity grant(UUID id, String email, String name, boolean active) {
+        UserEntity user = new UserEntity();
+        user.setId(id);
+        user.setEmail(email);
+        user.setDisplayName(name);
+        user.setProvider("GOOGLE");
+        user.setCreatedAt(Instant.now().minusSeconds(3_600));
+        user.setLastLoginAt(Instant.now().minusSeconds(60));
+
+        SpecialPremiumGrantEntity value = new SpecialPremiumGrantEntity();
+        value.setId(UUID.randomUUID());
+        value.setUser(user);
+        value.setActive(active);
+        value.setReason("Friends and family");
+        value.setGrantedBy("test-admin");
+        value.setGrantedAt(Instant.now().minusSeconds(600));
+        return value;
     }
 
     private String currentPeriod() {
