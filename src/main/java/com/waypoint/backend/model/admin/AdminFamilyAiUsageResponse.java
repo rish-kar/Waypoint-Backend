@@ -13,26 +13,22 @@ public record AdminFamilyAiUsageResponse(
         double poolUsagePercent,
         int activeSpecialUsers,
         int requestTokenLimit,
+        int sessionWindowHours,
+        int sessionBudgetPercent,
+        int weeklyWindowDays,
+        int weeklyBudgetPercent,
         String periodKey,
         Instant resetsAt,
         List<AdminFamilyAiUserUsageResponse> users
 ) {
     @JsonProperty("monthlyPoolRupees")
-    public double monthlyPoolRupees() {
-        return toRupees(monthlyPoolMicrorupees);
-    }
+    public double monthlyPoolRupees() { return toRupees(monthlyPoolMicrorupees); }
 
     @JsonProperty("poolSpentRupees")
-    public double poolSpentRupees() {
-        return toRupees(poolSpentMicrorupees);
-    }
+    public double poolSpentRupees() { return toRupees(poolSpentMicrorupees); }
 
     @JsonProperty("poolRemainingRupees")
-    public double poolRemainingRupees() {
-        return toRupees(poolRemainingMicrorupees);
-    }
+    public double poolRemainingRupees() { return toRupees(poolRemainingMicrorupees); }
 
-    private static double toRupees(long microrupees) {
-        return microrupees / 1_000_000.0;
-    }
+    private static double toRupees(long microrupees) { return microrupees / 1_000_000.0; }
 }
