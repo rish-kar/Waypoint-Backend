@@ -1,0 +1,3 @@
+$kind: collection
+description: Exercise subscription state changes against the selected paid test subscription.
+order: 2000

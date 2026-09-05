@@ -1,0 +1,41 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/admin/plans"
+method: GET
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      if (!adminId || !adminPassword) {
+          throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      }
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) return;
+      const body = pm.response.json();
+      pm.test('Plans returned', () => pm.expect(body).to.be.an('array').and.not.empty);
+
+      const monthly = body.find(plan => plan.code === 'PREMIUM_MONTHLY');
+      const annual = body.find(plan => plan.code === 'PREMIUM_ANNUAL');
+      pm.test('Configured monthly billing variant returned', () => {
+          pm.expect(monthly?.providerVariantId).to.be.a('string').and.not.empty;
+      });
+      pm.test('Configured annual billing variant returned', () => {
+          pm.expect(annual?.providerVariantId).to.be.a('string').and.not.empty;
+      });
+
+      if (monthly?.providerVariantId) pm.environment.set('monthlyVariantId', monthly.providerVariantId);
+      if (annual?.providerVariantId) pm.environment.set('annualVariantId', annual.providerVariantId);
+    language: text/javascript
+order: 7000

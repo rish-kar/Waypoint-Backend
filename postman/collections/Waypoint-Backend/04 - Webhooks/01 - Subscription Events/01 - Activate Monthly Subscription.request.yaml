@@ -1,0 +1,115 @@
+$kind: http-request
+description: Creates a fresh ACTIVE monthly subscription for the selected user using the Lemon Squeezy webhook path, then verifies the resulting user plan and exact subscription through admin Basic Auth. Run Admin > Plans > List Plans first so monthlyVariantId is copied from the running backend configuration.
+url: "{{baseUrl}}/api/v1/webhooks/lemonsqueezy"
+method: POST
+headers:
+  Content-Type: application/json
+  X-Signature: "{{webhookSignature}}"
+body:
+  type: json
+  content: "{{webhookBody}}"
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+
+      const secret = pm.environment.get('webhookSecret');
+      const userId = pm.environment.get('userId');
+      const variantId = pm.environment.get('monthlyVariantId');
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      if (!secret) throw new Error('Set webhookSecret in the environment.');
+      if (!userId) throw new Error('Run Find User by Email first so userId is populated.');
+      if (!variantId) throw new Error('Run Admin > Plans > List Plans first so monthlyVariantId matches the running backend.');
+      if (!adminId || !adminPassword) throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+
+      const adminBasicAuth = CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`));
+      pm.environment.set('adminBasicAuth', adminBasicAuth);
+
+      const now = new Date();
+      const renewsAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      const safeUser = String(userId).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
+      const subscriptionId = `postman-${safeUser}-${Date.now()}`;
+      pm.environment.set('subscriptionId', subscriptionId);
+
+      const payload = JSON.stringify({
+        meta: {
+          event_name: 'subscription_created',
+          custom_data: { waypoint_user_id: userId, waypoint_plan: 'MONTHLY' }
+        },
+        data: {
+          type: 'subscriptions',
+          id: subscriptionId,
+          attributes: {
+            customer_id: `postman-customer-${safeUser}`,
+            product_id: 'postman-product',
+            variant_id: variantId,
+            status: 'active',
+            updated_at: now.toISOString(),
+            renews_at: renewsAt.toISOString(),
+            ends_at: null
+          }
+        }
+      });
+      pm.variables.set('webhookBody', payload);
+      pm.variables.set('webhookSignature', CryptoJS.HmacSHA256(payload, secret).toString(CryptoJS.enc.Hex));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Webhook status is 200', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) return;
+
+      const baseUrl = pm.environment.get('baseUrl');
+      const expectedSubscriptionId = pm.environment.get('subscriptionId');
+      const expectedUserId = pm.environment.get('userId');
+      const adminAuth = pm.environment.get('adminBasicAuth');
+
+      pm.sendRequest({
+        url: `${baseUrl}/api/v1/admin/users/${expectedUserId}`,
+        method: 'GET',
+        header: { Authorization: `Basic ${adminAuth}` }
+      }, (error, response) => {
+        pm.test('Admin user verification succeeded', () => {
+          pm.expect(error).to.eql(null);
+          pm.expect(response.code).to.eql(200);
+        });
+        if (error || response.code !== 200) return;
+        const body = response.json();
+        pm.test('User switched to Premium Monthly', () => {
+          pm.expect(body.id).to.eql(expectedUserId);
+          pm.expect(body.persistedPlan).to.eql('PREMIUM_MONTHLY');
+          pm.expect(body.plan).to.eql('PREMIUM_MONTHLY');
+          pm.expect(body.premium).to.eql(true);
+        });
+      });
+
+      pm.sendRequest({
+        url: `${baseUrl}/api/v1/admin/subscriptions?userId=${encodeURIComponent(expectedUserId)}&size=50&sort=updatedAt&direction=DESC`,
+        method: 'GET',
+        header: { Authorization: `Basic ${adminAuth}` }
+      }, (error, response) => {
+        pm.test('Admin subscription verification succeeded', () => {
+          pm.expect(error).to.eql(null);
+          pm.expect(response.code).to.eql(200);
+        });
+        if (error || response.code !== 200) return;
+        const body = response.json();
+        const created = body.items.find(item => item.externalSubscriptionId === expectedSubscriptionId);
+        pm.test('Generated monthly subscription was persisted', () => {
+          pm.expect(created, 'generated subscription not found').to.exist;
+          pm.expect(created.userId).to.eql(expectedUserId);
+          pm.expect(created.plan).to.eql('MONTHLY');
+          pm.expect(created.status).to.eql('ACTIVE');
+        });
+        if (created) {
+          pm.environment.set('adminSubscriptionId', created.id);
+          pm.environment.set('adminSubscriptionUserId', created.userId);
+        }
+      });
+    language: text/javascript
+order: 2000

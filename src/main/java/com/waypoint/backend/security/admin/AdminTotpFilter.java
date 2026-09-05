@@ -1,6 +1,6 @@
 package com.waypoint.backend.security.admin;
 
-import com.waypoint.backend.service.admin.AdminAccountService;
+import com.waypoint.backend.config.admin.AdminProperties;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -14,14 +14,17 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 
 public class AdminTotpFilter extends OncePerRequestFilter {
     private static final String HEADER = "X-Admin-TOTP";
 
-    private final AdminAccountService adminAccountService;
+    private final AdminProperties adminProperties;
+    private final AdminTotpVerifier adminTotpVerifier;
 
-    public AdminTotpFilter(AdminAccountService adminAccountService) {
-        this.adminAccountService = adminAccountService;
+    public AdminTotpFilter(AdminProperties adminProperties, AdminTotpVerifier adminTotpVerifier) {
+        this.adminProperties = adminProperties;
+        this.adminTotpVerifier = adminTotpVerifier;
     }
 
     @Override
@@ -33,7 +36,14 @@ public class AdminTotpFilter extends OncePerRequestFilter {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication == null ? null : authentication.getName();
         String suppliedCode = request.getHeader(HEADER);
-        if (!StringUtils.hasText(username) || !adminAccountService.validTotp(username, suppliedCode)) {
+
+        boolean configuredAdmin = StringUtils.hasText(username)
+                && username.equals(adminProperties.id());
+        boolean validCode = configuredAdmin
+                && StringUtils.hasText(adminProperties.totpSecret())
+                && adminTotpVerifier.validCode(adminProperties.totpSecret(), suppliedCode, Instant.now());
+
+        if (!validCode) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setCharacterEncoding(StandardCharsets.UTF_8.name());

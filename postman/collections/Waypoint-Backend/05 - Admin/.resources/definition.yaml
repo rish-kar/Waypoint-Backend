@@ -1,2 +1,3 @@
 $kind: collection
+description: Operational admin API grouped by resource. Basic Auth credentials are generated into adminBasicAuth in the selected environment.
 order: 6000

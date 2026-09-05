@@ -92,7 +92,7 @@ public class WebhookSubscriptionProcessor {
         }
 
         subscription.setLastProviderEventAt(providerEventAt);
-        subscriptionRepository.save(subscription);
+        subscriptionRepository.saveAndFlush(subscription);
         planService.synchronizeUserPlan(user);
     }
 

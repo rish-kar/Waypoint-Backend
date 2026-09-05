@@ -13,7 +13,6 @@ spring:
 admin:
   id: test-admin
   password: test-admin-password-12345
-  totp-encryption-key: test-admin-totp-encryption-key-long-enough-12345
 
 jwt:
   secret: test-secret-that-is-long-enough-for-hmac

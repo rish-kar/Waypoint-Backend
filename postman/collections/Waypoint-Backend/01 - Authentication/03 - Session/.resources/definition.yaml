@@ -1,0 +1,3 @@
+$kind: collection
+description: Shared Waypoint session operations after sign-in.
+order: 3000

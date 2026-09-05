@@ -67,7 +67,6 @@ admin:
   id: ${ADMIN_ID:}
   password: ${ADMIN_PASSWORD:}
   totp-secret: ${ADMIN_TOTP_SECRET:}
-  totp-encryption-key: ${ADMIN_TOTP_ENCRYPTION_KEY:waypoint-local-admin-totp-encryption-key-change-before-production}
 
 subscription-access:
   admin-email: ${WAYPOINT_ADMIN_EMAIL:}
