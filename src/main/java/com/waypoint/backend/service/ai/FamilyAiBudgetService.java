@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
@@ -38,6 +39,8 @@ public class FamilyAiBudgetService {
     private static final long MICRORUPEES_PER_RUPEE = 1_000_000L;
     private static final int MAX_SPECIAL_REQUEST_INPUT_TOKENS = 5_000;
     private static final int PROVIDER_OVERHEAD_TOKENS = 5_000;
+    private static final Duration SESSION_WINDOW = Duration.ofHours(5);
+    private static final Duration WEEKLY_WINDOW = Duration.ofDays(7);
     private static final Encoding GPT5_ENCODING = Encodings.newDefaultEncodingRegistry()
             .getEncoding(EncodingType.O200K_BASE);
 
@@ -83,17 +86,7 @@ public class FamilyAiBudgetService {
         Instant now = Instant.now();
         Optional<SpecialPremiumGrantEntity> specialGrant = activeSpecialGrant(userId, now);
         if (specialGrant.isEmpty()) {
-            return new FamilyAiUsageResponse(
-                    false,
-                    0,
-                    0L,
-                    0L,
-                    0L,
-                    0.0,
-                    periodKey(now),
-                    resetsAt(now),
-                    "NOT_SPECIAL"
-            );
+            return new FamilyAiUsageResponse(false, 0, 5, 0.0, null, 7, 0.0, null, "NOT_SPECIAL");
         }
 
         String period = periodKey(now);
@@ -102,20 +95,33 @@ public class FamilyAiBudgetService {
         long allowance = activeUsers <= 0 ? 0L : poolBudget / activeUsers;
         long poolSpent = normalizeSpent(grantRepository.sumAiSpentMicrorupeesForPeriod(period));
         long poolRemaining = remaining(poolBudget, poolSpent);
-        long spent = currentPeriodSpend(specialGrant.get(), period);
-        long userRemaining = Math.min(remaining(allowance, spent), poolRemaining);
-        double percent = percentage(spent, allowance);
+        SpecialPremiumGrantEntity grant = specialGrant.get();
+        long monthlySpent = currentPeriodSpend(grant, period);
+        long monthlyRemaining = Math.min(remaining(allowance, monthlySpent), poolRemaining);
+
+        WindowUsage session = sessionUsage(grant, now);
+        WindowUsage weekly = weeklyUsage(grant, now);
+        long sessionLimit = budgetPercent(allowance, properties.sessionBudgetPercent());
+        long weeklyLimit = budgetPercent(allowance, properties.weeklyBudgetPercent());
+        long sessionRemaining = Math.min(remaining(sessionLimit, session.spentMicrorupees()), monthlyRemaining);
+        long weeklyRemaining = Math.min(remaining(weeklyLimit, weekly.spentMicrorupees()), monthlyRemaining);
+
+        String status;
+        if (monthlyRemaining <= 0L) status = "ACCOUNT_LIMIT_REACHED";
+        else if (sessionRemaining <= 0L) status = "SESSION_LIMIT_REACHED";
+        else if (weeklyRemaining <= 0L) status = "WEEKLY_LIMIT_REACHED";
+        else status = "ACTIVE";
 
         return new FamilyAiUsageResponse(
                 true,
                 MAX_SPECIAL_REQUEST_INPUT_TOKENS,
-                allowance,
-                spent,
-                userRemaining,
-                percent,
-                period,
-                resetsAt(now),
-                userRemaining > 0 ? "ACTIVE" : "LIMIT_REACHED"
+                Math.toIntExact(SESSION_WINDOW.toHours()),
+                percentage(session.spentMicrorupees(), sessionLimit),
+                session.resetsAt(),
+                Math.toIntExact(WEEKLY_WINDOW.toDays()),
+                percentage(weekly.spentMicrorupees(), weeklyLimit),
+                weekly.resetsAt(),
+                status
         );
     }
 
@@ -140,56 +146,29 @@ public class FamilyAiBudgetService {
                 percentage(poolSpent, poolBudget),
                 activeUsers,
                 MAX_SPECIAL_REQUEST_INPUT_TOKENS,
+                Math.toIntExact(SESSION_WINDOW.toHours()),
+                properties.sessionBudgetPercent(),
+                Math.toIntExact(WEEKLY_WINDOW.toDays()),
+                properties.weeklyBudgetPercent(),
                 period,
-                resetsAt(now),
+                monthlyResetsAt(now),
                 users
         );
     }
 
     @Transactional
-    public boolean consumeRequestBudget(
-            UUID userId,
-            AiIntentRequest request,
-            int maxProviderCalls,
-            int maxOutputTokensPerCall
-    ) {
-        return consumeRequestBudgetIfSpecial(
-                userId,
-                () -> estimateInputTokens(request),
-                maxProviderCalls,
-                maxOutputTokensPerCall
-        );
+    public boolean consumeRequestBudget(UUID userId, AiIntentRequest request, int maxProviderCalls, int maxOutputTokensPerCall) {
+        return consumeRequestBudgetIfSpecial(userId, () -> estimateInputTokens(request), maxProviderCalls, maxOutputTokensPerCall);
     }
 
     @Transactional
-    public boolean consumeRequestBudget(
-            UUID userId,
-            AiChatRequest request,
-            int maxProviderCalls,
-            int maxOutputTokensPerCall
-    ) {
-        return consumeRequestBudgetIfSpecial(
-                userId,
-                () -> estimateInputTokens(request),
-                maxProviderCalls,
-                maxOutputTokensPerCall
-        );
+    public boolean consumeRequestBudget(UUID userId, AiChatRequest request, int maxProviderCalls, int maxOutputTokensPerCall) {
+        return consumeRequestBudgetIfSpecial(userId, () -> estimateInputTokens(request), maxProviderCalls, maxOutputTokensPerCall);
     }
 
-    // Narrow numeric entry point used by budget-boundary unit tests.
     @Transactional
-    public boolean consumeRequestBudget(
-            UUID userId,
-            int estimatedInputTokens,
-            int maxProviderCalls,
-            int maxOutputTokensPerCall
-    ) {
-        return consumeRequestBudgetIfSpecial(
-                userId,
-                () -> estimatedInputTokens,
-                maxProviderCalls,
-                maxOutputTokensPerCall
-        );
+    public boolean consumeRequestBudget(UUID userId, int estimatedInputTokens, int maxProviderCalls, int maxOutputTokensPerCall) {
+        return consumeRequestBudgetIfSpecial(userId, () -> estimatedInputTokens, maxProviderCalls, maxOutputTokensPerCall);
     }
 
     private boolean consumeRequestBudgetIfSpecial(
@@ -199,20 +178,11 @@ public class FamilyAiBudgetService {
             int maxOutputTokensPerCall
     ) {
         Instant now = Instant.now();
-        if (activeSpecialGrant(userId, now).isEmpty()) {
-            // Family AI limits are deliberately scoped only to Premium Special.
-            // Non-Special tiers return before tokenization, locking or accounting.
-            return false;
-        }
+        if (activeSpecialGrant(userId, now).isEmpty()) return false;
 
         int estimatedInputTokens = Math.max(0, inputTokenCounter.getAsInt());
-        if (estimatedInputTokens > MAX_SPECIAL_REQUEST_INPUT_TOKENS) {
-            throw familyRequestTooLarge();
-        }
+        if (estimatedInputTokens > MAX_SPECIAL_REQUEST_INPUT_TOKENS) throw familyRequestTooLarge();
 
-        // The permanent Premium Special catalogue row is the single global lock.
-        // Admin grant/revoke operations take the same lock before changing membership,
-        // so the active-user divisor cannot change while this debit is calculated.
         planRepository.findByCodeForUpdate(PlanCode.PREMIUM_SPECIAL)
                 .orElseThrow(() -> new IllegalStateException("Premium Special plan is unavailable"));
 
@@ -226,9 +196,7 @@ public class FamilyAiBudgetService {
 
         String period = periodKey(now);
         int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
-        if (activeUsers <= 0) {
-            throw familyLimitReached();
-        }
+        if (activeUsers <= 0) throw familyAccessLimitReached();
 
         long totalBudget = monthlyBudgetMicrorupees();
         long userAllowance = totalBudget / activeUsers;
@@ -236,13 +204,33 @@ public class FamilyAiBudgetService {
         long userSpent = currentPeriodSpend(grant, period);
         long debit = requestBudgetMicrorupees(estimatedInputTokens, maxProviderCalls, maxOutputTokensPerCall);
 
-        if (safeAdd(globalSpent, debit) > totalBudget
-                || safeAdd(userSpent, debit) > userAllowance) {
-            throw familyLimitReached();
-        }
+        WindowUsage session = sessionUsage(grant, now);
+        WindowUsage weekly = weeklyUsage(grant, now);
+        long sessionLimit = budgetPercent(userAllowance, properties.sessionBudgetPercent());
+        long weeklyLimit = budgetPercent(userAllowance, properties.weeklyBudgetPercent());
 
+        if (safeAdd(globalSpent, debit) > totalBudget || safeAdd(userSpent, debit) > userAllowance) {
+            throw familyAccessLimitReached();
+        }
+        if (safeAdd(session.spentMicrorupees(), debit) > sessionLimit) throw familySessionLimitReached();
+        if (safeAdd(weekly.spentMicrorupees(), debit) > weeklyLimit) throw familyWeeklyLimitReached();
+
+        boolean sameMonthlyPeriod = period.equals(grant.getAiPeriodKey());
         grant.setAiPeriodKey(period);
         grant.setAiSpentMicrorupees(safeAdd(userSpent, debit));
+        grant.setAiPeriodRequestCount(safeAdd(sameMonthlyPeriod ? grant.getAiPeriodRequestCount() : 0L, 1L));
+        grant.setAiPeriodInputTokens(safeAdd(sameMonthlyPeriod ? grant.getAiPeriodInputTokens() : 0L, estimatedInputTokens));
+
+        grant.setAiSessionStartedAt(session.startedAt());
+        grant.setAiSessionSpentMicrorupees(safeAdd(session.spentMicrorupees(), debit));
+        grant.setAiSessionRequestCount(safeAdd(session.requestCount(), 1L));
+        grant.setAiSessionInputTokens(safeAdd(session.inputTokens(), estimatedInputTokens));
+
+        grant.setAiWeeklyStartedAt(weekly.startedAt());
+        grant.setAiWeeklySpentMicrorupees(safeAdd(weekly.spentMicrorupees(), debit));
+        grant.setAiWeeklyRequestCount(safeAdd(weekly.requestCount(), 1L));
+        grant.setAiWeeklyInputTokens(safeAdd(weekly.inputTokens(), estimatedInputTokens));
+
         grantRepository.save(grant);
         return true;
     }
@@ -259,10 +247,24 @@ public class FamilyAiBudgetService {
         long spent = currentPeriodSpend(grant, period);
         long allowance = active ? activeAllowance : 0L;
         long userRemaining = active ? Math.min(remaining(allowance, spent), poolRemaining) : 0L;
+        boolean sameMonthlyPeriod = period.equals(grant.getAiPeriodKey());
+        long monthlyRequests = sameMonthlyPeriod ? Math.max(0L, grant.getAiPeriodRequestCount()) : 0L;
+        long monthlyInputTokens = sameMonthlyPeriod ? Math.max(0L, grant.getAiPeriodInputTokens()) : 0L;
+
+        WindowUsage session = sessionUsage(grant, now);
+        WindowUsage weekly = weeklyUsage(grant, now);
+        long sessionLimit = active ? budgetPercent(allowance, properties.sessionBudgetPercent()) : 0L;
+        long weeklyLimit = active ? budgetPercent(allowance, properties.weeklyBudgetPercent()) : 0L;
+        long sessionRemaining = active ? Math.min(remaining(sessionLimit, session.spentMicrorupees()), userRemaining) : 0L;
+        long weeklyRemaining = active ? Math.min(remaining(weeklyLimit, weekly.spentMicrorupees()), userRemaining) : 0L;
+
         String status;
         if (!grant.isActive()) status = "REVOKED";
         else if (grant.getValidUntil() != null && !grant.getValidUntil().isAfter(now)) status = "EXPIRED";
-        else status = userRemaining > 0 ? "ACTIVE" : "LIMIT_REACHED";
+        else if (userRemaining <= 0L) status = "ACCOUNT_LIMIT_REACHED";
+        else if (sessionRemaining <= 0L) status = "SESSION_LIMIT_REACHED";
+        else if (weeklyRemaining <= 0L) status = "WEEKLY_LIMIT_REACHED";
+        else status = "ACTIVE";
 
         return new AdminFamilyAiUserUsageResponse(
                 grant.getId(),
@@ -289,7 +291,66 @@ public class FamilyAiBudgetService {
                 spent,
                 userRemaining,
                 active ? percentage(spent, allowance) : 0.0,
+                monthlyRequests,
+                monthlyInputTokens,
+                sessionLimit,
+                session.spentMicrorupees(),
+                sessionRemaining,
+                active ? percentage(session.spentMicrorupees(), sessionLimit) : 0.0,
+                session.resetsAt(),
+                session.requestCount(),
+                session.inputTokens(),
+                weeklyLimit,
+                weekly.spentMicrorupees(),
+                weeklyRemaining,
+                active ? percentage(weekly.spentMicrorupees(), weeklyLimit) : 0.0,
+                weekly.resetsAt(),
+                weekly.requestCount(),
+                weekly.inputTokens(),
                 status
+        );
+    }
+
+    private WindowUsage sessionUsage(SpecialPremiumGrantEntity grant, Instant now) {
+        return windowUsage(
+                grant.getAiSessionStartedAt(),
+                grant.getAiSessionSpentMicrorupees(),
+                grant.getAiSessionRequestCount(),
+                grant.getAiSessionInputTokens(),
+                SESSION_WINDOW,
+                now
+        );
+    }
+
+    private WindowUsage weeklyUsage(SpecialPremiumGrantEntity grant, Instant now) {
+        return windowUsage(
+                grant.getAiWeeklyStartedAt(),
+                grant.getAiWeeklySpentMicrorupees(),
+                grant.getAiWeeklyRequestCount(),
+                grant.getAiWeeklyInputTokens(),
+                WEEKLY_WINDOW,
+                now
+        );
+    }
+
+    private WindowUsage windowUsage(
+            Instant startedAt,
+            long spentMicrorupees,
+            long requestCount,
+            long inputTokens,
+            Duration duration,
+            Instant now
+    ) {
+        boolean current = startedAt != null
+                && !startedAt.isAfter(now)
+                && now.isBefore(startedAt.plus(duration));
+        if (!current) return new WindowUsage(now, now.plus(duration), 0L, 0L, 0L);
+        return new WindowUsage(
+                startedAt,
+                startedAt.plus(duration),
+                Math.max(0L, spentMicrorupees),
+                Math.max(0L, requestCount),
+                Math.max(0L, inputTokens)
         );
     }
 
@@ -303,13 +364,11 @@ public class FamilyAiBudgetService {
     }
 
     private Optional<SpecialPremiumGrantEntity> activeSpecialGrant(UUID userId, Instant now) {
-        return grantRepository.findByUserId(userId)
-                .filter(grant -> isActiveSpecialGrant(grant, now));
+        return grantRepository.findByUserId(userId).filter(grant -> isActiveSpecialGrant(grant, now));
     }
 
     private boolean isActiveSpecialGrant(SpecialPremiumGrantEntity grant, Instant now) {
-        return grant.isActive()
-                && (grant.getValidUntil() == null || grant.getValidUntil().isAfter(now));
+        return grant.isActive() && (grant.getValidUntil() == null || grant.getValidUntil().isAfter(now));
     }
 
     private long currentPeriodSpend(SpecialPremiumGrantEntity grant, String period) {
@@ -330,11 +389,16 @@ public class FamilyAiBudgetService {
         return Math.min(100.0, (Math.max(0L, spent) * 100.0) / allowance);
     }
 
+    private long budgetPercent(long allowance, int percent) {
+        if (allowance <= 0L || percent <= 0) return 0L;
+        return Math.max(1L, BigDecimal.valueOf(allowance)
+                .multiply(BigDecimal.valueOf(percent))
+                .divide(BigDecimal.valueOf(100L), 0, RoundingMode.FLOOR)
+                .longValueExact());
+    }
+
     private long requestBudgetMicrorupees(int inputTokens, int maxProviderCalls, int maxOutputTokensPerCall) {
-        long providerInputTokens = Math.min(
-                Integer.MAX_VALUE,
-                Math.max(0L, (long) inputTokens + PROVIDER_OVERHEAD_TOKENS)
-        );
+        long providerInputTokens = Math.min(Integer.MAX_VALUE, Math.max(0L, (long) inputTokens + PROVIDER_OVERHEAD_TOKENS));
         BigDecimal oneCallUsd = tokenCostUsd(providerInputTokens, maxOutputTokensPerCall);
         return oneCallUsd
                 .multiply(BigDecimal.valueOf(Math.max(1, maxProviderCalls)))
@@ -372,7 +436,7 @@ public class FamilyAiBudgetService {
         return YearMonth.from(now.atZone(ZoneOffset.UTC)).toString();
     }
 
-    private Instant resetsAt(Instant now) {
+    private Instant monthlyResetsAt(Instant now) {
         return YearMonth.from(now.atZone(ZoneOffset.UTC))
                 .plusMonths(1)
                 .atDay(1)
@@ -388,11 +452,35 @@ public class FamilyAiBudgetService {
         );
     }
 
-    private ApiException familyLimitReached() {
+    private ApiException familySessionLimitReached() {
         return new ApiException(
                 HttpStatus.TOO_MANY_REQUESTS,
-                "FAMILY_AI_BUDGET_REACHED",
-                "Your Friends & Family AI allowance has been used for this month."
+                "FAMILY_AI_SESSION_LIMIT_REACHED",
+                "Your 5-hour Cloud AI limit has been reached. Try again after it resets."
         );
     }
+
+    private ApiException familyWeeklyLimitReached() {
+        return new ApiException(
+                HttpStatus.TOO_MANY_REQUESTS,
+                "FAMILY_AI_WEEKLY_LIMIT_REACHED",
+                "Your weekly Cloud AI limit has been reached. Try again after it resets."
+        );
+    }
+
+    private ApiException familyAccessLimitReached() {
+        return new ApiException(
+                HttpStatus.TOO_MANY_REQUESTS,
+                "FAMILY_AI_ACCESS_LIMIT_REACHED",
+                "Friends & Family Cloud AI usage is currently at its limit."
+        );
+    }
+
+    private record WindowUsage(
+            Instant startedAt,
+            Instant resetsAt,
+            long spentMicrorupees,
+            long requestCount,
+            long inputTokens
+    ) {}
 }
