@@ -27,7 +27,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.IntSupplier;
@@ -41,6 +43,13 @@ public class FamilyAiBudgetService {
     private static final int PROVIDER_OVERHEAD_TOKENS = 5_000;
     private static final Duration SESSION_WINDOW = Duration.ofHours(5);
     private static final Duration WEEKLY_WINDOW = Duration.ofDays(7);
+
+    // Half of every user's unused equal-share balance remains protected. The other half can
+    // be reallocated toward users showing stronger recent demand.
+    private static final int PROTECTED_UNUSED_SHARE_PERCENT = 50;
+    private static final double IDLE_DEMAND_WEIGHT = 0.25;
+    private static final double MAX_RECENT_USAGE_RATIO = 2.0;
+
     private static final Encoding GPT5_ENCODING = Encodings.newDefaultEncodingRegistry()
             .getEncoding(EncodingType.O200K_BASE);
 
@@ -90,12 +99,14 @@ public class FamilyAiBudgetService {
         }
 
         String period = periodKey(now);
-        int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
         long poolBudget = monthlyBudgetMicrorupees();
-        long allowance = activeUsers <= 0 ? 0L : poolBudget / activeUsers;
         long poolSpent = normalizeSpent(grantRepository.sumAiSpentMicrorupeesForPeriod(period));
         long poolRemaining = remaining(poolBudget, poolSpent);
+        List<SpecialPremiumGrantEntity> activeGrants = grantRepository.findActiveAt(now);
+        AdaptiveQuotaPlan quotaPlan = adaptiveQuotaPlan(activeGrants, now, period, poolBudget, poolSpent);
+
         SpecialPremiumGrantEntity grant = specialGrant.get();
+        long allowance = quotaPlan.allowanceFor(userId);
         long monthlySpent = currentPeriodSpend(grant, period);
         long monthlyRemaining = Math.min(remaining(allowance, monthlySpent), poolRemaining);
 
@@ -129,14 +140,23 @@ public class FamilyAiBudgetService {
     public AdminFamilyAiUsageResponse adminCurrent() {
         Instant now = Instant.now();
         String period = periodKey(now);
-        int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
         long poolBudget = monthlyBudgetMicrorupees();
         long poolSpent = normalizeSpent(grantRepository.sumAiSpentMicrorupeesForPeriod(period));
         long poolRemaining = remaining(poolBudget, poolSpent);
-        long activeAllowance = activeUsers <= 0 ? 0L : poolBudget / activeUsers;
+        List<SpecialPremiumGrantEntity> allGrants = grantRepository.findAllWithUserForFamilyAiAdmin();
+        List<SpecialPremiumGrantEntity> activeGrants = allGrants.stream()
+                .filter(grant -> isActiveSpecialGrant(grant, now))
+                .toList();
+        AdaptiveQuotaPlan quotaPlan = adaptiveQuotaPlan(activeGrants, now, period, poolBudget, poolSpent);
 
-        List<AdminFamilyAiUserUsageResponse> users = grantRepository.findAllWithUserForFamilyAiAdmin().stream()
-                .map(grant -> adminUserUsage(grant, now, period, activeAllowance, poolRemaining))
+        List<AdminFamilyAiUserUsageResponse> users = allGrants.stream()
+                .map(grant -> adminUserUsage(
+                        grant,
+                        now,
+                        period,
+                        quotaPlan.allowanceFor(grant.getUser().getId()),
+                        poolRemaining
+                ))
                 .toList();
 
         return new AdminFamilyAiUsageResponse(
@@ -144,7 +164,7 @@ public class FamilyAiBudgetService {
                 poolSpent,
                 poolRemaining,
                 percentage(poolSpent, poolBudget),
-                activeUsers,
+                activeGrants.size(),
                 MAX_SPECIAL_REQUEST_INPUT_TOKENS,
                 Math.toIntExact(SESSION_WINDOW.toHours()),
                 properties.sessionBudgetPercent(),
@@ -183,6 +203,7 @@ public class FamilyAiBudgetService {
         int estimatedInputTokens = Math.max(0, inputTokenCounter.getAsInt());
         if (estimatedInputTokens > MAX_SPECIAL_REQUEST_INPUT_TOKENS) throw familyRequestTooLarge();
 
+        // Serialises Premium Special debits so adaptive allocations cannot race each other.
         planRepository.findByCodeForUpdate(PlanCode.PREMIUM_SPECIAL)
                 .orElseThrow(() -> new IllegalStateException("Premium Special plan is unavailable"));
 
@@ -195,12 +216,13 @@ public class FamilyAiBudgetService {
                 ));
 
         String period = periodKey(now);
-        int activeUsers = Math.toIntExact(grantRepository.countActiveAt(now));
-        if (activeUsers <= 0) throw familyAccessLimitReached();
-
         long totalBudget = monthlyBudgetMicrorupees();
-        long userAllowance = totalBudget / activeUsers;
         long globalSpent = normalizeSpent(grantRepository.sumAiSpentMicrorupeesForPeriod(period));
+        List<SpecialPremiumGrantEntity> activeGrants = grantRepository.findActiveAt(now);
+        if (activeGrants.isEmpty()) throw familyAccessLimitReached();
+
+        AdaptiveQuotaPlan quotaPlan = adaptiveQuotaPlan(activeGrants, now, period, totalBudget, globalSpent);
+        long userAllowance = quotaPlan.allowanceFor(userId);
         long userSpent = currentPeriodSpend(grant, period);
         long debit = requestBudgetMicrorupees(estimatedInputTokens, maxProviderCalls, maxOutputTokensPerCall);
 
@@ -233,6 +255,74 @@ public class FamilyAiBudgetService {
 
         grantRepository.save(grant);
         return true;
+    }
+
+    private AdaptiveQuotaPlan adaptiveQuotaPlan(
+            List<SpecialPremiumGrantEntity> activeGrants,
+            Instant now,
+            String period,
+            long poolBudget,
+            long poolSpent
+    ) {
+        if (activeGrants == null || activeGrants.isEmpty() || poolBudget <= 0L) {
+            return new AdaptiveQuotaPlan(0L, Map.of());
+        }
+
+        long equalShare = poolBudget / activeGrants.size();
+        long poolRemaining = remaining(poolBudget, poolSpent);
+        long nominalWeeklyLimit = budgetPercent(equalShare, properties.weeklyBudgetPercent());
+
+        Map<UUID, Long> spentByUser = new LinkedHashMap<>();
+        Map<UUID, Long> rawReserveByUser = new LinkedHashMap<>();
+        Map<UUID, Double> demandWeightByUser = new LinkedHashMap<>();
+        long rawReserveTotal = 0L;
+        double demandWeightTotal = 0.0;
+
+        for (SpecialPremiumGrantEntity activeGrant : activeGrants) {
+            UUID activeUserId = activeGrant.getUser().getId();
+            long spent = currentPeriodSpend(activeGrant, period);
+            long unusedEqualShare = remaining(equalShare, spent);
+            long reserve = budgetPercent(unusedEqualShare, PROTECTED_UNUSED_SHARE_PERCENT);
+            long recentWeeklySpend = weeklyUsage(activeGrant, now).spentMicrorupees();
+            double recentUsageRatio = nominalWeeklyLimit <= 0L
+                    ? 0.0
+                    : Math.max(0.0, recentWeeklySpend / (double) nominalWeeklyLimit);
+            double demandWeight = IDLE_DEMAND_WEIGHT + Math.min(MAX_RECENT_USAGE_RATIO, recentUsageRatio);
+
+            spentByUser.put(activeUserId, spent);
+            rawReserveByUser.put(activeUserId, reserve);
+            demandWeightByUser.put(activeUserId, demandWeight);
+            rawReserveTotal = safeAdd(rawReserveTotal, reserve);
+            demandWeightTotal += demandWeight;
+        }
+
+        double reserveScale = rawReserveTotal > poolRemaining && rawReserveTotal > 0L
+                ? poolRemaining / (double) rawReserveTotal
+                : 1.0;
+
+        Map<UUID, Long> reserveByUser = new LinkedHashMap<>();
+        long reserveTotal = 0L;
+        for (Map.Entry<UUID, Long> entry : rawReserveByUser.entrySet()) {
+            long scaledReserve = scaleFloor(entry.getValue(), reserveScale);
+            reserveByUser.put(entry.getKey(), scaledReserve);
+            reserveTotal = safeAdd(reserveTotal, scaledReserve);
+        }
+
+        long flexibleRemaining = remaining(poolRemaining, reserveTotal);
+        Map<UUID, Long> allowanceByUser = new LinkedHashMap<>();
+        for (SpecialPremiumGrantEntity activeGrant : activeGrants) {
+            UUID activeUserId = activeGrant.getUser().getId();
+            long spent = spentByUser.getOrDefault(activeUserId, 0L);
+            long protectedReserve = reserveByUser.getOrDefault(activeUserId, 0L);
+            double demandWeight = demandWeightByUser.getOrDefault(activeUserId, IDLE_DEMAND_WEIGHT);
+            long adaptiveShare = demandWeightTotal <= 0.0
+                    ? 0L
+                    : scaleFloor(flexibleRemaining, demandWeight / demandWeightTotal);
+            long futureCapacity = safeAdd(protectedReserve, adaptiveShare);
+            allowanceByUser.put(activeUserId, Math.min(poolBudget, safeAdd(spent, futureCapacity)));
+        }
+
+        return new AdaptiveQuotaPlan(equalShare, Map.copyOf(allowanceByUser));
     }
 
     private AdminFamilyAiUserUsageResponse adminUserUsage(
@@ -397,6 +487,14 @@ public class FamilyAiBudgetService {
                 .longValueExact());
     }
 
+    private long scaleFloor(long amount, double factor) {
+        if (amount <= 0L || factor <= 0.0) return 0L;
+        return BigDecimal.valueOf(amount)
+                .multiply(BigDecimal.valueOf(factor))
+                .setScale(0, RoundingMode.FLOOR)
+                .longValue();
+    }
+
     private long requestBudgetMicrorupees(int inputTokens, int maxProviderCalls, int maxOutputTokensPerCall) {
         long providerInputTokens = Math.min(Integer.MAX_VALUE, Math.max(0L, (long) inputTokens + PROVIDER_OVERHEAD_TOKENS));
         BigDecimal oneCallUsd = tokenCostUsd(providerInputTokens, maxOutputTokensPerCall);
@@ -474,6 +572,12 @@ public class FamilyAiBudgetService {
                 "FAMILY_AI_ACCESS_LIMIT_REACHED",
                 "Friends & Family Cloud AI usage is currently at its limit."
         );
+    }
+
+    private record AdaptiveQuotaPlan(long equalShareMicrorupees, Map<UUID, Long> allowanceByUserId) {
+        long allowanceFor(UUID userId) {
+            return allowanceByUserId.getOrDefault(userId, 0L);
+        }
     }
 
     private record WindowUsage(
