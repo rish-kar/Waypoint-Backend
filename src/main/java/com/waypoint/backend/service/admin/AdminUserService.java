@@ -10,9 +10,9 @@ import com.waypoint.backend.service.subscription.SubscriptionService;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
 import com.waypoint.backend.utilities.exception.NotFoundException;
 
-import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -70,24 +70,38 @@ public class AdminUserService {
             if (StringUtils.hasText(provider)) {
                 predicates.add(cb.equal(cb.upper(root.get("provider")), provider.trim().toUpperCase(Locale.ROOT)));
             }
-            if (plan != null) {
-                predicates.add(cb.equal(root.join("plan", JoinType.LEFT).get("code"), plan));
-            }
-            if (premium != null) {
-                predicates.add(cb.equal(root.join("plan", JoinType.LEFT).get("premium"), premium));
-            }
             AdminQuerySupport.addRange(predicates, cb, root.get("createdAt"), createdFrom, createdTo);
             AdminQuerySupport.addRange(predicates, cb, root.get("lastLoginAt"), lastLoginFrom, lastLoginTo);
             return cb.and(predicates.toArray(Predicate[]::new));
         };
 
-        Page<UserEntity> result = userRepository.findAll(
-                specification,
-                AdminQuerySupport.pageable(page, size, sort, direction, "createdAt", SORT_FIELDS)
-        );
-        Set<UUID> userIds = result.getContent().stream().map(UserEntity::getId).collect(Collectors.toSet());
+        var pageable = AdminQuerySupport.pageable(page, size, sort, direction, "createdAt", SORT_FIELDS);
+        if (plan == null && premium == null) {
+            Page<UserEntity> result = userRepository.findAll(specification, pageable);
+            Set<UUID> userIds = result.getContent().stream().map(UserEntity::getId).collect(Collectors.toSet());
+            Map<UUID, SubscriptionSnapshot> subscriptions = subscriptionService.currentForUsers(userIds, Instant.now());
+            Page<AdminUserResponse> mapped = result.map(user -> toResponse(user, subscriptions.get(user.getId())));
+            return AdminQuerySupport.page(
+                    mapped,
+                    AdminQuerySupport.sortOrDefault(sort, "createdAt"),
+                    AdminQuerySupport.directionOrDefault(direction)
+            );
+        }
+
+        List<UserEntity> candidates = userRepository.findAll(specification, pageable.getSort());
+        Set<UUID> userIds = candidates.stream().map(UserEntity::getId).collect(Collectors.toSet());
         Map<UUID, SubscriptionSnapshot> subscriptions = subscriptionService.currentForUsers(userIds, Instant.now());
-        Page<AdminUserResponse> mapped = result.map(user -> toResponse(user, subscriptions.get(user.getId())));
+        List<AdminUserResponse> filtered = candidates.stream()
+                .filter(user -> matchesSubscription(subscriptions.get(user.getId()), plan, premium))
+                .map(user -> toResponse(user, subscriptions.get(user.getId())))
+                .toList();
+        int fromIndex = (int) Math.min(pageable.getOffset(), filtered.size());
+        int toIndex = Math.min(fromIndex + pageable.getPageSize(), filtered.size());
+        Page<AdminUserResponse> mapped = new PageImpl<>(
+                filtered.subList(fromIndex, toIndex),
+                pageable,
+                filtered.size()
+        );
         return AdminQuerySupport.page(
                 mapped,
                 AdminQuerySupport.sortOrDefault(sort, "createdAt"),
@@ -115,6 +129,11 @@ public class AdminUserService {
         }
         UserEntity user = matches.getFirst();
         return toResponse(user, subscriptionService.current(user.getId()));
+    }
+
+    private boolean matchesSubscription(SubscriptionSnapshot subscription, PlanCode plan, Boolean premium) {
+        return (plan == null || subscription.planCode() == plan)
+                && (premium == null || subscription.premium() == premium);
     }
 
     private AdminUserResponse toResponse(UserEntity user, SubscriptionSnapshot subscription) {
