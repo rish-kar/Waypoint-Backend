@@ -1,0 +1,36 @@
+$kind: http-request
+description: Permanently deletes the exact subscription selected for the current user, then lets the backend recalculate that user's effective persisted plan. Refuses to run if the selected subscription belongs to a different user.
+url: "{{baseUrl}}/api/v1/admin/subscriptions/{{adminSubscriptionId}}"
+method: DELETE
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      const userId = pm.environment.get('userId');
+      const subscriptionId = pm.environment.get('adminSubscriptionId');
+      const subscriptionUserId = pm.environment.get('adminSubscriptionUserId');
+      if (!adminId || !adminPassword) throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      if (!userId) throw new Error('Run Find User by Email first so userId is populated.');
+      if (!subscriptionId) throw new Error('Run List Subscriptions for the selected user first. No subscription is selected.');
+      if (!subscriptionUserId || subscriptionUserId !== userId) {
+          throw new Error('Selected subscription does not belong to the current userId. Run List Subscriptions again.');
+      }
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 204', () => pm.response.to.have.status(204));
+      if (pm.response.code !== 204) return;
+      pm.environment.unset('adminSubscriptionId');
+      pm.environment.unset('adminSubscriptionUserId');
+    language: text/javascript
+order: 3000
