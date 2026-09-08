@@ -99,6 +99,19 @@ class ByokServiceTests {
     }
 
     @Test
+    void premiumSpecialUserCanSaveProviderKeyAndDiscoverModels() {
+        when(subscriptionService.current(userId)).thenReturn(snapshot(PlanCode.PREMIUM_SPECIAL, SubscriptionStatus.PREMIUM_SPECIAL, true));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(providerRegistry.availableModels(ByokProvider.OPENAI, USER_API_KEY)).thenReturn(List.of("gpt-4o"));
+        when(apiKeyCipher.encrypt(USER_API_KEY)).thenReturn("v1:ciphertext");
+
+        ByokModelCatalogResponse response = service.saveApiKey(userId, "openai", USER_API_KEY);
+
+        assertThat(response.models()).containsExactly("gpt-4o");
+        assertThat(user.getByokApiKeyCiphertext()).isEqualTo("v1:ciphertext");
+    }
+
+    @Test
     void changingProviderClearsModelFromPreviousProvider() {
         user.setByokProvider("openai");
         user.setByokApiKeyCiphertext("old-ciphertext");
@@ -118,14 +131,8 @@ class ByokServiceTests {
     }
 
     @Test
-    void trialAndSpecialAccessDoNotQualifyForByok() {
+    void trialAccessDoesNotQualifyForByok() {
         when(subscriptionService.currentBilling(userId)).thenReturn(snapshot(PlanCode.PREMIUM_MONTHLY, SubscriptionStatus.ON_TRIAL, true));
-
-        assertThatThrownBy(() -> service.saveApiKey(userId, "openai", USER_API_KEY))
-                .isInstanceOf(ApiException.class)
-                .satisfies(error -> assertThat(((ApiException) error).code()).isEqualTo("BYOK_PREMIUM_REQUIRED"));
-
-        when(subscriptionService.currentBilling(userId)).thenReturn(snapshot(PlanCode.PREMIUM_SPECIAL, SubscriptionStatus.PREMIUM_SPECIAL, true));
 
         assertThatThrownBy(() -> service.saveApiKey(userId, "openai", USER_API_KEY))
                 .isInstanceOf(ApiException.class)
