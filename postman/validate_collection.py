@@ -81,6 +81,24 @@ activate = require(
 )
 forbid(activate_rel, "const jwt =", "A JWT for the same user is required", "/api/v1/subscriptions/current")
 
+annual_rel = "collections/Waypoint-Backend/04 - Webhooks/01 - Subscription Events/03 - Activate Annual Subscription.request.yaml"
+annual = require(
+    annual_rel,
+    "annualVariantId",
+    "waypoint_plan: 'ANNUAL'",
+    "Date.now()",
+    "updated_at: now.toISOString()",
+    "pm.environment.set('subscriptionId', subscriptionId)",
+    "Run Admin > Plans > List Plans first",
+    "/api/v1/admin/users/${expectedUserId}",
+    "/api/v1/admin/subscriptions?userId=",
+    "body.persistedPlan).to.eql('PREMIUM_ANNUAL')",
+    "body.plan).to.eql('PREMIUM_ANNUAL')",
+    "created.plan).to.eql('ANNUAL')",
+    "created.status).to.eql('ACTIVE')",
+)
+forbid(annual_rel, "const jwt =", "A JWT for the same user is required", "/api/v1/subscriptions/current")
+
 refund_rel = "collections/Waypoint-Backend/04 - Webhooks/01 - Subscription Events/02 - Refund Subscription.request.yaml"
 refund = require(
     refund_rel,
@@ -90,7 +108,7 @@ refund = require(
     "refunded.status).to.eql('REFUNDED')",
 )
 forbid(refund_rel, "const jwt =", "A JWT for the same user is required", "/api/v1/subscriptions/current")
-for text, name in [(activate, "activate monthly"), (refund, "refund")]:
+for text, name in [(activate, "activate monthly"), (annual, "activate annual"), (refund, "refund")]:
     if "2030-01-01T00:00:00Z" in text:
         errors.append(f"{name}: hardcoded provider timestamp must not be used")
 
@@ -140,6 +158,12 @@ require(
     "pm.environment.unset('adminGrantId')",
 )
 require(
+    "collections/Waypoint-Backend/05 - Admin/02 - Users/04 - Delete User.request.yaml",
+    "/api/v1/admin/users/{{userId}}",
+    "method: DELETE",
+    "Status is 204",
+)
+require(
     "collections/Waypoint-Backend/05 - Admin/03 - Subscriptions/01 - List Subscriptions.request.yaml",
     "pm.environment.unset('adminSubscriptionId')",
     "item.userId === expectedUserId",
@@ -150,6 +174,13 @@ require(
     "Updated subscription still belongs to selected user",
 )
 require(
+    "collections/Waypoint-Backend/05 - Admin/03 - Subscriptions/03 - Delete Subscription.request.yaml",
+    "/api/v1/admin/subscriptions/{{adminSubscriptionId}}",
+    "method: DELETE",
+    "subscriptionUserId !== userId",
+    "Status is 204",
+)
+require(
     "collections/Waypoint-Backend/05 - Admin/04 - Premium Special/03 - List Special Grants.request.yaml",
     "userId={{userId}}",
     "pm.environment.unset('adminGrantId')",
@@ -158,6 +189,12 @@ require(
     "collections/Waypoint-Backend/05 - Admin/05 - Webhook Events/01 - List Webhook Events.request.yaml",
     "pm.environment.unset('adminWebhookEventId')",
     "body.items.length === 1",
+)
+require(
+    "collections/Waypoint-Backend/05 - Admin/05 - Webhook Events/04 - Delete Webhook Event.request.yaml",
+    "/api/v1/admin/webhook-events/{{adminWebhookEventId}}",
+    "method: DELETE",
+    "Status is 204",
 )
 
 # Auth flows must not preserve credentials/IDs from a failed new login attempt.
