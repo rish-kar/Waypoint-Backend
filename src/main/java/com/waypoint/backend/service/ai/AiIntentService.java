@@ -11,6 +11,7 @@ import com.waypoint.backend.utilities.exception.AiUnavailableException;
 import com.waypoint.backend.utilities.exception.ExternalServiceException;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -21,6 +22,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 public class AiIntentService {
@@ -47,9 +49,36 @@ public class AiIntentService {
     );
 
     private final AiModelClient aiClient;
+    private final ByokService byokService;
+    private final ByokProviderRegistry providerRegistry;
 
-    public AiIntentService(AiModelClient aiClient) {
+    @Autowired
+    public AiIntentService(
+            AiModelClient aiClient,
+            ByokService byokService,
+            ByokProviderRegistry providerRegistry
+    ) {
         this.aiClient = aiClient;
+        this.byokService = byokService;
+        this.providerRegistry = providerRegistry;
+    }
+
+    AiIntentService(AiModelClient aiClient) {
+        this(aiClient, null, null);
+    }
+
+    public AiIntentResponse route(UUID userId, AiIntentRequest request) {
+        if (byokService != null && providerRegistry != null) {
+            var credentials = byokService.credentialsFor(userId);
+            if (credentials.isPresent()) {
+                ByokService.ByokCredentials value = credentials.get();
+                return normalize(
+                        providerRegistry.route(value.provider(), request, value.apiKey(), value.model()),
+                        request
+                );
+            }
+        }
+        return route(request);
     }
 
     public AiIntentResponse route(AiIntentRequest request) {
@@ -58,14 +87,23 @@ public class AiIntentService {
         return normalize(aiClient.route(request), request);
     }
 
+    public AiChatResponse chat(UUID userId, AiChatRequest request) {
+        if (byokService != null && providerRegistry != null) {
+            var credentials = byokService.credentialsFor(userId);
+            if (credentials.isPresent()) {
+                ByokService.ByokCredentials value = credentials.get();
+                return validateChatResponse(
+                        providerRegistry.chat(value.provider(), request, value.apiKey(), value.model())
+                );
+            }
+        }
+        return chat(request);
+    }
+
     public AiChatResponse chat(AiChatRequest request) {
         String requestedModel = normalizeModel(request.model());
         validateModel(requestedModel);
-        AiChatResponse response = aiClient.chat(request);
-        if (response == null || !StringUtils.hasText(response.answer())) {
-            throw new ExternalServiceException("Cloud AI returned an empty answer");
-        }
-        return response;
+        return validateChatResponse(aiClient.chat(request));
     }
 
     public AiModelCatalogResponse models() {
@@ -76,6 +114,13 @@ public class AiIntentService {
                 "server"
         );
         return new AiModelCatalogResponse(aiClient.modelId(), List.of(configuredModel));
+    }
+
+    private AiChatResponse validateChatResponse(AiChatResponse response) {
+        if (response == null || !StringUtils.hasText(response.answer())) {
+            throw new ExternalServiceException("Cloud AI returned an empty answer");
+        }
+        return response;
     }
 
     private void validateModel(String requestedModel) {
