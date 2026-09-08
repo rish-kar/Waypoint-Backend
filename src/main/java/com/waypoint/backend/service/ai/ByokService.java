@@ -25,7 +25,7 @@ import java.util.UUID;
 
 @Service
 public class ByokService {
-    private static final Set<PlanCode> ELIGIBLE_PLANS = Set.of(
+    private static final Set<PlanCode> ELIGIBLE_BILLING_PLANS = Set.of(
             PlanCode.PREMIUM_MONTHLY,
             PlanCode.PREMIUM_ANNUAL
     );
@@ -152,11 +152,19 @@ public class ByokService {
     }
 
     private boolean eligible(UUID userId) {
-        SubscriptionSnapshot subscription = subscriptionService.currentBilling(userId);
-        return subscription != null
-                && subscription.premium()
-                && subscription.status() != SubscriptionStatus.ON_TRIAL
-                && ELIGIBLE_PLANS.contains(subscription.planCode());
+        SubscriptionSnapshot current = subscriptionService.current(userId);
+        if (current != null
+                && current.premium()
+                && current.status() != SubscriptionStatus.ON_TRIAL
+                && current.planCode() == PlanCode.PREMIUM_SPECIAL) {
+            return true;
+        }
+
+        SubscriptionSnapshot billing = subscriptionService.currentBilling(userId);
+        return billing != null
+                && billing.premium()
+                && billing.status() != SubscriptionStatus.ON_TRIAL
+                && ELIGIBLE_BILLING_PLANS.contains(billing.planCode());
     }
 
     private void requireEligible(UUID userId) {
@@ -164,7 +172,7 @@ public class ByokService {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "BYOK_PREMIUM_REQUIRED",
-                    "Bring Your Own Key is available only on Premium Monthly or Premium Annual."
+                    "Bring Your Own Key is available only on Premium Monthly, Premium Annual, or Premium Special."
             );
         }
     }
