@@ -5,6 +5,7 @@ import com.waypoint.backend.model.ai.AiIntentRequest;
 import com.waypoint.backend.service.admin.FamilyAiAdminService;
 import com.waypoint.backend.service.ai.AiIntentService;
 import com.waypoint.backend.service.ai.AiUsageService;
+import com.waypoint.backend.service.ai.ByokService;
 import com.waypoint.backend.service.ai.FamilyAiBudgetService;
 import com.waypoint.backend.service.entitlement.EntitlementService;
 import com.waypoint.backend.utilities.exception.ApiException;
@@ -39,7 +40,8 @@ class AiControllerFamilyLimitTests {
                 mock(AiUsageService.class),
                 familyAiBudgetService,
                 mock(FamilyAiAdminService.class),
-                mock(EntitlementService.class)
+                mock(EntitlementService.class),
+                mock(ByokService.class)
         );
         userId = UUID.randomUUID();
     }
@@ -56,7 +58,7 @@ class AiControllerFamilyLimitTests {
         assertThatThrownBy(() -> controller.routeIntent(userId, request))
                 .isInstanceOf(ApiException.class);
 
-        verify(aiIntentService, never()).route(any());
+        verify(aiIntentService, never()).route(eq(userId), any(AiIntentRequest.class));
     }
 
     @Test
@@ -71,6 +73,6 @@ class AiControllerFamilyLimitTests {
         assertThatThrownBy(() -> controller.chat(userId, request))
                 .isInstanceOf(ApiException.class);
 
-        verify(aiIntentService, never()).chat(any());
+        verify(aiIntentService, never()).chat(eq(userId), any(AiChatRequest.class));
     }
 }
