@@ -12,6 +12,7 @@ public record AccountResponse(
         String pictureUrl,
         String phoneNumber,
         String phoneCountryCode,
+        String locale,
         PlanResponse plan,
         EntitlementResponse entitlement
 ) {
