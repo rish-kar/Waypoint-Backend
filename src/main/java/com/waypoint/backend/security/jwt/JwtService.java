@@ -125,8 +125,7 @@ public class JwtService {
                     || expiresAt == null
                     || issuedAt.isAfter(now.plusSeconds(CLOCK_SKEW_SECONDS))
                     || !expiresAt.isAfter(now)
-                    || !expiresAt.isAfter(issuedAt)
-                    || Duration.between(issuedAt, expiresAt).getSeconds() > expirationSeconds + CLOCK_SKEW_SECONDS) {
+                    || !expiresAt.isAfter(issuedAt)) {
                 throw invalidToken();
             }
 
