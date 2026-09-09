@@ -8,8 +8,10 @@ import com.waypoint.backend.repository.user.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.Instant;
+import java.util.Locale;
 
 @Service
 public class MicrosoftUserProvisioningService {
@@ -26,6 +28,7 @@ public class MicrosoftUserProvisioningService {
         user.setProviderUserId(profile.providerUserId());
         user.setEmail(normalizedEmail);
         user.setDisplayName(profile.displayName());
+        user.setLocale(normalizeLocale(profile.locale()));
         user.setPlan(freePlan);
         user.setCreatedAt(Instant.now());
         user.setLastLoginAt(Instant.now());
@@ -38,8 +41,24 @@ public class MicrosoftUserProvisioningService {
         if (UserService.MICROSOFT_PROVIDER.equals(user.getProvider())) {
             user.setEmail(normalizedEmail);
             user.setDisplayName(profile.displayName());
+            String locale = normalizeLocale(profile.locale());
+            if (locale != null) {
+                user.setLocale(locale);
+            }
         }
         user.setLastLoginAt(Instant.now());
         return userRepository.save(user);
+    }
+
+    private String normalizeLocale(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        Locale locale = Locale.forLanguageTag(value.trim().replace('_', '-'));
+        if (!StringUtils.hasText(locale.getLanguage())) {
+            return null;
+        }
+        String tag = locale.toLanguageTag();
+        return tag.length() <= 35 ? tag : null;
     }
 }
