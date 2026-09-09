@@ -6,14 +6,17 @@ import com.waypoint.backend.model.plan.PlanResponse;
 import com.waypoint.backend.model.subscription.CheckoutPlan;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.service.billing.BillingService;
+import com.waypoint.backend.service.billing.PricingDisplayService;
 import com.waypoint.backend.service.user.UserService;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,16 +27,26 @@ import java.util.UUID;
 @RequestMapping("/api/v1/billing")
 public class BillingController {
     private final BillingService billingService;
+    private final PricingDisplayService pricingDisplayService;
     private final UserService userService;
 
-    public BillingController(BillingService billingService, UserService userService) {
+    public BillingController(
+            BillingService billingService,
+            PricingDisplayService pricingDisplayService,
+            UserService userService
+    ) {
         this.billingService = billingService;
+        this.pricingDisplayService = pricingDisplayService;
         this.userService = userService;
     }
 
     @GetMapping("/plans")
-    public List<PlanResponse> plans() {
-        return billingService.availablePlans();
+    public List<PlanResponse> plans(
+            @RequestHeader(value = HttpHeaders.ACCEPT_LANGUAGE, required = false) String acceptLanguage
+    ) {
+        return billingService.availablePlans().stream()
+                .map(plan -> pricingDisplayService.localize(plan, null, acceptLanguage))
+                .toList();
     }
 
     @PostMapping("/checkout")
