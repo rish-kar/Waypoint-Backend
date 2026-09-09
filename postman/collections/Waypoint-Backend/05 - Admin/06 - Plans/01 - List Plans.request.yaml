@@ -37,7 +37,7 @@ scripts:
       pm.test('Admin plan prices use whole INR values', () => {
           pm.expect(monthly?.price).to.eql(399);
           pm.expect(monthly?.currency).to.eql('INR');
-          pm.expect(annual?.price).to.eql(3499);
+          pm.expect(annual?.price).to.eql(3500);
           pm.expect(annual?.currency).to.eql('INR');
           body.forEach(plan => pm.expect(plan).to.not.have.property('priceCents'));
       });
