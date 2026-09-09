@@ -10,7 +10,6 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.JwtException;
-import org.springframework.security.oauth2.jwt.JwtIssuedAtValidator;
 import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
 import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -72,12 +71,8 @@ public class JwtService {
         timestampValidator.setClock(clock);
         timestampValidator.setAllowEmptyExpiryClaim(false);
         timestampValidator.setAllowEmptyNotBeforeClaim(false);
-        JwtIssuedAtValidator issuedAtValidator = new JwtIssuedAtValidator(true);
-        issuedAtValidator.setClock(clock);
-        issuedAtValidator.setClockSkew(Duration.ofSeconds(CLOCK_SKEW_SECONDS));
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 timestampValidator,
-                issuedAtValidator,
                 new JwtIssuerValidator(ISSUER)
         ));
         this.jwtDecoder = decoder;
