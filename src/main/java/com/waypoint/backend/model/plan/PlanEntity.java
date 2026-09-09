@@ -26,7 +26,7 @@ public class PlanEntity {
     @Column(nullable = false, length = 20)
     private BillingInterval billingInterval;
 
-    @Column(nullable = false)
+    @Column(name = "price_cents", nullable = false)
     private int price;
 
     @Column(nullable = false, length = 3)
