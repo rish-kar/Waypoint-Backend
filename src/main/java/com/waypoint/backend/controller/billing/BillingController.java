@@ -42,10 +42,13 @@ public class BillingController {
 
     @GetMapping("/plans")
     public List<PlanResponse> plans(
+            @AuthenticationPrincipal UUID userId,
             @RequestHeader(value = HttpHeaders.ACCEPT_LANGUAGE, required = false) String acceptLanguage
     ) {
+        UserEntity user = userId == null ? null : userService.requireById(userId);
+        String providerLocale = user == null ? null : user.getLocale();
         return billingService.availablePlans().stream()
-                .map(plan -> pricingDisplayService.localize(plan, null, acceptLanguage))
+                .map(plan -> pricingDisplayService.localize(plan, providerLocale, acceptLanguage))
                 .toList();
     }
 
