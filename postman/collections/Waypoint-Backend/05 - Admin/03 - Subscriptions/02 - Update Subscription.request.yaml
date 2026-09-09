@@ -1,0 +1,45 @@
+$kind: http-request
+description: Controlled internal update of the selected user's subscription status and renewal/end timestamps. Refuses to run when adminSubscriptionId was not selected from the same current userId.
+url: "{{baseUrl}}/api/v1/admin/subscriptions/{{adminSubscriptionId}}"
+method: PATCH
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "status": "ACTIVE"
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      const userId = pm.environment.get('userId');
+      const subscriptionId = pm.environment.get('adminSubscriptionId');
+      const subscriptionUserId = pm.environment.get('adminSubscriptionUserId');
+      if (!adminId || !adminPassword) throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      if (!userId) throw new Error('Run Find User by Email first so userId is populated.');
+      if (!subscriptionId) throw new Error('Run List Subscriptions for the selected user first. No subscription is selected.');
+      if (!subscriptionUserId || subscriptionUserId !== userId) {
+          throw new Error('Selected subscription does not belong to the current userId. Run List Subscriptions again.');
+      }
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) return;
+      const body = pm.response.json();
+      pm.test('Updated subscription ID matches selection', () => pm.expect(body.id).to.eql(pm.environment.get('adminSubscriptionId')));
+      pm.test('Updated subscription still belongs to selected user', () => pm.expect(body.userId).to.eql(pm.environment.get('userId')));
+      pm.test('Subscription status returned', () => pm.expect(body.status).to.be.a('string').and.not.empty);
+    language: text/javascript
+order: 2000

@@ -14,7 +14,9 @@ import java.util.Locale;
 
 @Component
 public class AdminTotpVerifier {
-    private static final long TIME_STEP_SECONDS = 30L;
+    private static final long TOTP_PERIOD_SECONDS = 30L;
+    private static final long MAX_CODE_AGE_SECONDS = 300L;
+    private static final long FUTURE_CLOCK_SKEW_STEPS = 1L;
     private static final int CODE_MODULUS = 1_000_000;
     private static final String BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
@@ -22,14 +24,32 @@ public class AdminTotpVerifier {
         if (!StringUtils.hasText(suppliedCode) || !suppliedCode.matches("\\d{6}")) {
             return false;
         }
+
         byte[] secret = decodeBase32(secretValue);
-        long counter = now.getEpochSecond() / TIME_STEP_SECONDS;
-        for (long offset = -1; offset <= 1; offset++) {
-            String expected = generateCode(secret, counter + offset);
-            if (MessageDigest.isEqual(
-                    expected.getBytes(StandardCharsets.US_ASCII),
-                    suppliedCode.getBytes(StandardCharsets.US_ASCII)
-            )) {
+        long nowEpochSeconds = now.getEpochSecond();
+        long currentCounter = nowEpochSeconds / TOTP_PERIOD_SECONDS;
+
+        if (matches(secret, suppliedCode, currentCounter)) {
+            return true;
+        }
+
+        // Microsoft Authenticator uses standard 30-second OATH-TOTP. Allow one
+        // future step for small device/server clock drift.
+        for (long offset = 1; offset <= FUTURE_CLOCK_SKEW_STEPS; offset++) {
+            if (matches(secret, suppliedCode, currentCounter + offset)) {
+                return true;
+            }
+        }
+
+        // Keep the Authenticator format standard while allowing an entered code
+        // to remain usable for up to five minutes on the backend.
+        for (long candidateCounter = currentCounter - 1; candidateCounter >= 0; candidateCounter--) {
+            long candidateWindowStart = candidateCounter * TOTP_PERIOD_SECONDS;
+            long ageSeconds = nowEpochSeconds - candidateWindowStart;
+            if (ageSeconds >= MAX_CODE_AGE_SECONDS) {
+                break;
+            }
+            if (matches(secret, suppliedCode, candidateCounter)) {
                 return true;
             }
         }
@@ -38,6 +58,14 @@ public class AdminTotpVerifier {
 
     public void validateSecret(String secretValue) {
         decodeBase32(secretValue);
+    }
+
+    private boolean matches(byte[] secret, String suppliedCode, long counter) {
+        String expected = generateCode(secret, counter);
+        return MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.US_ASCII),
+                suppliedCode.getBytes(StandardCharsets.US_ASCII)
+        );
     }
 
     private String generateCode(byte[] secret, long counter) {

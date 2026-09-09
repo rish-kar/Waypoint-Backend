@@ -69,6 +69,30 @@ class PlanServiceTests {
     }
 
     @Test
+    void assignsAdminPlanForConfiguredAdminEntitlement() {
+        UserEntity user = user();
+        PlanEntity admin = plan(PlanCode.ADMIN);
+        Instant now = Instant.now();
+        when(subscriptionService.current(user.getId())).thenReturn(new SubscriptionSnapshot(
+                PlanCode.ADMIN,
+                SubscriptionStatus.ADMIN,
+                true,
+                null,
+                null,
+                null,
+                null,
+                now
+        ));
+        when(planRepository.findById(PlanCode.ADMIN)).thenReturn(Optional.of(admin));
+
+        PlanEntity result = planService.synchronizeUserPlan(user);
+
+        assertThat(result).isSameAs(admin);
+        assertThat(user.getPlan().getCode()).isEqualTo(PlanCode.ADMIN);
+        verify(userRepository).save(user);
+    }
+
+    @Test
     void returnsUserToFreePlanAfterPremiumAccessEnds() {
         UserEntity user = user();
         user.setPlan(plan(PlanCode.PREMIUM_ANNUAL));

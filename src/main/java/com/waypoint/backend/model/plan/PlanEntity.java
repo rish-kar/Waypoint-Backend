@@ -26,8 +26,8 @@ public class PlanEntity {
     @Column(nullable = false, length = 20)
     private BillingInterval billingInterval;
 
-    @Column(nullable = false)
-    private int priceCents;
+    @Column(name = "price_cents", nullable = false)
+    private int price;
 
     @Column(nullable = false, length = 3)
     private String currency;
@@ -84,12 +84,12 @@ public class PlanEntity {
         this.billingInterval = billingInterval;
     }
 
-    public int getPriceCents() {
-        return priceCents;
+    public int getPrice() {
+        return price;
     }
 
-    public void setPriceCents(int priceCents) {
-        this.priceCents = priceCents;
+    public void setPrice(int price) {
+        this.price = price;
     }
 
     public String getCurrency() {

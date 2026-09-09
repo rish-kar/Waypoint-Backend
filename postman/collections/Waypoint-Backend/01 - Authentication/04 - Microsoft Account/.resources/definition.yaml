@@ -1,0 +1,3 @@
+$kind: collection
+description: Optional Microsoft account linking and disconnect operations.
+order: 4000

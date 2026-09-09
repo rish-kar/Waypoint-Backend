@@ -1,0 +1,41 @@
+$kind: http-request
+description: Controlled metadata correction only; this does not replay a webhook. Uses the runtime timestamp and requires an explicitly selected webhook event.
+url: "{{baseUrl}}/api/v1/admin/webhook-events/{{adminWebhookEventId}}"
+method: PATCH
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+      "processingStatus": "PROCESSED",
+      "clearErrorMessage": true,
+      "processedAt": "{{processedAt}}"
+    }
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      const eventId = pm.environment.get('adminWebhookEventId');
+      if (!adminId || !adminPassword) throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      if (!eventId) throw new Error('Set adminWebhookEventId explicitly, or filter List Webhook Events until exactly one event is returned.');
+      pm.variables.set('processedAt', new Date().toISOString());
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) return;
+      const body = pm.response.json();
+      pm.test('Webhook event ID matches selection', () => pm.expect(body.id).to.eql(pm.environment.get('adminWebhookEventId')));
+      pm.test('Webhook metadata updated', () => pm.expect(body.processingStatus).to.eql('PROCESSED'));
+    language: text/javascript
+order: 6200

@@ -1,0 +1,3 @@
+$kind: collection
+description: Optional branch for recovering the selected lifecycle subscription after an interrupted test run.
+order: 4000

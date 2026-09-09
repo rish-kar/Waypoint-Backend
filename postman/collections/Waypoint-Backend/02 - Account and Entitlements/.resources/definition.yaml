@@ -1,2 +1,3 @@
 $kind: collection
+description: Logged-in account, subscription and entitlement checks.
 order: 3000

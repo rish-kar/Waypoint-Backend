@@ -18,19 +18,26 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "users", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_users_provider_user", columnNames = {"provider", "provider_user_id"})
+        @UniqueConstraint(name = "uk_users_provider_user", columnNames = {"provider", "provider_user_id"}),
+        @UniqueConstraint(name = "uk_users_email_provider", columnNames = {"email", "provider"})
 })
 public class UserEntity {
     @Id
     private UUID id;
 
-    @Column(nullable = false, unique = true, length = 320)
+    @Column(nullable = false, length = 320)
     private String email;
 
     private String displayName;
 
     @Column(length = 2048)
     private String pictureUrl;
+
+    @Column(length = 32)
+    private String phoneNumber;
+
+    @Column(length = 2)
+    private String phoneCountryCode;
 
     @Column(nullable = false, length = 50)
     private String provider;
@@ -44,6 +51,21 @@ public class UserEntity {
 
     @Column(nullable = false)
     private int aiTrialRequestsUsed;
+
+    @Column(name = "openai_api_key_ciphertext", length = 4096)
+    private String openAiApiKeyCiphertext;
+
+    @Column(name = "openai_model", length = 200)
+    private String openAiModel;
+
+    @Column(name = "byok_provider", length = 40)
+    private String byokProvider;
+
+    @Column(name = "byok_api_key_ciphertext", length = 4096)
+    private String byokApiKeyCiphertext;
+
+    @Column(name = "byok_model", length = 200)
+    private String byokModel;
 
     @Column(nullable = false)
     private Instant createdAt;
@@ -108,6 +130,22 @@ public class UserEntity {
         this.pictureUrl = pictureUrl;
     }
 
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
+
+    public String getPhoneCountryCode() {
+        return phoneCountryCode;
+    }
+
+    public void setPhoneCountryCode(String phoneCountryCode) {
+        this.phoneCountryCode = phoneCountryCode;
+    }
+
     public String getProvider() {
         return provider;
     }
@@ -138,6 +176,46 @@ public class UserEntity {
 
     public void setAiTrialRequestsUsed(int aiTrialRequestsUsed) {
         this.aiTrialRequestsUsed = aiTrialRequestsUsed;
+    }
+
+    public String getOpenAiApiKeyCiphertext() {
+        return openAiApiKeyCiphertext;
+    }
+
+    public void setOpenAiApiKeyCiphertext(String openAiApiKeyCiphertext) {
+        this.openAiApiKeyCiphertext = openAiApiKeyCiphertext;
+    }
+
+    public String getOpenAiModel() {
+        return openAiModel;
+    }
+
+    public void setOpenAiModel(String openAiModel) {
+        this.openAiModel = openAiModel;
+    }
+
+    public String getByokProvider() {
+        return byokProvider;
+    }
+
+    public void setByokProvider(String byokProvider) {
+        this.byokProvider = byokProvider;
+    }
+
+    public String getByokApiKeyCiphertext() {
+        return byokApiKeyCiphertext;
+    }
+
+    public void setByokApiKeyCiphertext(String byokApiKeyCiphertext) {
+        this.byokApiKeyCiphertext = byokApiKeyCiphertext;
+    }
+
+    public String getByokModel() {
+        return byokModel;
+    }
+
+    public void setByokModel(String byokModel) {
+        this.byokModel = byokModel;
     }
 
     public Instant getCreatedAt() {

@@ -1,0 +1,47 @@
+$kind: http-request
+description: Strictly verifies that Lemon Squeezy delivered and Waypoint processed the refund webhook for the invoice selected in step 11 and refunded in step 12.
+url: "{{baseUrl}}/api/v1/admin/webhook-events?eventName=subscription_payment_refunded&processingStatus=PROCESSED&externalObjectId={{lemonSqueezyInvoiceId}}&size=10&sort=receivedAt&direction=DESC&includePayload=false"
+method: GET
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      const invoiceId = pm.environment.get('lemonSqueezyInvoiceId');
+      if (!adminId || !adminPassword) {
+          throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      }
+      if (!invoiceId) {
+          throw new Error('Run 11 - List Subscription Invoices and 12 - Refund Selected Invoice first.');
+      }
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      const invoiceId = String(pm.environment.get('lemonSqueezyInvoiceId'));
+      const events = body.items || [];
+      pm.test('Exactly matching refund webhook exists', () => {
+        pm.expect(events, 'No processed subscription_payment_refunded webhook exists for the selected invoice').to.be.an('array').and.not.empty;
+      });
+      const exactEvent = events.find(item =>
+        item.eventName === 'subscription_payment_refunded'
+        && item.processingStatus === 'PROCESSED'
+        && String(item.externalObjectId) === invoiceId
+      );
+      pm.test('Selected invoice refund webhook was processed', () => {
+        pm.expect(exactEvent, 'Matching refund webhook row was not found').to.exist;
+        pm.expect(exactEvent.processedAt).to.be.a('string').and.not.empty;
+        pm.expect(exactEvent.errorMessage).to.eql(null);
+      });
+    language: text/javascript
+order: 14000

@@ -1,0 +1,78 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/admin/family-ai"
+method: GET
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+  X-Request-ID: postman-admin-family-ai-usage
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      if (!adminId || !adminPassword) {
+          throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      }
+      const raw = `${adminId}:${adminPassword}`;
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(raw)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test('Full Family AI pool and rolling limit configuration are exposed to admin', () => {
+          pm.expect(body.monthlyPoolRupees).to.be.a('number').and.above(0);
+          pm.expect(body.poolSpentRupees).to.be.a('number').and.at.least(0);
+          pm.expect(body.poolRemainingRupees).to.be.a('number').and.at.least(0);
+          pm.expect(body.poolUsagePercent).to.be.a('number').and.within(0, 100);
+          pm.expect(body.activeSpecialUsers).to.be.a('number').and.at.least(0);
+          pm.expect(body.requestTokenLimit).to.eql(5000);
+          pm.expect(body.sessionWindowHours).to.eql(5);
+          pm.expect(body.sessionBudgetPercent).to.be.a('number').and.above(0);
+          pm.expect(body.weeklyWindowDays).to.eql(7);
+          pm.expect(body.weeklyBudgetPercent).to.be.a('number').and.above(0);
+          pm.expect(body.periodKey).to.match(/^\d{4}-\d{2}$/);
+          pm.expect(body.resetsAt).to.be.a('string').and.not.empty;
+          pm.expect(body.users).to.be.an('array');
+      });
+      pm.test('Internal microrupee accounting units are not exposed', () => {
+          pm.expect(body).to.not.have.property('monthlyPoolMicrorupees');
+          pm.expect(body).to.not.have.property('poolSpentMicrorupees');
+          pm.expect(body).to.not.have.property('poolRemainingMicrorupees');
+      });
+      pm.test('Per-user admin stats contain monthly, 5-hour and weekly details', () => {
+          body.users.forEach(user => {
+              pm.expect(user.userId).to.be.a('string').and.not.empty;
+              pm.expect(user.grantId).to.be.a('string').and.not.empty;
+              pm.expect(user.email).to.be.a('string').and.not.empty;
+              pm.expect(user.provider).to.be.a('string').and.not.empty;
+              pm.expect(user.active).to.be.a('boolean');
+              ['monthlyAllowanceRupees','spentRupees','remainingRupees','sessionLimitRupees','sessionSpentRupees','sessionRemainingRupees','weeklyLimitRupees','weeklySpentRupees','weeklyRemainingRupees'].forEach(key => pm.expect(user[key]).to.be.a('number').and.at.least(0));
+              ['usagePercent','sessionUsagePercent','weeklyUsagePercent'].forEach(key => pm.expect(user[key]).to.be.a('number').and.within(0, 100));
+              ['monthlyRequestCount','monthlyInputTokens','sessionRequestCount','sessionInputTokens','weeklyRequestCount','weeklyInputTokens'].forEach(key => pm.expect(user[key]).to.be.a('number').and.at.least(0));
+              pm.expect(user.sessionResetsAt).to.be.a('string').and.not.empty;
+              pm.expect(user.weeklyResetsAt).to.be.a('string').and.not.empty;
+              pm.expect(['ACTIVE','SESSION_LIMIT_REACHED','WEEKLY_LIMIT_REACHED','ACCOUNT_LIMIT_REACHED','EXPIRED','REVOKED']).to.include(user.status);
+              pm.expect(user).to.have.property('grantedBy');
+              pm.expect(user).to.have.property('grantedAt');
+              pm.expect(user).to.have.property('reason');
+              pm.expect(user).to.have.property('revokedBy');
+              pm.expect(user).to.have.property('revokedAt');
+          });
+      });
+      pm.environment.set('familyAiAdminPoolRupees', String(body.monthlyPoolRupees));
+      pm.environment.set('familyAiAdminPoolSpentRupees', String(body.poolSpentRupees));
+      pm.environment.set('familyAiAdminPoolRemainingRupees', String(body.poolRemainingRupees));
+      pm.environment.set('familyAiAdminActiveUsers', String(body.activeSpecialUsers));
+      pm.environment.set('familyAiAdminSessionBudgetPercent', String(body.sessionBudgetPercent));
+      pm.environment.set('familyAiAdminWeeklyBudgetPercent', String(body.weeklyBudgetPercent));
+      pm.environment.set('familyAiAdminUserCount', String(body.users.length));
+      pm.test('Request ID propagated', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-admin-family-ai-usage'));
+    language: text/javascript
+description: "Admin-only complete Friends & Family AI view: monthly hard pool, active-user count, 5-hour and weekly limit configuration, and every Special user's monthly/session/weekly usage, requests, input tokens and grant details."
+order: 4400

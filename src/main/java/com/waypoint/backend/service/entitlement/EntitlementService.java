@@ -3,9 +3,12 @@ package com.waypoint.backend.service.entitlement;
 import com.waypoint.backend.model.entitlement.EntitlementResponse;
 import com.waypoint.backend.model.entitlement.FeatureCode;
 import com.waypoint.backend.model.entitlement.FeatureEntitlementResponse;
+import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.service.subscription.SubscriptionService;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
+import com.waypoint.backend.utilities.exception.SubscriptionRequiredException;
+import com.waypoint.backend.utilities.exception.UnauthorizedException;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +30,10 @@ public class EntitlementService {
 
     @Transactional(readOnly = true)
     public EntitlementResponse currentEntitlement(UUID userId, boolean includeCheckedAt) {
-        SubscriptionSnapshot subscription = subscriptionService.current(userId);
+        return fromSnapshot(subscriptionService.current(userId), includeCheckedAt);
+    }
+
+    public EntitlementResponse fromSnapshot(SubscriptionSnapshot subscription, boolean includeCheckedAt) {
         return new EntitlementResponse(
                 entitlementPlan(subscription),
                 subscription.status().name(),
@@ -55,11 +61,27 @@ public class EntitlementService {
 
     @Transactional(readOnly = true)
     public boolean hasFeature(UUID userId, FeatureCode feature) {
+        if (userId == null) {
+            return false;
+        }
         SubscriptionSnapshot subscription = subscriptionService.current(userId);
         return featureCatalog.hasFeature(subscription.planCode(), feature);
     }
 
+    @Transactional(readOnly = true)
+    public void requireFeature(UUID userId, FeatureCode feature) {
+        if (userId == null) {
+            throw new UnauthorizedException("Authentication required");
+        }
+        if (!hasFeature(userId, feature)) {
+            throw new SubscriptionRequiredException(feature.value());
+        }
+    }
+
     private String entitlementPlan(SubscriptionSnapshot subscription) {
+        if (subscription.planCode() == PlanCode.ADMIN) {
+            return "ADMIN";
+        }
         return subscription.premium() ? "PREMIUM" : "FREE";
     }
 }

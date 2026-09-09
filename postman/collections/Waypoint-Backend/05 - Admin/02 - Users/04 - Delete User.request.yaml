@@ -1,0 +1,33 @@
+$kind: http-request
+description: Permanently deletes the exact user selected by Find User by Email. Related subscriptions and Premium Special data are removed first; database-cascaded session/provider records are also removed. This is destructive and intended for controlled admin/test cleanup.
+url: "{{baseUrl}}/api/v1/admin/users/{{userId}}"
+method: DELETE
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      const userId = pm.environment.get('userId');
+      const userEmail = pm.environment.get('userEmail');
+      if (!adminId || !adminPassword) throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      if (!userId || !userEmail) throw new Error('Run Find User by Email first so the exact user is selected.');
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 204', () => pm.response.to.have.status(204));
+      if (pm.response.code !== 204) return;
+      pm.environment.unset('userId');
+      pm.environment.unset('adminSubscriptionId');
+      pm.environment.unset('adminSubscriptionUserId');
+      pm.environment.unset('adminGrantId');
+    language: text/javascript
+order: 4000

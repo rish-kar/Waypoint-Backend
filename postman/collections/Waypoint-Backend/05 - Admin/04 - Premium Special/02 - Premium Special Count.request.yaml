@@ -1,0 +1,32 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/admin/premium-special"
+method: GET
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      if (!adminId || !adminPassword) {
+          throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      }
+      const raw = `${adminId}:${adminPassword}`;
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(raw)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const body = pm.response.json();
+      pm.test('At least one Premium Special user exists', () => pm.expect(body.count).to.be.at.least(1));
+      pm.test('Granted user is listed', () => {
+          pm.expect(body.users.some(user => user.userId === pm.environment.get('userId'))).to.eql(true);
+      });
+    language: text/javascript
+order: 4000

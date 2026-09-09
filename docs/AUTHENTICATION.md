@@ -1,6 +1,6 @@
 # Authentication
 
-Waypoint supports Google and Microsoft sign-in and issues its own short-lived bearer token plus a rotating Waypoint refresh token for authenticated API access.
+Waypoint supports backend-controlled Google OAuth and Microsoft OAuth. Provider credentials and provider-token handling stay on the backend. Successful authentication issues a short-lived Waypoint bearer JWT plus a rotating opaque Waypoint refresh token.
 
 ## Waypoint session model
 
@@ -18,16 +18,12 @@ A successful Google login or Microsoft session exchange returns:
 }
 ```
 
-The access token is a short-lived Waypoint JWT. The refresh token is opaque, stored only as a SHA-256 hash on the backend, rotated on every refresh and rejected after use, expiration or logout.
-
-Protected request example:
+The access token is short-lived. The refresh token is opaque, stored only as a SHA-256 hash on the backend, rotated on every refresh and rejected after use, expiration or logout.
 
 ```http
 GET /api/v1/account
 Authorization: Bearer waypoint-jwt
 ```
-
-Refresh an expired/expiring Waypoint session without an access token:
 
 ```http
 POST /api/v1/auth/session/refresh
@@ -38,15 +34,35 @@ Content-Type: application/json
 }
 ```
 
-`GET /api/v1/auth/session` is public and returns either the authenticated user/session when a valid bearer token is present or a signed-out response when it is absent.
+`GET /api/v1/auth/session` returns the authenticated session when a valid bearer token is present or a signed-out response when it is absent.
 
-## Google sign-in
+## Browser-extension Google flow
 
-1. The browser extension obtains a Google OAuth access token.
-2. The extension sends only that token to `POST /api/v1/auth/google`.
-3. The backend validates the Google token and profile using Google endpoints.
-4. The backend creates or updates the user identified by the Google provider subject.
-5. The backend returns a Waypoint access token, rotating refresh token, user profile and entitlement.
+Google uses a backend-owned Web Application OAuth Authorization Code flow with PKCE.
+
+1. The extension opens `GET /api/v1/auth/google/start` with its `chromiumapp.org` return URL using Chrome's web-auth transport.
+2. The backend creates one-time state and a PKCE verifier and redirects to Google.
+3. Google redirects to `GET /api/v1/auth/google/callback` on the Waypoint backend.
+4. The backend exchanges the authorization code using `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+5. The backend validates the Google profile and creates or updates the Waypoint user.
+6. Waypoint issues its own access and refresh credentials.
+7. The callback returns only Waypoint credentials to the validated extension return URL; Google provider tokens are never exposed to the extension.
+
+The extension does not contain Google client credentials and does not call Google token endpoints.
+
+Start the browser flow:
+
+```http
+GET /api/v1/auth/google/start?returnUrl=https://<extension-id>.chromiumapp.org/google
+```
+
+Configured callback:
+
+```text
+http://localhost:8080/api/v1/auth/google/callback
+```
+
+The direct provider-token endpoint remains available for API testing:
 
 ```http
 POST /api/v1/auth/google
@@ -63,7 +79,7 @@ The backend never trusts a client-supplied email address or Google user ID.
 
 Microsoft uses a backend-owned OAuth Authorization Code flow with PKCE.
 
-### 1. Start authentication
+### Start authentication
 
 ```http
 POST /api/v1/auth/microsoft/start
@@ -74,41 +90,19 @@ Content-Type: application/json
 }
 ```
 
-The `redirectUri` must exactly match one entry in `MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS`.
+The `redirectUri` must exactly match one entry in `MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS`. The response contains an authorization URL, diagnostic transaction ID and expiration time. Waypoint stores only hashed state and keeps the PKCE verifier protected server-side.
 
-The response contains:
+### Microsoft callback
 
-- `authorizationUrl` — open this in the browser/Chrome auth flow;
-- `transactionId` — diagnostic identifier only;
-- `expiresIn` — lifetime of the pending OAuth transaction.
-
-Waypoint generates a random OAuth state and PKCE verifier, stores only the state hash, encrypts the verifier at rest and makes the state single-use.
-
-### 2. Microsoft callback
-
-Microsoft redirects to the backend callback configured by `MICROSOFT_CALLBACK_URL`:
+Microsoft redirects to:
 
 ```text
 GET /api/v1/auth/microsoft/callback
 ```
 
-The backend validates the state, exchanges the authorization code with Microsoft, requests the Microsoft Graph profile and stores the Microsoft refresh credential encrypted with AES-256-GCM.
+The backend validates state, exchanges the code, reads the Microsoft Graph profile and stores the Microsoft refresh credential encrypted with AES-256-GCM. Microsoft provider tokens are never returned to the extension.
 
-The backend then redirects to the original extension redirect URI with either:
-
-```text
-?waypoint_auth=success&exchange_code=<short-lived-one-time-code>
-```
-
-or a sanitized error such as:
-
-```text
-?waypoint_auth=error&error=authentication_failed
-```
-
-Microsoft provider tokens are never returned to the extension.
-
-### 3. Exchange for a Waypoint session
+The backend returns a short-lived, one-time exchange code to the extension. Exchange it for a normal Waypoint session:
 
 ```http
 POST /api/v1/auth/session/exchange
@@ -119,13 +113,11 @@ Content-Type: application/json
 }
 ```
 
-The exchange code is stored only as a hash, expires quickly and is single-use. A successful exchange returns the normal Waypoint access/refresh session response.
-
 ## Explicit Microsoft account linking
 
 Waypoint does not automatically merge Google and Microsoft accounts by matching email addresses.
 
-An already-authenticated Waypoint user can explicitly link Microsoft:
+An authenticated Waypoint user can explicitly link Microsoft:
 
 ```http
 POST /api/v1/auth/microsoft/link/start
@@ -137,13 +129,15 @@ Content-Type: application/json
 }
 ```
 
-The authenticated Waypoint user ID is bound to the OAuth transaction. If that Microsoft identity is already linked to another Waypoint user, linking is rejected.
+If that Microsoft identity is already linked to another Waypoint user, linking is rejected. For Google-primary accounts, the canonical Google email/display name remain unchanged after Microsoft is linked.
 
-For Google-primary accounts, the canonical Google email/display name remain unchanged after Microsoft is linked.
+## Refresh sessions
 
-## Logout vs Microsoft disconnect
+Refresh tokens are generated from cryptographically secure random bytes. Only SHA-256 hashes are stored in PostgreSQL. Rotation is serialized with a pessimistic database lock. Expired or replayed refresh tokens return `401 UNAUTHORIZED`. Logout revokes all active refresh sessions for the user, and old rows are cleaned periodically.
 
-Logout and provider unlinking are intentionally separate operations.
+A browser profile created before refresh-token support must sign in once after upgrading. New sessions then refresh transparently until the refresh lifetime expires or the session is revoked.
+
+## Logout and Microsoft disconnect
 
 Logout:
 
@@ -152,7 +146,7 @@ POST /api/v1/auth/logout
 Authorization: Bearer waypoint-jwt
 ```
 
-Logout revokes the current JWT and all Waypoint refresh sessions for the user. It **does not delete the Microsoft account link**, so an explicitly linked Microsoft identity remains associated with the same Waypoint account after signing out.
+Logout revokes the current JWT and all Waypoint refresh sessions. It does not delete an existing Microsoft link.
 
 Explicit Microsoft disconnect:
 
@@ -161,21 +155,42 @@ DELETE /api/v1/auth/microsoft
 Authorization: Bearer waypoint-jwt
 ```
 
-This removes the stored Microsoft provider credential/link while leaving the current Waypoint session valid.
+This removes the Microsoft credential/link while leaving the current Waypoint session valid.
 
-## Microsoft credential refresh
+## Account phone update
 
-The backend stores only the Microsoft refresh credential required for future Microsoft API access. It is encrypted at rest.
+Phone is optional Waypoint profile data. The Google scope (`openid email profile`) does not provide a phone number, so users enter it manually.
 
-When refreshed:
+```http
+PATCH /api/v1/account
+Authorization: Bearer waypoint-jwt
+Content-Type: application/json
 
-- the backend sends the stored provider refresh token to Microsoft;
-- a rotated Microsoft refresh token replaces the previous encrypted value;
-- if Microsoft rejects the credential, the stored credential is removed and re-authentication/re-linking is required.
+{
+  "phoneNumber": "+91 9916604905",
+  "phoneCountryCode": "IN"
+}
+```
 
-## Local end-to-end Microsoft setup
+The number and ISO country code are persisted on the Waypoint user and are also exposed through the admin user response.
 
-Production secret-management details can be added later. For a real local Microsoft E2E test, configure these values in your local environment:
+## Local configuration
+
+Google:
+
+```text
+GOOGLE_CLIENT_ID=<google-web-application-client-id>
+GOOGLE_CLIENT_SECRET=<google-web-application-client-secret>
+APP_BASE_URL=http://localhost:8080
+```
+
+Google Cloud must authorize:
+
+```text
+http://localhost:8080/api/v1/auth/google/callback
+```
+
+Microsoft:
 
 ```text
 MICROSOFT_CLIENT_ID=<Azure app client ID>
@@ -186,53 +201,40 @@ MICROSOFT_TOKEN_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
 MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS=https://<your-extension-id>.chromiumapp.org/microsoft
 ```
 
-For the Azure/Microsoft app registration used locally, add this Web redirect URI exactly:
+Azure must authorize:
 
 ```text
 http://localhost:8080/api/v1/auth/microsoft/callback
 ```
 
-Then:
+Shared session configuration:
 
-1. Start PostgreSQL and Redis and run the backend with the `dev` profile.
-2. Import `postman/Waypoint-Backend.postman_collection.json` and `postman/Waypoint-Local.postman_environment.json` and select `Waypoint Local`.
-3. Set `microsoftRedirectUri` to the same Chromium redirect URI configured in `MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS`.
-4. Run `Microsoft Start` in `01 - Authentication`.
-5. Open the returned `microsoftAuthorizationUrl` through the extension's Chrome web-auth flow and complete Microsoft sign-in/consent.
-6. Read `exchange_code` from the final extension redirect URL and set `microsoftExchangeCode` in `Waypoint Local`.
-7. Run `Microsoft Session Exchange`, which stores `jwt`, `waypointRefreshToken`, `userId` and `userEmail`.
-8. Run `Current Session`, `Refresh Waypoint Session` and `Refresh Replay Rejected`.
-9. Verify `Logout` revokes the Waypoint session but keeps the Microsoft link; sign in again with Microsoft and confirm it returns to the same Waypoint account.
-10. Use `Microsoft Link Start` for explicit cross-provider linking and `Microsoft Disconnect` for explicit unlinking.
+```text
+JWT_SECRET=<at-least-32-random-bytes>
+JWT_EXPIRATION_SECONDS=900
+WAYPOINT_SESSION_REFRESH_TOKEN_TTL_SECONDS=2592000
+WAYPOINT_SESSION_CLEANUP_MS=3600000
+```
 
-The Microsoft requests are part of the main `01 - Authentication` Postman folder and use the shared `Waypoint Local` environment. The browser consent/redirect step remains interactive because Microsoft authentication must happen in the browser/Chrome extension context.
-
-## Production configuration notes
-
-Production validates HTTPS callback/provider URLs, exact Chromium extension redirect URIs, short JWT/session lifetimes, Redis-backed distributed state and a mounted managed-secret file for Microsoft token encryption. Production values are intentionally environment-specific and are not hard-coded in the repository.
+Never put provider secrets, provider tokens, Waypoint JWTs or raw Waypoint refresh tokens in source control or logs.
 
 ## Security properties
 
-The Microsoft flow includes:
-
-- Authorization Code + PKCE (`S256`);
-- cryptographically random OAuth state;
-- hashed state and exchange codes;
-- pessimistic database locking for one-time state/exchange/refresh consumption;
-- exact extension redirect allowlisting;
-- short-lived exchange codes;
-- encrypted Microsoft refresh credentials using AES-256-GCM;
-- rotating Waypoint refresh sessions;
-- sanitized provider failures;
-- explicit cross-provider account linking;
-- no Microsoft access/refresh token exposure to the extension.
+The OAuth/session design includes PKCE (`S256`), cryptographically random state, one-time state/exchange/refresh consumption, exact extension redirect validation, short-lived access JWTs, rotating Waypoint refresh sessions, sanitized provider failures, explicit cross-provider linking and no provider-token exposure to the extension. Microsoft refresh credentials are encrypted at rest.
 
 ## Automated tests
 
-Run the complete suite:
+Run:
 
 ```bash
 mvn clean verify
 ```
 
-Authentication coverage includes Google authentication plus Microsoft login, PKCE/scopes, expired/replayed state, expired/replayed exchange codes, Waypoint refresh rotation/replay rejection, persistent links across logout, explicit disconnect, prevention of automatic cross-provider email merging, explicit linking, provider refresh-token rotation/failure cleanup, sanitized failures and concurrent first login.
+Coverage includes Google and Microsoft authentication, PKCE/scopes, invalid/expired/replayed state, session refresh rotation/replay rejection, persistent Microsoft links across logout, explicit disconnect/linking, provider credential rotation/failure cleanup, phone persistence and phone update after access-token expiry.
+
+`WaypointSessionIntegrationTests` exercises:
+
+```text
+login → access JWT expires → refresh-token rotation → PATCH /api/v1/account
+→ phone persisted in DB → old refresh token rejected → logout → refresh session revoked
+```

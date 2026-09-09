@@ -11,6 +11,8 @@ public record AdminUserResponse(
         String email,
         String displayName,
         String pictureUrl,
+        String phoneNumber,
+        String phoneCountryCode,
         String provider,
         String providerUserId,
         PlanCode persistedPlan,

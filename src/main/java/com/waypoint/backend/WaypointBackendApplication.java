@@ -1,9 +1,11 @@
 package com.waypoint.backend;
 
 import com.waypoint.backend.config.admin.AdminProperties;
+import com.waypoint.backend.config.ai.FamilyAiAccessProperties;
 import com.waypoint.backend.config.ai.OpenAiProperties;
 import com.waypoint.backend.config.application.AppProperties;
 import com.waypoint.backend.config.application.CorsProperties;
+import com.waypoint.backend.config.auth.GoogleOAuthProperties;
 import com.waypoint.backend.config.auth.GoogleProperties;
 import com.waypoint.backend.config.auth.MicrosoftOAuthProperties;
 import com.waypoint.backend.config.auth.WaypointSessionProperties;
@@ -22,9 +24,11 @@ import java.util.TimeZone;
 @EnableConfigurationProperties({
         AdminProperties.class,
         OpenAiProperties.class,
+        FamilyAiAccessProperties.class,
         AppProperties.class,
         CorsProperties.class,
         GoogleProperties.class,
+        GoogleOAuthProperties.class,
         MicrosoftOAuthProperties.class,
         WaypointSessionProperties.class,
         JwtProperties.class,

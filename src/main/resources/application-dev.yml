@@ -3,6 +3,10 @@ spring:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/waypoint}
     username: ${DATABASE_USERNAME:waypoint}
     password: ${DATABASE_PASSWORD:waypoint}
+  flyway:
+    ignore-migration-patterns:
+      - "*:future"
+      - "*:missing"
 
 management:
   endpoint:

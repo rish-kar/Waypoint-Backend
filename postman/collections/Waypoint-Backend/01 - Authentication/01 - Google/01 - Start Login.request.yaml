@@ -1,0 +1,35 @@
+$kind: http-request
+description: Starts backend-controlled Google OAuth for manual/Postman testing. The backend uses GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and returns only a one-time Waypoint exchange handle plus the Google authorization URL. No Google client credentials or provider tokens are required in Postman.
+url: "{{baseUrl}}/api/v1/auth/google/start"
+method: GET
+headers:
+  X-Request-ID: postman-google-start
+scripts:
+  - type: beforeRequest
+    code: |-
+      pm.environment.unset('googleAuthorizationUrl');
+      pm.environment.unset('googleExchangeCode');
+      pm.environment.unset('jwt');
+      pm.environment.unset('userId');
+      pm.environment.unset('waypointRefreshToken');
+      pm.environment.unset('previousWaypointRefreshToken');
+      pm.environment.unset('adminSubscriptionId');
+      pm.environment.unset('adminSubscriptionUserId');
+      pm.environment.unset('adminGrantId');
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      if (pm.response.code === 200) {
+          const body = pm.response.json();
+          pm.test('Backend-controlled Google authorization started', () => {
+              pm.expect(body.authorizationUrl).to.be.a('string').and.not.empty;
+              pm.expect(body.exchangeCode).to.be.a('string').and.not.empty;
+              pm.expect(body.expiresIn).to.be.above(0);
+          });
+          pm.environment.set('googleAuthorizationUrl', body.authorizationUrl);
+          pm.environment.set('googleExchangeCode', body.exchangeCode);
+          console.log('Open this URL in your browser, complete Google sign-in, then run 02 - Complete Login:', body.authorizationUrl);
+      }
+    language: text/javascript
+order: 5000

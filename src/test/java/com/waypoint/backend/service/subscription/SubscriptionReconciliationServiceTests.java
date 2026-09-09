@@ -15,6 +15,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -35,7 +36,7 @@ class SubscriptionReconciliationServiceTests {
     private PlanService planService;
 
     @Test
-    void recoversMissingLocalSubscriptionByExactAccountEmail() {
+    void recoversMissingLocalSubscriptionByUnambiguousAccountEmail() {
         UserEntity user = new UserEntity();
         user.setId(UUID.randomUUID());
         user.setEmail("user@example.com");
@@ -46,7 +47,7 @@ class SubscriptionReconciliationServiceTests {
                 trialEndsAt, Instant.parse("2030-01-01T00:00:00Z"), null, updatedAt
         );
         when(subscriptionRepository.findByExternalSubscriptionIdForUpdate("sub_1")).thenReturn(Optional.empty());
-        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.findAllByEmail("user@example.com")).thenReturn(List.of(user));
         when(subscriptionAccessPolicy.planForVariant("111")).thenReturn("MONTHLY");
 
         SubscriptionReconciliationService service = service();
@@ -92,7 +93,7 @@ class SubscriptionReconciliationServiceTests {
     void skipsSubscriptionWhenNoWaypointUserMatchesEmail() {
         Instant updatedAt = Instant.parse("2026-08-14T18:00:00Z");
         when(subscriptionRepository.findByExternalSubscriptionIdForUpdate("sub_2")).thenReturn(Optional.empty());
-        when(userRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
+        when(userRepository.findAllByEmail("unknown@example.com")).thenReturn(List.of());
 
         ProviderSubscriptionSnapshot snapshot = new ProviderSubscriptionSnapshot(
                 "sub_2", "unknown@example.com", "cus_2", "prod_2", "111", "active",
@@ -101,6 +102,31 @@ class SubscriptionReconciliationServiceTests {
 
         assertEquals(SubscriptionReconciliationService.Result.UNMATCHED_USER, service().reconcile(snapshot));
         verify(subscriptionRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void skipsEmailFallbackWhenMultipleProviderAccountsShareEmail() {
+        Instant updatedAt = Instant.parse("2026-08-14T18:00:00Z");
+        UserEntity google = new UserEntity();
+        google.setId(UUID.randomUUID());
+        google.setProvider("GOOGLE");
+        google.setEmail("shared@example.com");
+        UserEntity microsoft = new UserEntity();
+        microsoft.setId(UUID.randomUUID());
+        microsoft.setProvider("MICROSOFT");
+        microsoft.setEmail("shared@example.com");
+
+        when(subscriptionRepository.findByExternalSubscriptionIdForUpdate("sub_3")).thenReturn(Optional.empty());
+        when(userRepository.findAllByEmail("shared@example.com")).thenReturn(List.of(google, microsoft));
+
+        ProviderSubscriptionSnapshot snapshot = new ProviderSubscriptionSnapshot(
+                "sub_3", "shared@example.com", "cus_3", "prod_3", "111", "active",
+                null, null, null, updatedAt
+        );
+
+        assertEquals(SubscriptionReconciliationService.Result.UNMATCHED_USER, service().reconcile(snapshot));
+        verify(subscriptionRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(planService, never()).synchronizeUserPlan(org.mockito.ArgumentMatchers.any());
     }
 
     private SubscriptionReconciliationService service() {

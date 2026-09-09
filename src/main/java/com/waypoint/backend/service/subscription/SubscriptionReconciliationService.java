@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -76,7 +77,8 @@ public class SubscriptionReconciliationService {
         if (!StringUtils.hasText(email)) {
             return Optional.empty();
         }
-        return userRepository.findByEmail(email.trim().toLowerCase(Locale.ROOT));
+        List<UserEntity> matches = userRepository.findAllByEmail(email.trim().toLowerCase(Locale.ROOT));
+        return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
     }
 
     private void setIfPresent(java.util.function.Consumer<String> setter, String value) {

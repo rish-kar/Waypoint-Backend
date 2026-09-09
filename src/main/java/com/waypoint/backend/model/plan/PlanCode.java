@@ -4,5 +4,6 @@ public enum PlanCode {
     FREE,
     PREMIUM_MONTHLY,
     PREMIUM_ANNUAL,
-    PREMIUM_SPECIAL
+    PREMIUM_SPECIAL,
+    ADMIN
 }

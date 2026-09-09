@@ -1,0 +1,3 @@
+$kind: collection
+description: Select a subscription, then update it if needed.
+order: 3000

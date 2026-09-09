@@ -1,11 +1,102 @@
 $kind: collection
 id: aa93dc55-52d9-4b40-84f0-0d397a7301a8
 name: Waypoint Backend API
-description: Run folders in order. Health checks need only the backend and PostgreSQL. Authentication requests cover Google login, Microsoft OAuth with PKCE, Waypoint session exchange/refresh, replay protection and bearer-token enforcement. Successful provider login stores the shared Waypoint jwt and userId. Microsoft consent uses the real Chrome extension web-auth redirect. Checkout requests require Lemon Squeezy test-mode credentials. Webhook requests generate X-Signature automatically from webhookSecret.
+description: Functional Waypoint backend flows only. Run folders in order. Negative authorization, malformed-token and hardening probes are covered by automated tests instead of manual Postman requests.
 scripts:
   - type: http:beforeRequest
     code: |-
       if (!pm.environment.get('baseUrl')) {
           throw new Error('Select the Waypoint Local environment.');
+      }
+
+      const requestUrl = pm.request.url.toString();
+      const adminTotp = pm.environment.get('adminTotp');
+      if (adminTotp && requestUrl.includes('/api/v1/admin/')) {
+          pm.request.headers.upsert({ key: 'X-Admin-TOTP', value: adminTotp });
+      } else {
+          pm.request.headers.remove('X-Admin-TOTP');
+      }
+
+      // Collection pre-request scripts run before request-level pre-request scripts.
+      // Validate only the URL here. Request-level scripts may intentionally generate
+      // dynamic header/body variables such as webhookSignature and webhookBody later.
+      const resolvedUrl = pm.variables.replaceIn(requestUrl);
+      const unresolvedUrl = resolvedUrl.match(/{{[^}]+}}/g) || [];
+      if (unresolvedUrl.length) {
+          throw new Error(`Unresolved Postman URL variables: ${unresolvedUrl.join(', ')}`);
+      }
+
+      // Keep the short-lived access JWT without forcing a new OAuth login every 15 minutes.
+      // Any request using the shared Waypoint Bearer token automatically rotates the
+      // 30-day refresh token shortly before the JWT expires.
+      const authorization = String(pm.request.headers.get('Authorization') || '');
+      const usesWaypointJwt = /^Bearer\s+/i.test(authorization);
+      if (usesWaypointJwt) {
+          const jwt = String(pm.environment.get('jwt') || '').trim();
+          if (!jwt) {
+              throw new Error('No Waypoint JWT is available. Run Google Complete Login or Microsoft Exchange Session first.');
+          }
+
+          let expiresAt;
+          try {
+              const payloadPart = jwt.split('.')[1];
+              if (!payloadPart) throw new Error('missing payload');
+              const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+              const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
+              const payload = JSON.parse(atob(padded));
+              expiresAt = Number(payload.exp || 0) * 1000;
+              if (!expiresAt) throw new Error('missing exp');
+          } catch {
+              throw new Error('Stored Waypoint JWT is malformed. Run Google Complete Login or Microsoft Exchange Session again.');
+          }
+
+          if (expiresAt <= Date.now() + 30000) {
+              const refreshToken = String(pm.environment.get('waypointRefreshToken') || '').trim();
+              if (!refreshToken) {
+                  throw new Error('Waypoint JWT has expired and no refresh token is stored. Sign in again.');
+              }
+
+              const baseUrl = String(pm.environment.get('baseUrl') || '').trim().replace(/\/+$/, '');
+              pm.sendRequest({
+                  url: `${baseUrl}/api/v1/auth/session/refresh`,
+                  method: 'POST',
+                  header: {
+                      'Content-Type': 'application/json',
+                      'X-Request-ID': 'postman-auto-refresh'
+                  },
+                  body: {
+                      mode: 'raw',
+                      raw: JSON.stringify({ refreshToken })
+                  }
+              }, (error, response) => {
+                  const failRefresh = (message) => {
+                      pm.environment.unset('jwt');
+                      pm.environment.unset('waypointRefreshToken');
+                      pm.environment.unset('previousWaypointRefreshToken');
+                      if (pm.execution?.skipRequest) pm.execution.skipRequest();
+                      throw new Error(message);
+                  };
+
+                  if (error || !response || response.code !== 200) {
+                      failRefresh('Waypoint session refresh failed. Run Google Complete Login or Microsoft Exchange Session again.');
+                  }
+
+                  let body;
+                  try {
+                      body = response.json();
+                  } catch {
+                      failRefresh('Waypoint session refresh returned an invalid response. Sign in again.');
+                  }
+
+                  if (!body?.accessToken || !body?.refreshToken) {
+                      failRefresh('Waypoint session refresh returned incomplete credentials. Sign in again.');
+                  }
+
+                  pm.environment.set('previousWaypointRefreshToken', refreshToken);
+                  pm.environment.set('jwt', body.accessToken);
+                  pm.environment.set('waypointRefreshToken', body.refreshToken);
+                  pm.request.headers.upsert({ key: 'Authorization', value: `Bearer ${body.accessToken}` });
+              });
+          }
       }
     language: text/javascript

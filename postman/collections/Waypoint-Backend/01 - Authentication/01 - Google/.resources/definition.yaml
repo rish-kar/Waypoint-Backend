@@ -1,0 +1,3 @@
+$kind: collection
+description: Backend-controlled Google sign-in flow. GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET stay in the backend; Postman receives only a generated authorization URL and a one-time Waypoint exchange handle.
+order: 1000

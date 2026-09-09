@@ -77,7 +77,6 @@ public class GlobalExceptionHandler {
     ) {
         Throwable rootCause = rootCause(exception);
         LOGGER.atWarn()
-                .setCause(exception)
                 .addKeyValue("event", "client_request_rejected")
                 .addKeyValue("status", status.value())
                 .addKeyValue("code", code)
