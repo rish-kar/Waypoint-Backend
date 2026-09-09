@@ -107,6 +107,7 @@ public class GoogleWebClientProfileClient implements GoogleProfileClient {
                     emailVerified,
                     text(userInfo, "name"),
                     text(userInfo, "picture"),
+                    text(userInfo, "locale"),
                     tokenClientId.trim(),
                     expiresInSeconds
             );
