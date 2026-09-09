@@ -155,6 +155,47 @@ POST https://your-backend.example/api/v1/webhooks/lemonsqueezy
 
 The backend verifies `X-Signature` using HMAC-SHA256, stores a raw payload hash for idempotency and links subscriptions through `meta.custom_data.waypoint_user_id`. Do not subscribe to `order_refunded` until order-to-subscription mapping is implemented.
 
+### Local Lemon Squeezy Webhook Testing with Cloudflare Tunnel
+
+When the backend is running locally on `http://localhost:8080`, Lemon Squeezy cannot call localhost directly. Keep a Cloudflare tunnel running in a separate terminal whenever testing checkout, trials or subscription webhooks.
+
+If `cloudflared` is not installed:
+
+```powershell
+winget install --id Cloudflare.cloudflared
+```
+
+Close and reopen PowerShell, then verify:
+
+```powershell
+cloudflared --version
+```
+
+Start a quick tunnel to the local backend:
+
+```powershell
+cloudflared tunnel --url http://localhost:8080
+```
+
+Cloudflare prints a URL similar to:
+
+```text
+https://xxxxx.trycloudflare.com
+```
+
+Set the Lemon Squeezy **Test Mode → Settings → Webhooks** callback URL to:
+
+```text
+https://xxxxx.trycloudflare.com/api/v1/webhooks/lemonsqueezy
+```
+
+Important:
+
+- Keep the `cloudflared` terminal running while testing.
+- A quick-tunnel URL normally changes each time the tunnel is restarted, so update the Lemon Squeezy webhook URL after restarting it.
+- If checkout succeeds but Waypoint still shows `FREE / INACTIVE`, first confirm the tunnel is running and then resend the failed `subscription_created` webhook from Lemon Squeezy.
+- The local Spring Boot log should show a request to `/api/v1/webhooks/lemonsqueezy` when a webhook reaches the backend.
+
 ## Premium Special
 
 `PREMIUM_SPECIAL` is complimentary premium access managed by Waypoint administrators. It is stored separately from Lemon Squeezy subscriptions so complimentary accounts can be counted and audited without creating fake billing records.
