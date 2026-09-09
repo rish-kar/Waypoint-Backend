@@ -13,7 +13,6 @@ spring:
 admin:
   id: test-admin
   password: test-admin-password-12345
-  totp-encryption-key: test-admin-totp-encryption-key-long-enough-12345
 
 jwt:
   secret: test-secret-that-is-long-enough-for-hmac
@@ -28,6 +27,11 @@ monitoring:
 
 google:
   client-id: test-google-client
+
+google-oauth:
+  client-secret: test-google-secret
+  authorization-url: https://accounts.google.com/o/oauth2/v2/auth
+  token-url: https://oauth2.googleapis.com/token
 
 microsoft:
   client-id: test-microsoft-client
@@ -49,6 +53,10 @@ lemon-squeezy:
   monthly-variant-id: "111"
   annual-variant-id: "222"
   webhook-secret: test-webhook-secret
+
+ai:
+  family-access:
+    monthly-budget-rupees: 5000
 
 cors:
   allowed-origins:
