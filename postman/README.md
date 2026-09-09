@@ -19,12 +19,12 @@ Run the folders in order where applicable.
 1. Health
 2. Liveness
 3. Readiness
-4. Metrics - Missing Token — expects `401`
-5. Metrics - Invalid Token — expects `401`
+4. Metrics - Missing Admin Credentials — expects `401`
+5. Metrics - Invalid Admin Credentials — expects `401`
 6. Generate Waypoint API Metric — creates a safe custom metric sample
 7. Metrics - Prometheus — expects `200` and verifies JVM, HTTP and Waypoint metrics
 
-The Prometheus request uses `monitoringMetricsToken` from the existing `Waypoint Local` environment. Its local default is `waypoint-local-metrics-token-change-before-production`; if you override `MONITORING_METRICS_TOKEN` when starting the backend, set the Postman value to the same token.
+The Prometheus request uses the same `adminId` and `adminPassword` values as the existing Admin requests and generates `adminBasicAuth` automatically. There is no separate metrics token. Production `/api/v1/admin/**` requests keep their TOTP requirement; `/actuator/prometheus` uses admin Basic Auth only so Prometheus can scrape it automatically.
 
 ### 01 - Authentication
 
@@ -217,7 +217,7 @@ The percentages are applied to each active Special user's current dynamic monthl
 
 ## Local setup
 
-Start the backend with the normal local configuration. For admin requests configure matching values in the backend and Postman environment:
+Start the backend with the normal local configuration. For admin and metrics requests configure matching values in the backend and Postman environment:
 
 ```text
 ADMIN_ID=<your-admin-id>
@@ -229,8 +229,7 @@ Postman environment:
 ```text
 adminId = same value as ADMIN_ID
 adminPassword = same value as ADMIN_PASSWORD
-adminTotp = current Microsoft Authenticator code when testing production
-monitoringMetricsToken = same value as MONITORING_METRICS_TOKEN if you override the local default
+adminTotp = current Microsoft Authenticator code when testing production admin APIs
 webhookSecret = same value as LEMON_SQUEEZY_WEBHOOK_SECRET
 ```
 
