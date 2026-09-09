@@ -43,7 +43,7 @@ waypoint_api_request_duration_seconds_bucket
 
 ## Postman
 
-Metrics checks are part of the existing `Waypoint Backend API` collection under `00 - Health and Configuration`; no separate metrics collection is required.
+Metrics checks are part of the existing Git-synced `Waypoint-Backend` collection under `00 - Health and Configuration`; there is no separate metrics collection and no generated main collection JSON.
 
 The existing `Waypoint Local` environment includes:
 
@@ -55,10 +55,10 @@ That value matches the backend's local default. If `MONITORING_METRICS_TOKEN` is
 
 Run these requests in order:
 
-1. `Metrics - Missing Token` — expects `401`.
-2. `Metrics - Invalid Token` — expects `401`.
-3. `Generate Waypoint API Metric` — creates a safe custom Waypoint metric sample.
-4. `Metrics - Prometheus` — expects `200` and verifies JVM, HTTP and Waypoint metrics.
+1. `04 - Metrics - Missing Token` — expects `401`.
+2. `05 - Metrics - Invalid Token` — expects `401`.
+3. `06 - Generate Waypoint API Metric` — creates a safe custom Waypoint metric sample.
+4. `07 - Metrics - Prometheus` — expects `200` and verifies JVM, HTTP and Waypoint metrics.
 
 ## Prometheus scrape example
 
