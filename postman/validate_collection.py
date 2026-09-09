@@ -54,13 +54,24 @@ forbid(
     "checkResolved(`Header",
 )
 
-# Admin plan discovery is the source of truth for the running backend's configured variants.
+# Admin plan discovery is the source of truth for the running backend's configured variants and display prices.
 plans_rel = "collections/Waypoint-Backend/05 - Admin/06 - Plans/01 - List Plans.request.yaml"
 require(
     plans_rel,
     "providerVariantId",
     "pm.environment.set('monthlyVariantId', monthly.providerVariantId)",
     "pm.environment.set('annualVariantId', annual.providerVariantId)",
+    "monthly?.price).to.eql(399)",
+    "annual?.price).to.eql(3500)",
+    "priceCents",
+)
+
+billing_plans_rel = "collections/Waypoint-Backend/03 - Billing/01 - Available Plans.request.yaml"
+require(
+    billing_plans_rel,
+    "monthly.price).to.eql(399)",
+    "annual.price).to.eql(3500)",
+    "to.not.have.property('priceCents')",
 )
 
 # Simulated webhook lifecycle tests must be repeatable, use the backend-synced variant,
@@ -151,6 +162,12 @@ require(
 )
 
 # User/admin selectors must clear dependent IDs before selecting new data.
+require(
+    "collections/Waypoint-Backend/02 - Account and Entitlements/01 - Account Details.request.yaml",
+    "Plan uses price field, not priceCents",
+    "to.have.property('price')",
+    "to.not.have.property('priceCents')",
+)
 require(
     "collections/Waypoint-Backend/05 - Admin/02 - Users/02 - Find User by Email.request.yaml",
     "pm.environment.unset('userId')",
