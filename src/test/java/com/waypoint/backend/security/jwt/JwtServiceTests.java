@@ -33,6 +33,19 @@ class JwtServiceTests {
     }
 
     @Test
+    void acceptsStillValidTokenWhenCurrentConfiguredTtlIsShorter() {
+        UUID userId = UUID.randomUUID();
+        JwtService issuer = service(SECRET, 86400, NOW);
+        String token = issuer.issueToken(userId, "user@example.com");
+        JwtService verifier = service(SECRET, 900, NOW.plusSeconds(120));
+
+        JwtClaims claims = verifier.parseToken(token);
+
+        assertThat(claims.userId()).isEqualTo(userId);
+        assertThat(claims.expiresAt()).isEqualTo(NOW.plusSeconds(86400));
+    }
+
+    @Test
     void rejectsExpiredToken() {
         JwtService issuer = service(SECRET, 60, NOW);
         String token = issuer.issueToken(UUID.randomUUID(), "user@example.com");
