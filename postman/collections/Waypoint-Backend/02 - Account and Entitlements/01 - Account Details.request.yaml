@@ -3,6 +3,7 @@ url: "{{baseUrl}}/api/v1/account"
 method: GET
 headers:
   Authorization: Bearer {{jwt}}
+  Accept-Language: en-US
 scripts:
   - type: afterResponse
     code: |-
@@ -11,10 +12,20 @@ scripts:
       const body = pm.response.json();
       pm.test('Account ID matches login', () => pm.expect(body.id).to.eql(pm.environment.get('userId')));
       pm.test('Entitlement included', () => pm.expect(body.entitlement.features).to.be.an('array'));
+      pm.test('Approximate locale is exposed for profile display', () => {
+        pm.expect(body).to.have.property('locale');
+        pm.expect(body.locale).to.satisfy(value => value === null || typeof value === 'string');
+      });
       pm.test('Plan uses price field, not priceCents', () => {
         pm.expect(body.plan).to.have.property('price');
         pm.expect(body.plan).to.not.have.property('priceCents');
         pm.expect(body.plan.currency).to.eql('INR');
+      });
+      pm.test('Plan includes locale-aware display pricing without changing checkout currency', () => {
+        pm.expect(body.plan).to.have.property('displayPrice');
+        pm.expect(body.plan).to.have.property('displayCurrency');
+        pm.expect(body.plan).to.have.property('displayPriceApproximate');
+        pm.expect(body.plan.displayPriceApproximate).to.be.a('boolean');
       });
     language: text/javascript
 order: 1000
