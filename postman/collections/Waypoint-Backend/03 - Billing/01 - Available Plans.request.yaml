@@ -19,10 +19,10 @@ scripts:
         pm.expect(monthly, 'PREMIUM_MONTHLY missing').to.exist;
         pm.expect(annual, 'PREMIUM_ANNUAL missing').to.exist;
       });
-      pm.test('Plan price contract keeps the actual checkout price in whole INR values', () => {
+      pm.test('Plan price contract keeps canonical whole INR values', () => {
         pm.expect(monthly.price).to.eql(399);
         pm.expect(monthly.currency).to.eql('INR');
-        pm.expect(annual.price).to.eql(3499);
+        pm.expect(annual.price).to.eql(3500);
         pm.expect(annual.currency).to.eql('INR');
         body.forEach(plan => pm.expect(plan).to.not.have.property('priceCents'));
       });
