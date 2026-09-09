@@ -1,11 +1,26 @@
 $kind: http-request
 url: "{{baseUrl}}/actuator/prometheus"
 method: GET
-description: Scrapes Prometheus metrics using the dedicated monitoring token from the existing Waypoint Local environment. This token is separate from Waypoint user JWTs and admin credentials.
+description: Scrapes Prometheus metrics using the same admin ID and password as the existing Admin requests.
 headers:
-  Authorization: Bearer {{monitoringMetricsToken}}
+  Authorization: Basic {{adminBasicAuth}}
   Accept: text/plain
 scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      if (!adminId || !adminPassword) {
+          throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      }
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+    language: text/javascript
   - type: afterResponse
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
