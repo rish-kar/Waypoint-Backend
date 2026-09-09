@@ -69,9 +69,6 @@ management:
         http.server.requests: true
         waypoint.api.request.duration: true
 
-monitoring:
-  metrics-token: ${MONITORING_METRICS_TOKEN:waypoint-local-metrics-token-change-before-production}
-
 admin:
   id: ${ADMIN_ID:}
   password: ${ADMIN_PASSWORD:}
