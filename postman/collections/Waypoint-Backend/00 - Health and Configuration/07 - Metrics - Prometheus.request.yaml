@@ -1,0 +1,20 @@
+$kind: http-request
+url: "{{baseUrl}}/actuator/prometheus"
+method: GET
+description: Scrapes Prometheus metrics using the dedicated monitoring token from the existing Waypoint Local environment. This token is separate from Waypoint user JWTs and admin credentials.
+headers:
+  Authorization: Bearer {{monitoringMetricsToken}}
+  Accept: text/plain
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      const contentType = pm.response.headers.get('Content-Type') || '';
+      const text = pm.response.text();
+      pm.test('Prometheus text response returned', () => pm.expect(contentType).to.include('text/plain'));
+      pm.test('JVM metrics are present', () => pm.expect(text).to.include('jvm_memory_used_bytes'));
+      pm.test('HTTP server metrics are present', () => pm.expect(text).to.include('http_server_requests_seconds_count'));
+      pm.test('Waypoint request counter is present', () => pm.expect(text).to.include('waypoint_api_requests_total'));
+      pm.test('Waypoint request duration is present', () => pm.expect(text).to.include('waypoint_api_request_duration_seconds'));
+    language: text/javascript
+order: 7000
