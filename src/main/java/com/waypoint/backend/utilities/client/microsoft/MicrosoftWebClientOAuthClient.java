@@ -69,10 +69,11 @@ public class MicrosoftWebClientOAuthClient implements MicrosoftOAuthClient {
             String providerUserId = text(payload, "id");
             String email = firstText(payload, "mail", "userPrincipalName");
             String displayName = text(payload, "displayName");
+            String locale = text(payload, "preferredLanguage");
             if (!StringUtils.hasText(providerUserId) || !StringUtils.hasText(email) || !email.contains("@")) {
                 throw new UnauthorizedException("Microsoft account does not provide a usable email address");
             }
-            return new MicrosoftProfile(providerUserId.trim(), email.trim(), displayName);
+            return new MicrosoftProfile(providerUserId.trim(), email.trim(), displayName, locale);
         } catch (UnauthorizedException exception) {
             throw exception;
         } catch (WebClientResponseException exception) {
