@@ -62,7 +62,7 @@ require(
     "pm.environment.set('monthlyVariantId', monthly.providerVariantId)",
     "pm.environment.set('annualVariantId', annual.providerVariantId)",
     "monthly?.price).to.eql(399)",
-    "annual?.price).to.eql(3500)",
+    "annual?.price).to.eql(3499)",
     "priceCents",
 )
 
@@ -70,8 +70,12 @@ billing_plans_rel = "collections/Waypoint-Backend/03 - Billing/01 - Available Pl
 require(
     billing_plans_rel,
     "monthly.price).to.eql(399)",
-    "annual.price).to.eql(3500)",
+    "annual.price).to.eql(3499)",
     "to.not.have.property('priceCents')",
+    "displayPrice",
+    "displayCurrency",
+    "displayPriceApproximate",
+    "Accept-Language: en-US",
 )
 
 # Simulated webhook lifecycle tests must be repeatable, use the backend-synced variant,
@@ -167,6 +171,8 @@ require(
     "Plan uses price field, not priceCents",
     "to.have.property('price')",
     "to.not.have.property('priceCents')",
+    "Approximate locale is exposed for profile display",
+    "displayPriceApproximate",
 )
 require(
     "collections/Waypoint-Backend/05 - Admin/02 - Users/02 - Find User by Email.request.yaml",
