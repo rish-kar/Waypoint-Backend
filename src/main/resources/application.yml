@@ -76,7 +76,9 @@ admin:
   id: ${ADMIN_ID:}
   password: ${ADMIN_PASSWORD:}
   totp-secret: ${ADMIN_TOTP_SECRET:}
-  totp-encryption-key: ${ADMIN_TOTP_ENCRYPTION_KEY:waypoint-local-admin-totp-encryption-key-change-before-production}
+
+subscription-access:
+  admin-email: ${WAYPOINT_ADMIN_EMAIL:}
 
 jwt:
   secret: ${JWT_SECRET:}
@@ -93,6 +95,11 @@ google:
   client-id: ${GOOGLE_CLIENT_ID:}
   token-info-url: ${GOOGLE_TOKEN_INFO_URL:https://oauth2.googleapis.com/tokeninfo}
   user-info-url: ${GOOGLE_USER_INFO_URL:https://openidconnect.googleapis.com/v1/userinfo}
+
+google-oauth:
+  client-secret: ${GOOGLE_CLIENT_SECRET:}
+  authorization-url: ${GOOGLE_AUTHORIZATION_URL:https://accounts.google.com/o/oauth2/v2/auth}
+  token-url: ${GOOGLE_TOKEN_URL:https://oauth2.googleapis.com/token}
 
 microsoft:
   client-id: ${MICROSOFT_CLIENT_ID:local-microsoft-client-id}
@@ -122,6 +129,13 @@ ai:
     api-key: ${OPENAI_API_KEY:}
     model: ${AI_OPENAI_MODEL:gpt-5-nano}
     request-timeout: ${AI_OPENAI_REQUEST_TIMEOUT:30s}
+  family-access:
+    monthly-budget-rupees: ${AI_FAMILY_MONTHLY_BUDGET_RUPEES}
+    session-budget-percent: ${AI_FAMILY_SESSION_BUDGET_PERCENT:5}
+    weekly-budget-percent: ${AI_FAMILY_WEEKLY_BUDGET_PERCENT:25}
+    usd-inr-accounting-rate: ${AI_FAMILY_USD_INR_ACCOUNTING_RATE:100}
+    input-usd-per-million-tokens: ${AI_FAMILY_INPUT_USD_PER_MILLION_TOKENS:0.05}
+    output-usd-per-million-tokens: ${AI_FAMILY_OUTPUT_USD_PER_MILLION_TOKENS:0.40}
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:}
