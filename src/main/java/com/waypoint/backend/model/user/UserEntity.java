@@ -39,6 +39,9 @@ public class UserEntity {
     @Column(length = 2)
     private String phoneCountryCode;
 
+    @Column(length = 35)
+    private String locale;
+
     @Column(nullable = false, length = 50)
     private String provider;
 
@@ -144,6 +147,14 @@ public class UserEntity {
 
     public void setPhoneCountryCode(String phoneCountryCode) {
         this.phoneCountryCode = phoneCountryCode;
+    }
+
+    public String getLocale() {
+        return locale;
+    }
+
+    public void setLocale(String locale) {
+        this.locale = locale;
     }
 
     public String getProvider() {
