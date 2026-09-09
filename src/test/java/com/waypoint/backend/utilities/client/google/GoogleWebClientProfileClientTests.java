@@ -38,7 +38,8 @@ class GoogleWebClientProfileClientTests {
                       "email": "user@example.com",
                       "email_verified": true,
                       "name": "User Name",
-                      "picture": "https://example.com/picture.png"
+                      "picture": "https://example.com/picture.png",
+                      "locale": "en-US"
                     }
                     """.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -124,6 +125,7 @@ class GoogleWebClientProfileClientTests {
         assertThat(profile.providerUserId()).isEqualTo("google-123");
         assertThat(profile.email()).isEqualTo("user@example.com");
         assertThat(profile.emailVerified()).isTrue();
+        assertThat(profile.locale()).isEqualTo("en-US");
         assertThat(profile.audience()).isEqualTo("expected-client");
         assertThat(profile.expiresInSeconds()).isEqualTo(300);
     }
