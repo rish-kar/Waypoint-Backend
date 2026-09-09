@@ -4,45 +4,42 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class MetricsIntegrationTests {
-    private static final String METRICS_TOKEN = "test-metrics-token-that-is-long-enough-12345";
+    private static final String ADMIN_ID = "test-admin";
+    private static final String ADMIN_PASSWORD = "test-admin-password-12345";
 
     @Autowired
     private MockMvc mockMvc;
 
     @Test
-    void prometheusEndpointRequiresDedicatedToken() throws Exception {
+    void prometheusEndpointRequiresAdminBasicAuthentication() throws Exception {
         mockMvc.perform(get("/actuator/prometheus"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, "Bearer realm=\"waypoint-metrics\""))
-                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+                .andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/actuator/prometheus")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer wrong-token"))
+                        .with(httpBasic(ADMIN_ID, "wrong-password")))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
-    void prometheusEndpointExportsRuntimeAndWaypointMetrics() throws Exception {
+    void prometheusEndpointExportsRuntimeAndWaypointMetricsForAdmin() throws Exception {
         mockMvc.perform(get("/api/v1/ai/models"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/actuator/prometheus")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + METRICS_TOKEN))
+                        .with(httpBasic(ADMIN_ID, ADMIN_PASSWORD)))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("jvm_memory_used_bytes")))
                 .andExpect(content().string(containsString("http_server_requests")))
