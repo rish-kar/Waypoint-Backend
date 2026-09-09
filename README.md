@@ -50,11 +50,10 @@ Never commit real secrets. For local IntelliJ development, set runtime values in
 | `DATABASE_POOL_MIN_IDLE` | Hikari minimum idle connections |
 | `DATABASE_CONNECTION_TIMEOUT_MS` | Hikari connection timeout |
 | `DATABASE_VALIDATION_TIMEOUT_MS` | Hikari validation timeout |
-| `ADMIN_ID` | Admin ID used only for `/api/v1/admin/**` HTTP Basic authentication |
-| `ADMIN_PASSWORD` | Admin password used only for `/api/v1/admin/**`; must be non-empty |
+| `ADMIN_ID` | Admin ID used only for `/api/v1/admin/**` HTTP Basic authentication and `/actuator/prometheus` |
+| `ADMIN_PASSWORD` | Admin password used for admin Basic authentication; must be non-empty |
 | `JWT_SECRET` | HMAC secret; minimum 32 characters and 32 bytes |
 | `JWT_EXPIRATION_SECONDS` | JWT validity; defaults to `86400` |
-| `MONITORING_METRICS_TOKEN` | Dedicated bearer token for `/actuator/prometheus`; production requires a non-placeholder value of at least 32 characters |
 | `GOOGLE_CLIENT_ID` | Expected Google OAuth client ID |
 | `GOOGLE_TOKEN_INFO_URL` | Google token validation endpoint |
 | `GOOGLE_USER_INFO_URL` | Google profile endpoint |
@@ -104,7 +103,6 @@ For production:
 - `APP_BASE_URL` must be a valid HTTPS URL.
 - `CORS_ALLOWED_ORIGINS` must contain only explicit HTTPS or Chrome-extension origins.
 - `ADMIN_ID` and `ADMIN_PASSWORD` must be non-placeholder production credentials.
-- `MONITORING_METRICS_TOKEN` must be a non-placeholder value of at least 32 characters.
 - Admin credentials and the protected metrics endpoint must only be used over HTTPS.
 - Development placeholders are rejected.
 - Flyway validates migrations and Hibernate validates the mapped schema.
@@ -117,7 +115,7 @@ Actuator exposes public health endpoints and a protected Prometheus endpoint:
 GET /actuator/health
 GET /actuator/health/liveness
 GET /actuator/health/readiness
-GET /actuator/prometheus   Authorization: Bearer <MONITORING_METRICS_TOKEN>
+GET /actuator/prometheus   Authorization: Basic <ADMIN_ID:ADMIN_PASSWORD>
 ```
 
 Readiness includes database connectivity. Detailed health information is visible in development and hidden in production. See `docs/METRICS.md` for the Prometheus metrics, security model and example queries.
@@ -198,7 +196,7 @@ The admin surface is a typed management API rather than a raw database/SQL endpo
 | `GET` | `/api/v1/admin/plans` | Admin Basic | View complete local plan catalogue |
 | `GET` | `/api/v1/admin/audit-events` | Admin Basic | Page/filter admin mutation audit trail |
 | `GET` | `/actuator/health/**` | Public | Health, liveness and readiness checks |
-| `GET` | `/actuator/prometheus` | Monitoring Bearer | Prometheus JVM, HTTP and bounded Waypoint application metrics |
+| `GET` | `/actuator/prometheus` | Admin Basic | Prometheus JVM, HTTP and bounded Waypoint application metrics |
 
 ## Subscription Rules
 
