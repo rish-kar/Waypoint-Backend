@@ -9,7 +9,7 @@ public record AdminPlanResponse(
         PlanCode code,
         String displayName,
         BillingInterval billingInterval,
-        int priceCents,
+        int price,
         String currency,
         boolean premium,
         boolean active,

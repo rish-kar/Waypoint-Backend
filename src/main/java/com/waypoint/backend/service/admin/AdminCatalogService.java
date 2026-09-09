@@ -83,7 +83,7 @@ public class AdminCatalogService {
 
     private AdminPlanResponse toPlanResponse(PlanEntity plan) {
         return new AdminPlanResponse(
-                plan.getCode(), plan.getDisplayName(), plan.getBillingInterval(), plan.getPriceCents(), plan.getCurrency(),
+                plan.getCode(), plan.getDisplayName(), plan.getBillingInterval(), plan.getPrice(), plan.getCurrency(),
                 plan.isPremium(), plan.isActive(), providerVariantId(plan.getCode()), plan.getCreatedAt(), plan.getUpdatedAt()
         );
     }

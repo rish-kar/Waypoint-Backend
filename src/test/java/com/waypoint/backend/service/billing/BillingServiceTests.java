@@ -2,7 +2,6 @@ package com.waypoint.backend.service.billing;
 
 import com.waypoint.backend.config.billing.LemonSqueezyProperties;
 import com.waypoint.backend.model.billing.BillingStatusResponse;
-import com.waypoint.backend.model.billing.ProviderPriceCatalog;
 import com.waypoint.backend.model.plan.BillingInterval;
 import com.waypoint.backend.model.plan.PlanCode;
 import com.waypoint.backend.model.plan.PlanEntity;
@@ -28,7 +27,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -151,20 +149,17 @@ class BillingServiceTests {
     }
 
     @Test
-    void returnsPaidPlansUsingProviderPricesAndCachesCatalog() {
-        PlanEntity monthly = plan(PlanCode.PREMIUM_MONTHLY, BillingInterval.MONTHLY, 499);
-        PlanEntity annual = plan(PlanCode.PREMIUM_ANNUAL, BillingInterval.ANNUAL, 3999);
-        when(planRepository.findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceCentsAsc(BillingInterval.NONE))
+    void returnsPaidPlansUsingCanonicalCataloguePrices() {
+        PlanEntity monthly = plan(PlanCode.PREMIUM_MONTHLY, BillingInterval.MONTHLY, 399);
+        PlanEntity annual = plan(PlanCode.PREMIUM_ANNUAL, BillingInterval.ANNUAL, 3500);
+        when(planRepository.findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceAsc(BillingInterval.NONE))
                 .thenReturn(List.of(monthly, annual));
-        when(lemonSqueezyClient.fetchPriceCatalog("111", "222"))
-                .thenReturn(new ProviderPriceCatalog(599, 4999, "GBP"));
 
-        List<PlanResponse> first = billingService.availablePlans();
-        List<PlanResponse> second = billingService.availablePlans();
+        List<PlanResponse> result = billingService.availablePlans();
 
-        assertThat(first).extracting(PlanResponse::priceCents).containsExactly(599, 4999);
-        assertThat(second).extracting(PlanResponse::currency).containsOnly("GBP");
-        verify(lemonSqueezyClient, times(1)).fetchPriceCatalog("111", "222");
+        assertThat(result).extracting(PlanResponse::price).containsExactly(399, 3500);
+        assertThat(result).extracting(PlanResponse::currency).containsOnly("INR");
+        verify(lemonSqueezyClient, never()).fetchPriceCatalog("111", "222");
     }
 
     @Test
@@ -245,13 +240,13 @@ class BillingServiceTests {
         return user;
     }
 
-    private PlanEntity plan(PlanCode code, BillingInterval interval, int priceCents) {
+    private PlanEntity plan(PlanCode code, BillingInterval interval, int price) {
         PlanEntity plan = new PlanEntity();
         plan.setCode(code);
         plan.setDisplayName(code.name());
         plan.setBillingInterval(interval);
-        plan.setPriceCents(priceCents);
-        plan.setCurrency("USD");
+        plan.setPrice(price);
+        plan.setCurrency("INR");
         plan.setPremium(true);
         plan.setActive(true);
         return plan;
