@@ -151,13 +151,13 @@ class BillingServiceTests {
     @Test
     void returnsPaidPlansUsingCanonicalCataloguePrices() {
         PlanEntity monthly = plan(PlanCode.PREMIUM_MONTHLY, BillingInterval.MONTHLY, 399);
-        PlanEntity annual = plan(PlanCode.PREMIUM_ANNUAL, BillingInterval.ANNUAL, 3499);
+        PlanEntity annual = plan(PlanCode.PREMIUM_ANNUAL, BillingInterval.ANNUAL, 3500);
         when(planRepository.findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceAsc(BillingInterval.NONE))
                 .thenReturn(List.of(monthly, annual));
 
         List<PlanResponse> result = billingService.availablePlans();
 
-        assertThat(result).extracting(PlanResponse::price).containsExactly(399, 3499);
+        assertThat(result).extracting(PlanResponse::price).containsExactly(399, 3500);
         assertThat(result).extracting(PlanResponse::currency).containsOnly("INR");
         verify(lemonSqueezyClient, never()).fetchPriceCatalog("111", "222");
     }
