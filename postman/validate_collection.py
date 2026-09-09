@@ -62,7 +62,7 @@ require(
     "pm.environment.set('monthlyVariantId', monthly.providerVariantId)",
     "pm.environment.set('annualVariantId', annual.providerVariantId)",
     "monthly?.price).to.eql(399)",
-    "annual?.price).to.eql(3499)",
+    "annual?.price).to.eql(3500)",
     "priceCents",
 )
 
@@ -70,7 +70,7 @@ billing_plans_rel = "collections/Waypoint-Backend/03 - Billing/01 - Available Pl
 require(
     billing_plans_rel,
     "monthly.price).to.eql(399)",
-    "annual.price).to.eql(3499)",
+    "annual.price).to.eql(3500)",
     "to.not.have.property('priceCents')",
     "displayPrice",
     "displayCurrency",
