@@ -40,8 +40,6 @@ values:
     value: ''
   - key: jwtSecret
     value: waypoint-local-development-secret-change-before-production
-  - key: monitoringMetricsToken
-    value: waypoint-local-metrics-token-change-before-production
   - key: webhookSecret
     value: local-webhook-secret
   - key: monthlyVariantId
