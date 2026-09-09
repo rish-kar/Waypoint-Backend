@@ -8,18 +8,28 @@ scripts:
   - type: afterResponse
     code: |-
       pm.test('Status is 200', () => pm.response.to.have.status(200));
+      if (pm.response.code !== 200) return;
       const body = pm.response.json();
       pm.test('Plans are returned as an array', () => pm.expect(body).to.be.an('array'));
+
+      const monthly = body.find(plan => plan.code === 'PREMIUM_MONTHLY');
+      const annual = body.find(plan => plan.code === 'PREMIUM_ANNUAL');
       pm.test('Monthly and annual premium plans are available', () => {
-        const codes = body.map(plan => plan.code);
-        pm.expect(codes).to.include('PREMIUM_MONTHLY');
-        pm.expect(codes).to.include('PREMIUM_ANNUAL');
+        pm.expect(monthly, 'PREMIUM_MONTHLY missing').to.exist;
+        pm.expect(annual, 'PREMIUM_ANNUAL missing').to.exist;
+      });
+      pm.test('Plan price contract uses whole INR values', () => {
+        pm.expect(monthly.price).to.eql(399);
+        pm.expect(monthly.currency).to.eql('INR');
+        pm.expect(annual.price).to.eql(3500);
+        pm.expect(annual.currency).to.eql('INR');
+        body.forEach(plan => pm.expect(plan).to.not.have.property('priceCents'));
       });
       pm.test('Returned plans are premium and active billing options', () => {
         body.forEach(plan => {
           pm.expect(plan.premium).to.eql(true);
           pm.expect(plan.billingInterval).to.be.oneOf(['MONTHLY', 'ANNUAL']);
-          pm.expect(plan.priceCents).to.be.at.least(0);
+          pm.expect(plan.price).to.be.at.least(0);
           pm.expect(plan.currency).to.be.a('string').and.not.empty;
         });
       });

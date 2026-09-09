@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface PlanRepository extends JpaRepository<PlanEntity, PlanCode> {
-    List<PlanEntity> findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceCentsAsc(BillingInterval billingInterval);
+    List<PlanEntity> findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceAsc(BillingInterval billingInterval);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select plan from PlanEntity plan where plan.code = :code")

@@ -29,19 +29,19 @@ class PlanCatalogueMigrationIntegrationTests {
         var special = planRepository.findById(PlanCode.PREMIUM_SPECIAL).orElseThrow();
         var admin = planRepository.findById(PlanCode.ADMIN).orElseThrow();
 
-        assertThat(free.getPriceCents()).isZero();
+        assertThat(free.getPrice()).isZero();
         assertThat(free.getCurrency()).isEqualTo("INR");
 
-        assertThat(monthly.getPriceCents()).isEqualTo(39900);
+        assertThat(monthly.getPrice()).isEqualTo(399);
         assertThat(monthly.getCurrency()).isEqualTo("INR");
 
-        assertThat(annual.getPriceCents()).isEqualTo(349900);
+        assertThat(annual.getPrice()).isEqualTo(3500);
         assertThat(annual.getCurrency()).isEqualTo("INR");
 
-        assertThat(special.getPriceCents()).isZero();
+        assertThat(special.getPrice()).isZero();
         assertThat(special.getCurrency()).isEqualTo("INR");
 
-        assertThat(admin.getPriceCents()).isZero();
+        assertThat(admin.getPrice()).isZero();
         assertThat(admin.getCurrency()).isEqualTo("INR");
         assertThat(admin.getBillingInterval()).isEqualTo(BillingInterval.NONE);
         assertThat(admin.isPremium()).isTrue();

@@ -30,7 +30,10 @@ public class EntitlementService {
 
     @Transactional(readOnly = true)
     public EntitlementResponse currentEntitlement(UUID userId, boolean includeCheckedAt) {
-        SubscriptionSnapshot subscription = subscriptionService.current(userId);
+        return fromSnapshot(subscriptionService.current(userId), includeCheckedAt);
+    }
+
+    public EntitlementResponse fromSnapshot(SubscriptionSnapshot subscription, boolean includeCheckedAt) {
         return new EntitlementResponse(
                 entitlementPlan(subscription),
                 subscription.status().name(),

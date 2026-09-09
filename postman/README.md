@@ -68,7 +68,8 @@ Choose one checkout branch.
 
 **01 - Subscription Events**
 1. Activate Monthly Subscription
-2. Refund Subscription
+2. Activate Annual Subscription
+3. Refund Subscription
 
 These requests are only for local/manual subscription-event testing. Invalid-signature, duplicate-delivery and other hardening cases are covered by automated backend tests instead of the operational Postman collection.
 
@@ -102,10 +103,12 @@ The Postman collection automatically sends it as `X-Admin-TOTP` for admin reques
 1. List Users
 2. Find User by Email — stores the returned ID in `userId`
 3. Get User
+4. Delete User — permanently removes the selected account and its owned subscription/Special data
 
 **03 - Subscriptions**
 1. List Subscriptions — stores the selected subscription in `adminSubscriptionId`
 2. Update Subscription
+3. Delete Subscription — permanently removes the selected subscription and recalculates the user's effective plan
 
 **04 - Premium Special**
 1. Grant Premium Special
@@ -119,6 +122,9 @@ The Postman collection automatically sends it as `X-Admin-TOTP` for admin reques
 1. List Webhook Events
 2. Get Webhook Event
 3. Update Webhook Event
+4. Delete Webhook Event — permanently removes the selected webhook record
+
+Delete User, Delete Subscription and Delete Webhook Event are destructive admin/test-cleanup operations and return `204 No Content` when successful. Plans and audit records are intentionally not exposed as deletable data.
 
 **06 - Plans**
 1. List Plans
