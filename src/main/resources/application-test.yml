@@ -35,7 +35,7 @@ microsoft:
   client-secret: test-microsoft-secret
   tenant: common
   callback-url: http://localhost:8080/api/v1/auth/microsoft/callback
-  graph-user-url: https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName
+  graph-user-url: https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName,preferredLanguage
   token-encryption-key: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
   token-encryption-key-file:
   allowed-extension-redirect-uris:
