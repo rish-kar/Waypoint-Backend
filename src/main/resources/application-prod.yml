@@ -34,7 +34,7 @@ microsoft:
   client-secret: ${MICROSOFT_CLIENT_SECRET}
   tenant: ${MICROSOFT_TENANT:common}
   callback-url: ${MICROSOFT_CALLBACK_URL}
-  graph-user-url: ${MICROSOFT_GRAPH_USER_URL:https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName}
+  graph-user-url: ${MICROSOFT_GRAPH_USER_URL:https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName,preferredLanguage}
   token-encryption-key: ${MICROSOFT_TOKEN_ENCRYPTION_KEY:}
   token-encryption-key-file: ${MICROSOFT_TOKEN_ENCRYPTION_KEY_FILE}
   allowed-extension-redirect-uris: ${MICROSOFT_ALLOWED_EXTENSION_REDIRECT_URIS}
