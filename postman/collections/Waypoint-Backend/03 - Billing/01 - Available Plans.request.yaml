@@ -1,9 +1,10 @@
 $kind: http-request
-description: Returns the active premium plans configured in the Waypoint database. Requires a valid Waypoint JWT but does not call Lemon Squeezy.
+description: Returns the active premium plans configured in the Waypoint database. The base price stays in INR; displayPrice/displayCurrency are approximate locale-aware presentation fields and never change checkout billing.
 url: "{{baseUrl}}/api/v1/billing/plans"
 method: GET
 headers:
   Authorization: Bearer {{jwt}}
+  Accept-Language: en-US
 scripts:
   - type: afterResponse
     code: |-
@@ -18,12 +19,20 @@ scripts:
         pm.expect(monthly, 'PREMIUM_MONTHLY missing').to.exist;
         pm.expect(annual, 'PREMIUM_ANNUAL missing').to.exist;
       });
-      pm.test('Plan price contract uses whole INR values', () => {
+      pm.test('Plan price contract keeps the actual checkout price in whole INR values', () => {
         pm.expect(monthly.price).to.eql(399);
         pm.expect(monthly.currency).to.eql('INR');
-        pm.expect(annual.price).to.eql(3500);
+        pm.expect(annual.price).to.eql(3499);
         pm.expect(annual.currency).to.eql('INR');
         body.forEach(plan => pm.expect(plan).to.not.have.property('priceCents'));
+      });
+      pm.test('Locale-aware display pricing is additive and safe to fall back to INR', () => {
+        body.forEach(plan => {
+          pm.expect(plan.displayPrice).to.be.a('number');
+          pm.expect(plan.displayCurrency).to.be.a('string').and.not.empty;
+          pm.expect(plan.displayPriceApproximate).to.be.a('boolean');
+          pm.expect(plan.displayLocale).to.satisfy(value => value === null || typeof value === 'string');
+        });
       });
       pm.test('Returned plans are premium and active billing options', () => {
         body.forEach(plan => {
