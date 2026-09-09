@@ -42,6 +42,19 @@ class PricingDisplayServiceTests {
     }
 
     @Test
+    void convertsAnnualPlanWithoutChangingCanonicalAnnualPrice() {
+        when(exchangeRateClient.rate("INR", "USD")).thenReturn(new BigDecimal("0.012"));
+
+        PlanResponse result = service.localize(annual(), "en-US", null);
+
+        assertThat(result.price()).isEqualTo(3500);
+        assertThat(result.currency()).isEqualTo("INR");
+        assertThat(result.displayPrice()).isEqualByComparingTo("42.00");
+        assertThat(result.displayCurrency()).isEqualTo("USD");
+        assertThat(result.displayPriceApproximate()).isTrue();
+    }
+
+    @Test
     void prefersProviderRegionAndSkipsRateLookupForInrLocale() {
         PlanResponse result = service.localize(monthly(), "en-IN", "en-US,en;q=0.9");
 
@@ -70,11 +83,19 @@ class PricingDisplayServiceTests {
     }
 
     private PlanResponse monthly() {
+        return plan(PlanCode.PREMIUM_MONTHLY, "Premium Monthly", BillingInterval.MONTHLY, 399);
+    }
+
+    private PlanResponse annual() {
+        return plan(PlanCode.PREMIUM_ANNUAL, "Premium Annual", BillingInterval.ANNUAL, 3500);
+    }
+
+    private PlanResponse plan(PlanCode code, String displayName, BillingInterval interval, int price) {
         PlanEntity plan = new PlanEntity();
-        plan.setCode(PlanCode.PREMIUM_MONTHLY);
-        plan.setDisplayName("Premium Monthly");
-        plan.setBillingInterval(BillingInterval.MONTHLY);
-        plan.setPrice(399);
+        plan.setCode(code);
+        plan.setDisplayName(displayName);
+        plan.setBillingInterval(interval);
+        plan.setPrice(price);
         plan.setCurrency("INR");
         plan.setPremium(true);
         return PlanResponse.from(plan);
