@@ -22,9 +22,6 @@ waypoint-session:
   refresh-token-ttl-seconds: 2592000
   cleanup-ms: 3600000
 
-monitoring:
-  metrics-token: test-metrics-token-that-is-long-enough-12345
-
 google:
   client-id: test-google-client
 
