@@ -6,4 +6,8 @@ import java.util.List;
 
 public interface LemonSqueezySubscriptionClient {
     List<ProviderSubscriptionSnapshot> listSubscriptions();
+
+    default ProviderSubscriptionSnapshot skipTrial(String externalSubscriptionId) {
+        throw new UnsupportedOperationException("Skipping a Lemon Squeezy trial is not implemented by this client");
+    }
 }

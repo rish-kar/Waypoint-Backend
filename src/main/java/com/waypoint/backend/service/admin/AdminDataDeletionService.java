@@ -5,6 +5,7 @@ import com.waypoint.backend.model.subscription.SubscriptionEntity;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.model.webhook.WebhookEventEntity;
 import com.waypoint.backend.repository.admin.AdminAuditEventRepository;
+import com.waypoint.backend.repository.billing.BillingCheckoutSessionRepository;
 import com.waypoint.backend.repository.entitlement.SpecialPremiumGrantRepository;
 import com.waypoint.backend.repository.subscription.SubscriptionRepository;
 import com.waypoint.backend.repository.user.UserRepository;
@@ -15,12 +16,14 @@ import com.waypoint.backend.utilities.exception.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
 public class AdminDataDeletionService {
     private final UserRepository userRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final BillingCheckoutSessionRepository checkoutSessionRepository;
     private final SpecialPremiumGrantRepository grantRepository;
     private final WebhookEventRepository webhookEventRepository;
     private final PlanService planService;
@@ -29,6 +32,7 @@ public class AdminDataDeletionService {
     public AdminDataDeletionService(
             UserRepository userRepository,
             SubscriptionRepository subscriptionRepository,
+            BillingCheckoutSessionRepository checkoutSessionRepository,
             SpecialPremiumGrantRepository grantRepository,
             WebhookEventRepository webhookEventRepository,
             PlanService planService,
@@ -36,6 +40,7 @@ public class AdminDataDeletionService {
     ) {
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
+        this.checkoutSessionRepository = checkoutSessionRepository;
         this.grantRepository = grantRepository;
         this.webhookEventRepository = webhookEventRepository;
         this.planService = planService;
@@ -50,6 +55,7 @@ public class AdminDataDeletionService {
 
         subscriptionRepository.deleteAll(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId));
         grantRepository.findByUserId(userId).ifPresent(grantRepository::delete);
+        clearCheckoutSession(userId);
         subscriptionRepository.flush();
         grantRepository.flush();
 
@@ -67,6 +73,7 @@ public class AdminDataDeletionService {
 
         subscriptionRepository.delete(subscription);
         subscriptionRepository.flush();
+        clearCheckoutSession(user.getId());
         planService.synchronizeUserPlan(user);
         audit(
                 adminId,
@@ -74,6 +81,33 @@ public class AdminDataDeletionService {
                 "SUBSCRIPTION",
                 subscriptionId,
                 "userId=" + user.getId() + ", externalSubscriptionId=" + externalSubscriptionId
+        );
+    }
+
+    @Transactional
+    public void resetTrialState(UUID userId, String adminId) {
+        UserEntity user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        List<SubscriptionEntity> subscriptions = subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId);
+        int previousTrialRequestsUsed = user.getAiTrialRequestsUsed();
+
+        if (!subscriptions.isEmpty()) {
+            subscriptionRepository.deleteAll(subscriptions);
+        }
+        subscriptionRepository.flush();
+        clearCheckoutSession(userId);
+
+        user.setAiTrialRequestsUsed(0);
+        userRepository.saveAndFlush(user);
+        planService.synchronizeUserPlan(user);
+
+        audit(
+                adminId,
+                "RESET_TRIAL_STATE",
+                "USER",
+                userId,
+                "deletedSubscriptions=" + subscriptions.size()
+                        + ", previousAiTrialRequestsUsed=" + previousTrialRequestsUsed
         );
     }
 
@@ -93,6 +127,11 @@ public class AdminDataDeletionService {
                 eventId,
                 "eventName=" + eventName + ", externalObjectId=" + externalObjectId
         );
+    }
+
+    private void clearCheckoutSession(UUID userId) {
+        checkoutSessionRepository.findById(userId).ifPresent(checkoutSessionRepository::delete);
+        checkoutSessionRepository.flush();
     }
 
     private void audit(String adminId, String action, String resourceType, UUID resourceId, String details) {
