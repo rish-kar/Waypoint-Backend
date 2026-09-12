@@ -6,6 +6,7 @@ import com.waypoint.backend.model.plan.PlanResponse;
 import com.waypoint.backend.model.subscription.CheckoutPlan;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.service.billing.BillingService;
+import com.waypoint.backend.service.billing.TrialConversionService;
 import com.waypoint.backend.service.user.UserService;
 
 import jakarta.validation.Valid;
@@ -24,10 +25,16 @@ import java.util.UUID;
 @RequestMapping("/api/v1/billing")
 public class BillingController {
     private final BillingService billingService;
+    private final TrialConversionService trialConversionService;
     private final UserService userService;
 
-    public BillingController(BillingService billingService, UserService userService) {
+    public BillingController(
+            BillingService billingService,
+            TrialConversionService trialConversionService,
+            UserService userService
+    ) {
         this.billingService = billingService;
+        this.trialConversionService = trialConversionService;
         this.userService = userService;
     }
 
@@ -41,6 +48,11 @@ public class BillingController {
         UserEntity user = userService.requireById(userId);
         String checkoutUrl = billingService.createCheckout(user, request.plan());
         return new CheckoutResponse(checkoutUrl);
+    }
+
+    @PostMapping("/skip-trial")
+    public BillingStatusResponse skipTrial(@AuthenticationPrincipal UUID userId) {
+        return trialConversionService.skipTrial(userId);
     }
 
     @GetMapping("/status")

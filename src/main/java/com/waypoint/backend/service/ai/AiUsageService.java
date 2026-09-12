@@ -61,7 +61,7 @@ public class AiUsageService {
             throw new ApiException(
                     HttpStatus.TOO_MANY_REQUESTS,
                     "AI_TRIAL_LIMIT_REACHED",
-                    "Your 20 Cloud AI trial requests have been used."
+                    "Your Cloud AI trial requests have been used."
             );
         }
 

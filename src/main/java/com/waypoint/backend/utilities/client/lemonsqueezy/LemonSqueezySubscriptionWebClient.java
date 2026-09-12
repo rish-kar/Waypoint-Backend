@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class LemonSqueezySubscriptionWebClient implements LemonSqueezySubscriptionClient {
@@ -35,9 +36,7 @@ public class LemonSqueezySubscriptionWebClient implements LemonSqueezySubscripti
 
     @Override
     public List<ProviderSubscriptionSnapshot> listSubscriptions() {
-        if (!StringUtils.hasText(properties.apiKey()) || !StringUtils.hasText(properties.storeId())) {
-            throw new ExternalServiceException("Lemon Squeezy reconciliation is not configured");
-        }
+        requireConfiguration();
 
         List<ProviderSubscriptionSnapshot> subscriptions = new ArrayList<>();
         int page = 1;
@@ -58,6 +57,50 @@ public class LemonSqueezySubscriptionWebClient implements LemonSqueezySubscripti
         } while (page <= lastPage);
 
         return List.copyOf(subscriptions);
+    }
+
+    @Override
+    public ProviderSubscriptionSnapshot skipTrial(String externalSubscriptionId) {
+        requireConfiguration();
+        if (!StringUtils.hasText(externalSubscriptionId) || !externalSubscriptionId.matches("\\d+")) {
+            throw new ExternalServiceException("Lemon Squeezy subscription ID is invalid");
+        }
+
+        Map<String, Object> body = Map.of(
+                "data", Map.of(
+                        "type", "subscriptions",
+                        "id", externalSubscriptionId,
+                        "attributes", Map.of("billing_anchor", 0)
+                )
+        );
+
+        try {
+            JsonNode response = webClient.patch()
+                    .uri("/subscriptions/{subscriptionId}", externalSubscriptionId)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
+                    .accept(JSON_API)
+                    .contentType(JSON_API)
+                    .bodyValue(body)
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .timeout(REQUEST_TIMEOUT)
+                    .block();
+            JsonNode data = response == null ? null : response.path("data");
+            if (data == null || data.isMissingNode()) {
+                throw new ExternalServiceException("Lemon Squeezy returned an empty trial conversion response");
+            }
+            ProviderSubscriptionSnapshot snapshot = toSnapshot(data);
+            if (!externalSubscriptionId.equals(snapshot.externalSubscriptionId())) {
+                throw new ExternalServiceException("Lemon Squeezy returned the wrong subscription after ending the trial");
+            }
+            return snapshot;
+        } catch (WebClientResponseException | WebClientRequestException exception) {
+            throw new ExternalServiceException("Unable to end the Lemon Squeezy trial");
+        } catch (ExternalServiceException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new ExternalServiceException("Unable to end the Lemon Squeezy trial");
+        }
     }
 
     private JsonNode fetchPage(int page) {
@@ -107,6 +150,12 @@ public class LemonSqueezySubscriptionWebClient implements LemonSqueezySubscripti
                 parseInstant(text(attributes, "ends_at")),
                 providerUpdatedAt
         );
+    }
+
+    private void requireConfiguration() {
+        if (!StringUtils.hasText(properties.apiKey()) || !StringUtils.hasText(properties.storeId())) {
+            throw new ExternalServiceException("Lemon Squeezy reconciliation is not configured");
+        }
     }
 
     private Instant parseInstant(String value) {

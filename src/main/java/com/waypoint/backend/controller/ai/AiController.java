@@ -117,6 +117,7 @@ public class AiController {
             @Valid @RequestBody AiIntentRequest request
     ) {
         requireAiAccess(userId);
+        aiUsageService.consume(userId);
         familyAiBudgetService.consumeRequestBudget(userId, request, 2, 800);
         return aiIntentService.route(userId, request);
     }
@@ -127,6 +128,7 @@ public class AiController {
             @Valid @RequestBody AiChatRequest request
     ) {
         requireAiAccess(userId);
+        aiUsageService.consume(userId);
         familyAiBudgetService.consumeRequestBudget(userId, request, 4, 1_200);
         return aiIntentService.chat(userId, request);
     }

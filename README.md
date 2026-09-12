@@ -50,8 +50,8 @@ Never commit real secrets. For local IntelliJ development, set runtime values in
 | `DATABASE_POOL_MIN_IDLE` | Hikari minimum idle connections |
 | `DATABASE_CONNECTION_TIMEOUT_MS` | Hikari connection timeout |
 | `DATABASE_VALIDATION_TIMEOUT_MS` | Hikari validation timeout |
-| `ADMIN_ID` | Admin ID used only for `/api/v1/admin/**` HTTP Basic authentication and `/actuator/prometheus` |
-| `ADMIN_PASSWORD` | Admin password used for admin Basic authentication; must be non-empty |
+| `ADMIN_ID` | Admin ID used only for `/api/v1/admin/**` HTTP Basic authentication |
+| `ADMIN_PASSWORD` | Admin password used only for `/api/v1/admin/**`; must be non-empty |
 | `JWT_SECRET` | HMAC secret; minimum 32 characters and 32 bytes |
 | `JWT_EXPIRATION_SECONDS` | JWT validity; defaults to `86400` |
 | `GOOGLE_CLIENT_ID` | Expected Google OAuth client ID |
@@ -103,22 +103,21 @@ For production:
 - `APP_BASE_URL` must be a valid HTTPS URL.
 - `CORS_ALLOWED_ORIGINS` must contain only explicit HTTPS or Chrome-extension origins.
 - `ADMIN_ID` and `ADMIN_PASSWORD` must be non-placeholder production credentials.
-- Admin credentials and the protected metrics endpoint must only be used over HTTPS.
+- Admin credentials must only be transmitted over HTTPS.
 - Development placeholders are rejected.
 - Flyway validates migrations and Hibernate validates the mapped schema.
 
-## Health Checks and Metrics
+## Health Checks
 
-Actuator exposes public health endpoints and a protected Prometheus endpoint:
+Actuator exposes only health endpoints:
 
 ```text
 GET /actuator/health
 GET /actuator/health/liveness
 GET /actuator/health/readiness
-GET /actuator/prometheus   Authorization: Basic <ADMIN_ID:ADMIN_PASSWORD>
 ```
 
-Readiness includes database connectivity. Detailed health information is visible in development and hidden in production. See `docs/METRICS.md` for the Prometheus metrics, security model and example queries.
+Readiness includes database connectivity. Detailed health information is visible in development and hidden in production.
 
 ## Logging
 
@@ -155,6 +154,47 @@ POST https://your-backend.example/api/v1/webhooks/lemonsqueezy
 ```
 
 The backend verifies `X-Signature` using HMAC-SHA256, stores a raw payload hash for idempotency and links subscriptions through `meta.custom_data.waypoint_user_id`. Do not subscribe to `order_refunded` until order-to-subscription mapping is implemented.
+
+### Local Lemon Squeezy Webhook Testing with Cloudflare Tunnel
+
+When the backend is running locally on `http://localhost:8080`, Lemon Squeezy cannot call localhost directly. Keep a Cloudflare tunnel running in a separate terminal whenever testing checkout, trials or subscription webhooks.
+
+If `cloudflared` is not installed:
+
+```powershell
+winget install --id Cloudflare.cloudflared
+```
+
+Close and reopen PowerShell, then verify:
+
+```powershell
+cloudflared --version
+```
+
+Start a quick tunnel to the local backend:
+
+```powershell
+cloudflared tunnel --url http://localhost:8080
+```
+
+Cloudflare prints a URL similar to:
+
+```text
+https://xxxxx.trycloudflare.com
+```
+
+Set the Lemon Squeezy **Test Mode → Settings → Webhooks** callback URL to:
+
+```text
+https://xxxxx.trycloudflare.com/api/v1/webhooks/lemonsqueezy
+```
+
+Important:
+
+- Keep the `cloudflared` terminal running while testing.
+- A quick-tunnel URL normally changes each time the tunnel is restarted, so update the Lemon Squeezy webhook URL after restarting it.
+- If checkout succeeds but Waypoint still shows `FREE / INACTIVE`, first confirm the tunnel is running and then resend the failed `subscription_created` webhook from Lemon Squeezy.
+- The local Spring Boot log should show a request to `/api/v1/webhooks/lemonsqueezy` when a webhook reaches the backend.
 
 ## Premium Special
 
@@ -196,7 +236,6 @@ The admin surface is a typed management API rather than a raw database/SQL endpo
 | `GET` | `/api/v1/admin/plans` | Admin Basic | View complete local plan catalogue |
 | `GET` | `/api/v1/admin/audit-events` | Admin Basic | Page/filter admin mutation audit trail |
 | `GET` | `/actuator/health/**` | Public | Health, liveness and readiness checks |
-| `GET` | `/actuator/prometheus` | Admin Basic | Prometheus JVM, HTTP and bounded Waypoint application metrics |
 
 ## Subscription Rules
 
