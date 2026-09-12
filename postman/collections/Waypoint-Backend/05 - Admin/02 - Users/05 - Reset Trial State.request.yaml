@@ -1,0 +1,30 @@
+$kind: http-request
+description: Resets the selected user's Waypoint trial test state without manual SQL. Deletes local subscriptions, clears any pending/reusable billing checkout session, resets Cloud AI trial usage to 0, and recalculates the effective plan. This does not cancel the Lemon Squeezy provider subscription; cancel/delete that provider subscription first when preparing a completely fresh checkout.
+url: "{{baseUrl}}/api/v1/admin/users/{{userId}}/reset-trial-state"
+method: POST
+headers:
+  Authorization: Basic {{adminBasicAuth}}
+scripts:
+  - type: beforeRequest
+    code: |-
+      let CryptoJS;
+      try {
+          CryptoJS = pm.require('npm:crypto-js@4.2.0');
+      } catch (error) {
+          CryptoJS = require('crypto-js');
+      }
+      const adminId = pm.environment.get('adminId');
+      const adminPassword = pm.environment.get('adminPassword');
+      const userId = pm.environment.get('userId');
+      if (!adminId || !adminPassword) throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
+      if (!userId) throw new Error('Run Find User by Email first so userId is populated.');
+      pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
+    language: text/javascript
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 204', () => pm.response.to.have.status(204));
+      if (pm.response.code !== 204) return;
+      pm.environment.unset('adminSubscriptionId');
+      pm.environment.unset('adminSubscriptionUserId');
+    language: text/javascript
+order: 5000
