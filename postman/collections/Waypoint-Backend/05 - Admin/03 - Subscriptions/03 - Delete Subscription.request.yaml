@@ -1,5 +1,5 @@
 $kind: http-request
-description: Permanently deletes the exact subscription selected for the current user, then lets the backend recalculate that user's effective persisted plan. Refuses to run if the selected subscription belongs to a different user.
+description: Permanently deletes the exact local subscription selected for the current user, clears that user's pending/reusable checkout session, then lets the backend recalculate the effective persisted plan. It does not reset Cloud AI trial usage and refuses to run if the selected subscription belongs to a different user.
 url: "{{baseUrl}}/api/v1/admin/subscriptions/{{adminSubscriptionId}}"
 method: DELETE
 headers:
