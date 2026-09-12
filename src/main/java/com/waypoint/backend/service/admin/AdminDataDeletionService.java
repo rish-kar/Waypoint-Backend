@@ -1,6 +1,5 @@
 package com.waypoint.backend.service.admin;
 
-import com.waypoint.backend.model.billing.BillingCheckoutSessionEntity;
 import com.waypoint.backend.model.admin.AdminAuditEventEntity;
 import com.waypoint.backend.model.subscription.SubscriptionEntity;
 import com.waypoint.backend.model.user.UserEntity;
