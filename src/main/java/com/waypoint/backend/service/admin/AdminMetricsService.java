@@ -121,7 +121,7 @@ public class AdminMetricsService {
         );
     }
 
-    private double value    private double value(String name) {
+    private double value(String name) {
         return statistic(name, Statistic.VALUE);
     }
 
