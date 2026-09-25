@@ -5,16 +5,23 @@ import java.util.Map;
 
 public record AdminMetricsResponse(
         String application,
-        Instant generatedAt,
-        double uptimeSeconds,
+        MeasurementWindow measurementWindow,
         CpuMetrics cpu,
         MemoryMetrics memory,
         DiskMetrics disk,
         DatabaseMetrics database,
         ThreadMetrics threads,
         HttpMetrics http,
-        WaypointMetrics waypoint
+        WaypointApiMetrics waypointApi
 ) {
+    public record MeasurementWindow(
+            String type,
+            Instant startedAt,
+            Instant generatedAt,
+            double durationSeconds,
+            String resetBehavior
+    ) {}
+
     public record CpuMetrics(
             double processUsagePercent,
             double systemUsagePercent,
@@ -48,15 +55,19 @@ public record AdminMetricsResponse(
     ) {}
 
     public record HttpMetrics(
-            long totalRequests,
-            double averageResponseTimeMs
+            String scope,
+            long requestsSinceStartup,
+            double averageResponseTimeMsSinceStartup
     ) {}
 
-    public record WaypointMetrics(
-            long totalRequests,
-            long totalErrors,
-            double averageResponseTimeMs,
-            Map<String, Long> requestsByArea,
-            Map<String, Long> errorsByArea
+    public record WaypointApiMetrics(
+            String scope,
+            long requestsSinceStartup,
+            long errorsSinceStartup,
+            double errorRatePercentSinceStartup,
+            double averageResponseTimeMsSinceStartup,
+            Map<String, Long> requestsByAreaSinceStartup,
+            Map<String, Long> errorsByAreaSinceStartup,
+            Map<String, String> areaScopes
     ) {}
 }
