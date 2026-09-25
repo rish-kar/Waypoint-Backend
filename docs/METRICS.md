@@ -6,7 +6,7 @@ Waypoint exposes runtime and application metrics through Spring Boot Actuator an
 
 ```text
 GET /actuator/prometheus
-Authorization: Basic <ADMIN_ID:ADMIN_PASSWORD>
+Authorization: Basic Auth using ADMIN_ID and ADMIN_PASSWORD
 ```
 
 Health, liveness and readiness remain public. Prometheus metrics use the same admin ID and password as the existing admin API. A Waypoint user JWT does not grant access to metrics.
