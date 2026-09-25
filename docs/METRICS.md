@@ -12,6 +12,8 @@ Authorization: Basic Auth using ADMIN_ID and ADMIN_PASSWORD
 Accept: application/json
 ```
 
+The JSON summary uses one explicit measurement window: `SINCE_APPLICATION_START`. Request/error counters and average response times cover the period from `measurementWindow.startedAt` to `measurementWindow.generatedAt` and reset when the backend process restarts.
+
 Raw Prometheus scrape endpoint:
 
 ```text
