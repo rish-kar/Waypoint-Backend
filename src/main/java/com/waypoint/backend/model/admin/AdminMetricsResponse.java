@@ -5,21 +5,24 @@ import java.util.Map;
 
 public record AdminMetricsResponse(
         String application,
+        Instant generatedAt,
         MeasurementWindow measurementWindow,
-        CpuMetrics cpu,
-        MemoryMetrics memory,
-        DiskMetrics disk,
-        DatabaseMetrics database,
-        ThreadMetrics threads,
-        HttpMetrics http,
-        WaypointApiMetrics waypointApi
+        CurrentSnapshot currentSnapshot,
+        SinceApplicationStart sinceApplicationStart
 ) {
     public record MeasurementWindow(
             String type,
             Instant startedAt,
-            Instant generatedAt,
             double durationSeconds,
-            String resetBehavior
+            boolean resetsOnBackendRestart
+    ) {}
+
+    public record CurrentSnapshot(
+            CpuMetrics cpu,
+            MemoryMetrics jvmMemory,
+            DiskMetrics disk,
+            DatabasePoolMetrics databasePool,
+            ThreadMetrics jvmThreads
     ) {}
 
     public record CpuMetrics(
@@ -41,7 +44,7 @@ public record AdminMetricsResponse(
             double usedPercent
     ) {}
 
-    public record DatabaseMetrics(
+    public record DatabasePoolMetrics(
             long activeConnections,
             long idleConnections,
             long maxConnections,
@@ -49,25 +52,31 @@ public record AdminMetricsResponse(
     ) {}
 
     public record ThreadMetrics(
-            long live,
-            long daemon,
-            long peak
+            long liveThreads,
+            long daemonThreads,
+            long peakThreads
     ) {}
 
-    public record HttpMetrics(
+    public record SinceApplicationStart(
+            HttpTrafficMetrics httpTraffic,
+            WaypointApiMetrics waypointApi
+    ) {}
+
+    public record HttpTrafficMetrics(
             String scope,
-            long requestsSinceStartup,
-            double averageResponseTimeMsSinceStartup
+            long requestCount,
+            double averageResponseTimeMs
     ) {}
 
     public record WaypointApiMetrics(
             String scope,
-            long requestsSinceStartup,
-            long errorsSinceStartup,
-            double errorRatePercentSinceStartup,
-            double averageResponseTimeMsSinceStartup,
-            Map<String, Long> requestsByAreaSinceStartup,
-            Map<String, Long> errorsByAreaSinceStartup,
-            Map<String, String> areaScopes
+            long requestCount,
+            long errorCount,
+            double errorRatePercent,
+            double averageResponseTimeMs,
+            Map<String, Long> requestsByArea,
+            Map<String, Long> errorsByArea,
+            Map<String, String> areaScopes,
+            String excludedEndpoint
     ) {}
 }
