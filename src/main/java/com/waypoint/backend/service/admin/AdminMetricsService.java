@@ -45,10 +45,22 @@ public class AdminMetricsService {
         double waypointDurationCount = statistic("waypoint.api.request.duration", Statistic.COUNT);
         double waypointDurationTotal = statistic("waypoint.api.request.duration", Statistic.TOTAL_TIME);
 
+        Instant generatedAt = Instant.now();
+        double uptimeSeconds = value("process.uptime");
+        double processStartEpochSeconds = value("process.start.time");
+        Instant startedAt = processStartEpochSeconds > 0
+                ? Instant.ofEpochMilli(Math.round(processStartEpochSeconds * 1000.0))
+                : generatedAt.minusMillis(Math.round(uptimeSeconds * 1000.0));
+
         return new AdminMetricsResponse(
                 applicationName,
-                Instant.now(),
-                round(value("process.uptime"), 3),
+                new AdminMetricsResponse.MeasurementWindow(
+                        "SINCE_APPLICATION_START",
+                        startedAt,
+                        generatedAt,
+                        round(uptimeSeconds, 3),
+                        "Counters and averages reset when the backend process restarts"
+                ),
                 new AdminMetricsResponse.CpuMetrics(
                         percent(value("process.cpu.usage")),
                         percent(value("system.cpu.usage")),
@@ -77,15 +89,29 @@ public class AdminMetricsService {
                         Math.round(value("jvm.threads.peak"))
                 ),
                 new AdminMetricsResponse.HttpMetrics(
+                        "ALL_HTTP_SERVER_REQUESTS",
                         Math.round(httpCount),
                         averageMilliseconds(httpTotalTime, httpCount)
                 ),
-                new AdminMetricsResponse.WaypointMetrics(
+                new AdminMetricsResponse.WaypointApiMetrics(
+                        "/api/v1/**",
                         Math.round(waypointCount),
                         Math.round(waypointErrors),
+                        ratioPercent(waypointErrors, waypointCount),
                         averageMilliseconds(waypointDurationTotal, waypointDurationCount),
                         countByTag("waypoint.api.requests", "area"),
-                        countByTag("waypoint.api.errors", "area")
+                        countByTag("waypoint.api.errors", "area"),
+                        Map.of(
+                                "auth", "/api/v1/auth/**",
+                                "ai", "/api/v1/ai/**",
+                                "billing", "/api/v1/billing/**",
+                                "webhook", "/api/v1/webhooks/**",
+                                "admin", "/api/v1/admin/**",
+                                "account", "/api/v1/account**",
+                                "entitlement", "/api/v1/entitlements**",
+                                "subscription", "/api/v1/subscriptions**",
+                                "other", "other /api/v1/** routes"
+                        )
                 )
         );
     }
