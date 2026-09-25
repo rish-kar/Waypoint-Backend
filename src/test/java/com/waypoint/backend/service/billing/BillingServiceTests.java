@@ -159,7 +159,7 @@ class BillingServiceTests {
 
         assertThat(result).extracting(PlanResponse::price).containsExactly(399, 3500);
         assertThat(result).extracting(PlanResponse::currency).containsOnly("INR");
-        verify(lemonSqueezyClient, never()).fetchPriceCatalog("111", "222");
+        verifyNoInteractions(lemonSqueezyClient);
     }
 
     @Test
