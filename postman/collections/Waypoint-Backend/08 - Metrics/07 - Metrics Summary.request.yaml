@@ -17,14 +17,21 @@ scripts:
       const body = pm.response.json();
       pm.test('Core metrics are present', () => {
           pm.expect(body.application).to.be.a('string');
-          pm.expect(body.uptimeSeconds).to.be.a('number');
+          pm.expect(body.measurementWindow).to.be.an('object');
+          pm.expect(body.measurementWindow.type).to.eql('SINCE_APPLICATION_START');
+          pm.expect(body.measurementWindow.startedAt).to.be.a('string');
+          pm.expect(body.measurementWindow.generatedAt).to.be.a('string');
+          pm.expect(body.measurementWindow.durationSeconds).to.be.a('number');
           pm.expect(body.cpu).to.be.an('object');
           pm.expect(body.memory).to.be.an('object');
           pm.expect(body.disk).to.be.an('object');
           pm.expect(body.database).to.be.an('object');
           pm.expect(body.threads).to.be.an('object');
           pm.expect(body.http).to.be.an('object');
-          pm.expect(body.waypoint).to.be.an('object');
+          pm.expect(body.waypointApi).to.be.an('object');
+          pm.expect(body.http.requestsSinceStartup).to.be.a('number');
+          pm.expect(body.waypointApi.requestsSinceStartup).to.be.a('number');
+          pm.expect(body.waypointApi.errorsSinceStartup).to.be.a('number');
       });
     language: text/javascript
 order: 7000
