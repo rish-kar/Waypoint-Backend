@@ -165,9 +165,10 @@ Use Recovery only when a lifecycle test was interrupted and the selected Lemon S
 4. Missing Admin Credentials — expects `401`
 5. Invalid Admin Credentials — expects `401`
 6. Generate Waypoint API Metric — calls a safe endpoint to create a custom metric sample
-7. Prometheus — expects `200` and verifies JVM, HTTP and Waypoint metrics
+7. Metrics Summary — human-readable JSON metrics for the admin
+8. Prometheus Raw — machine-oriented Prometheus exposition format
 
-The Prometheus request uses the same `adminId` and `adminPassword` values as the existing Admin requests. There is no separate metrics token. Production `/api/v1/admin/**` requests keep their TOTP requirement; `/actuator/prometheus` uses admin Basic Auth only so Prometheus can scrape it automatically.
+`/api/v1/admin/metrics` is the human-readable admin endpoint and returns structured JSON. `/actuator/prometheus` remains available only for Prometheus-compatible monitoring tools. Both use `adminId` and `adminPassword`; neither requires a Waypoint JWT or admin TOTP.
 
 ## Friends & Family AI visibility
 
