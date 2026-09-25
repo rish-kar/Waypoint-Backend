@@ -21,4 +21,4 @@ scripts:
       pm.test('Waypoint request counter is present', () => pm.expect(text).to.include('waypoint_api_requests_total'));
       pm.test('Waypoint request duration is present', () => pm.expect(text).to.include('waypoint_api_request_duration_seconds'));
     language: text/javascript
-order: 4000
+order: 7000
