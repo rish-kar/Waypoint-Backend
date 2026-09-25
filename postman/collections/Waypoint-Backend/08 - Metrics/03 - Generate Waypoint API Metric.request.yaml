@@ -10,4 +10,4 @@ scripts:
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       pm.test('Request ID returned', () => pm.expect(pm.response.headers.get('X-Request-ID')).to.eql('postman-metrics-sample'));
     language: text/javascript
-order: 3000
+order: 6000
