@@ -2,14 +2,24 @@
 
 Waypoint exposes runtime and application metrics through Spring Boot Actuator and Micrometer's Prometheus registry.
 
-## Endpoint
+## Endpoints
+
+Human-readable admin JSON:
+
+```text
+GET /api/v1/admin/metrics
+Authorization: Basic Auth using ADMIN_ID and ADMIN_PASSWORD
+Accept: application/json
+```
+
+Raw Prometheus scrape endpoint:
 
 ```text
 GET /actuator/prometheus
 Authorization: Basic Auth using ADMIN_ID and ADMIN_PASSWORD
 ```
 
-Health, liveness and readiness remain public. Prometheus metrics use the same admin ID and password as the existing admin API. A Waypoint user JWT does not grant access to metrics.
+Health, liveness and readiness remain public. Both metrics endpoints use the same admin ID and password as the existing admin API. A Waypoint user JWT does not grant access to metrics.
 
 Under the `prod` profile the metrics endpoint is HTTPS-only. Keep the admin credentials in the deployment/monitoring secret store and restrict network access to the scraper wherever possible.
 
@@ -62,7 +72,8 @@ Run these requests in order:
 4. `04 - Missing Admin Credentials` — expects `401`.
 5. `05 - Invalid Admin Credentials` — expects `401`.
 6. `06 - Generate Waypoint API Metric` — creates a safe custom Waypoint metric sample.
-7. `07 - Prometheus` — expects `200` and verifies JVM, HTTP and Waypoint metrics.
+7. `07 - Metrics Summary` — human-readable structured JSON.
+8. `08 - Prometheus Raw` — raw machine-oriented Prometheus format.
 
 ## Prometheus scrape example
 
