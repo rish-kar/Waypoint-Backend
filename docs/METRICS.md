@@ -118,3 +118,19 @@ histogram_quantile(
 ```
 
 Overall Spring HTTP 5xx rate can also be derived from `http_server_requests_seconds_count`.
+
+
+## Admin JSON response contract
+
+`GET /api/v1/admin/metrics` is designed for the admin panel.
+
+- `generatedAt` — exact time the snapshot was created.
+- `measurementWindow.type` — `SINCE_APPLICATION_START`.
+- `measurementWindow.startedAt` — backend process start time.
+- `measurementWindow.durationSeconds` — exact duration covered by cumulative metrics.
+- `measurementWindow.resetsOnBackendRestart` — explicitly indicates counters reset on restart.
+- `currentSnapshot` — current CPU, JVM memory, disk, database-pool and JVM-thread values.
+- `sinceApplicationStart.httpTraffic` — cumulative traffic for all backend HTTP requests.
+- `sinceApplicationStart.waypointApi` — cumulative traffic only for `/api/v1/**`, including request count, error count, error rate, response time and per-area breakdown.
+- Field names include units where applicable, such as `Percent`, `Mb`, `Gb` and `Ms`.
+- `/api/v1/admin/metrics` is excluded from Waypoint API counters so opening the admin metrics page does not inflate those counters.
