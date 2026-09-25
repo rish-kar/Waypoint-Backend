@@ -82,12 +82,6 @@ adminId
 adminPassword
 ```
 
-The generated Base64 value is stored in:
-
-```text
-adminBasicAuth
-```
-
 Production admin requests also require Microsoft Authenticator TOTP. Configure the same Base32 `ADMIN_TOTP_SECRET` in Microsoft Authenticator as a standard OATH-TOTP account using SHA-1, 6 digits and the normal 30-second period. Put the currently displayed code in:
 
 ```text
@@ -176,7 +170,7 @@ Use Recovery only when a lifecycle test was interrupted and the selected Lemon S
 3. Generate Waypoint API Metric — calls a safe endpoint to create a custom metric sample
 4. Prometheus — expects `200` and verifies JVM, HTTP and Waypoint metrics
 
-The Prometheus request uses the same `adminId` and `adminPassword` values as the existing Admin requests and generates `adminBasicAuth` automatically. There is no separate metrics token. Production `/api/v1/admin/**` requests keep their TOTP requirement; `/actuator/prometheus` uses admin Basic Auth only so Prometheus can scrape it automatically.
+The Prometheus request uses the same `adminId` and `adminPassword` values as the existing Admin requests. There is no separate metrics token. Production `/api/v1/admin/**` requests keep their TOTP requirement; `/actuator/prometheus` uses admin Basic Auth only so Prometheus can scrape it automatically.
 
 ## Friends & Family AI visibility
 
