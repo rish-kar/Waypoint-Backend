@@ -1,5 +1,7 @@
 package com.waypoint.backend;
 
+import com.waypoint.backend.config.admin.AdminProperties;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,11 +19,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class MetricsIntegrationTests {
-    private static final String ADMIN_ID = "test-admin";
-    private static final String ADMIN_PASSWORD = "test-admin-password-12345";
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private AdminProperties adminProperties;
 
     @Test
     void prometheusEndpointRequiresAdminBasicAuthentication() throws Exception {
@@ -29,7 +32,7 @@ class MetricsIntegrationTests {
                 .andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/actuator/prometheus")
-                        .with(httpBasic(ADMIN_ID, "wrong-password")))
+                        .with(httpBasic(adminProperties.id(), adminProperties.password() + "-wrong")))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -39,7 +42,7 @@ class MetricsIntegrationTests {
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/actuator/prometheus")
-                        .with(httpBasic(ADMIN_ID, ADMIN_PASSWORD)))
+                        .with(httpBasic(adminProperties.id(), adminProperties.password())))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("jvm_memory_used_bytes")))
                 .andExpect(content().string(containsString("http_server_requests")))
