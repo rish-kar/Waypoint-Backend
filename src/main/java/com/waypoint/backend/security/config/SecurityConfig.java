@@ -72,7 +72,7 @@ public class SecurityConfig {
             Environment environment
     ) throws Exception {
         http
-                .securityMatcher("/api/v1/admin/**")
+                .securityMatcher("/api/v1/admin/**", "/actuator/prometheus")
                 .csrf(csrf -> csrf.ignoringRequestMatchers(request ->
                         environment.acceptsProfiles(Profiles.of("dev", "test"))
                                 || request.getHeader("X-Admin-TOTP") != null))

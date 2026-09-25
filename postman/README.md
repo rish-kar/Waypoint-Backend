@@ -14,12 +14,6 @@ The old generated main collection JSON has been removed because the workspace re
 
 Run the folders in order where applicable.
 
-### 00 - Health and Configuration
-
-1. Health
-2. Liveness
-3. Readiness
-
 ### 01 - Authentication
 
 Authentication is split by flow.
@@ -80,12 +74,6 @@ Admin requests use HTTP Basic authentication generated from the selected environ
 ```text
 adminId
 adminPassword
-```
-
-The generated Base64 value is stored in:
-
-```text
-adminBasicAuth
 ```
 
 Production admin requests also require Microsoft Authenticator TOTP. Configure the same Base32 `ADMIN_TOTP_SECRET` in Microsoft Authenticator as a standard OATH-TOTP account using SHA-1, 6 digits and the normal 30-second period. Put the currently displayed code in:
@@ -169,6 +157,19 @@ Use Recovery only when a lifecycle test was interrupted and the selected Lemon S
 4. Chat - Page Context
 5. Friends and Family Usage — authenticated user's abstract 5-hour + weekly usage only
 
+### 08 - Metrics
+
+1. Health — public frontend/backend health check
+2. Liveness — public liveness probe
+3. Readiness — public readiness probe
+4. Missing Admin Credentials — expects `401`
+5. Invalid Admin Credentials — expects `401`
+6. Generate Waypoint API Metric — calls a safe endpoint to create a custom metric sample
+7. Metrics Summary — human-readable JSON metrics for the admin
+8. Prometheus Raw — machine-oriented Prometheus exposition format
+
+`/api/v1/admin/metrics` is the human-readable admin endpoint and returns structured JSON. `/actuator/prometheus` remains available only for Prometheus-compatible monitoring tools. Both use `adminId` and `adminPassword`; neither requires a Waypoint JWT or admin TOTP.
+
 ## Friends & Family AI visibility
 
 The Family AI APIs intentionally have separate user and admin views.
@@ -211,7 +212,7 @@ The percentages are applied to each active Special user's current dynamic monthl
 
 ## Local setup
 
-Start the backend with the normal local configuration. For admin requests configure matching values in the backend and Postman environment:
+Start the backend with the normal local configuration. For admin and metrics requests configure matching values in the backend and Postman environment:
 
 ```text
 ADMIN_ID=<your-admin-id>
@@ -223,7 +224,7 @@ Postman environment:
 ```text
 adminId = same value as ADMIN_ID
 adminPassword = same value as ADMIN_PASSWORD
-adminTotp = current Microsoft Authenticator code when testing production
+adminTotp = current Microsoft Authenticator code when testing production admin APIs
 webhookSecret = same value as LEMON_SQUEEZY_WEBHOOK_SECRET
 ```
 
