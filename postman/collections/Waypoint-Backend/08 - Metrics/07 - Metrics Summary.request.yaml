@@ -1,0 +1,44 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/admin/metrics"
+method: GET
+description: Returns a panel-friendly JSON summary with current snapshot values and cumulative metrics since backend startup.
+auth:
+  type: basic
+  credentials:
+    username: "{{adminId}}"
+    password: "{{adminPassword}}"
+headers:
+  Accept: application/json
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      pm.test('JSON response returned', () => pm.expect(pm.response.headers.get('Content-Type') || '').to.include('application/json'));
+      const body = pm.response.json();
+      pm.test('Admin metrics schema is clear and complete', () => {
+          pm.expect(body.application).to.be.a('string');
+          pm.expect(body.generatedAt).to.be.a('string');
+
+          pm.expect(body.measurementWindow.type).to.eql('SINCE_APPLICATION_START');
+          pm.expect(body.measurementWindow.startedAt).to.be.a('string');
+          pm.expect(body.measurementWindow.durationSeconds).to.be.a('number');
+          pm.expect(body.measurementWindow.resetsOnBackendRestart).to.eql(true);
+
+          pm.expect(body.currentSnapshot.cpu.processUsagePercent).to.be.a('number');
+          pm.expect(body.currentSnapshot.jvmMemory.heapUsedMb).to.be.a('number');
+          pm.expect(body.currentSnapshot.disk.usedPercent).to.be.a('number');
+          pm.expect(body.currentSnapshot.databasePool.activeConnections).to.be.a('number');
+          pm.expect(body.currentSnapshot.jvmThreads.liveThreads).to.be.a('number');
+
+          pm.expect(body.sinceApplicationStart.httpTraffic.scope).to.eql('ALL_BACKEND_HTTP_REQUESTS');
+          pm.expect(body.sinceApplicationStart.httpTraffic.requestCount).to.be.a('number');
+          pm.expect(body.sinceApplicationStart.httpTraffic.averageResponseTimeMs).to.be.a('number');
+
+          pm.expect(body.sinceApplicationStart.waypointApi.scope).to.eql('/api/v1/**');
+          pm.expect(body.sinceApplicationStart.waypointApi.requestCount).to.be.a('number');
+          pm.expect(body.sinceApplicationStart.waypointApi.errorCount).to.be.a('number');
+          pm.expect(body.sinceApplicationStart.waypointApi.errorRatePercent).to.be.a('number');
+          pm.expect(body.sinceApplicationStart.waypointApi.averageResponseTimeMs).to.be.a('number');
+      });
+    language: text/javascript
+order: 7000

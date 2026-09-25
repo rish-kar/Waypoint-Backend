@@ -1,0 +1,18 @@
+$kind: http-request
+url: "{{baseUrl}}/actuator/prometheus"
+method: GET
+description: Raw Prometheus exposition format for monitoring tools. This endpoint is machine-oriented and is not intended as the human-readable admin response.
+auth:
+  type: basic
+  credentials:
+    username: "{{adminId}}"
+    password: "{{adminPassword}}"
+headers:
+  Accept: text/plain
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      pm.test('Prometheus text returned', () => pm.expect(pm.response.headers.get('Content-Type') || '').to.include('text/plain'));
+    language: text/javascript
+order: 8000
