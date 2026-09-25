@@ -45,7 +45,7 @@ waypoint_api_request_duration_seconds_bucket
 
 ## Postman
 
-Metrics checks are part of the existing Git-synced `Waypoint-Backend` collection under `00 - Health and Configuration`; no separate metrics collection or metrics credential is required.
+Metrics checks are in the dedicated `08 - Metrics` folder of the existing Git-synced `Waypoint-Backend` collection. No separate metrics credential is required.
 
 Set the existing `Waypoint Local` values:
 
@@ -56,10 +56,10 @@ adminPassword = same value as ADMIN_PASSWORD
 
 Run these requests in order:
 
-1. `04 - Metrics - Missing Admin Credentials` — expects `401`.
-2. `05 - Metrics - Invalid Admin Credentials` — expects `401`.
-3. `06 - Generate Waypoint API Metric` — creates a safe custom Waypoint metric sample.
-4. `07 - Metrics - Prometheus` — expects `200` and verifies JVM, HTTP and Waypoint metrics.
+1. `01 - Missing Admin Credentials` — expects `401`.
+2. `02 - Invalid Admin Credentials` — expects `401`.
+3. `03 - Generate Waypoint API Metric` — creates a safe custom Waypoint metric sample.
+4. `04 - Prometheus` — expects `200` and verifies JVM, HTTP and Waypoint metrics.
 
 ## Prometheus scrape example
 
