@@ -1,5 +1,6 @@
 package com.waypoint.backend.config.metrics;
 
+import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -23,7 +24,7 @@ public class MetricsSecurityConfig {
             Environment environment
     ) throws Exception {
         http
-                .securityMatcher("/actuator/prometheus")
+                .securityMatcher(EndpointRequest.to("prometheus"))
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
