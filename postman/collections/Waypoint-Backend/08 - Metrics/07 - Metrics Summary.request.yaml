@@ -1,0 +1,30 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/admin/metrics"
+method: GET
+description: Returns a human-readable JSON summary of backend runtime and Waypoint application metrics.
+auth:
+  type: basic
+  credentials:
+    username: "{{adminId}}"
+    password: "{{adminPassword}}"
+headers:
+  Accept: application/json
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Status is 200', () => pm.response.to.have.status(200));
+      pm.test('JSON response returned', () => pm.expect(pm.response.headers.get('Content-Type') || '').to.include('application/json'));
+      const body = pm.response.json();
+      pm.test('Core metrics are present', () => {
+          pm.expect(body.application).to.be.a('string');
+          pm.expect(body.uptimeSeconds).to.be.a('number');
+          pm.expect(body.cpu).to.be.an('object');
+          pm.expect(body.memory).to.be.an('object');
+          pm.expect(body.disk).to.be.an('object');
+          pm.expect(body.database).to.be.an('object');
+          pm.expect(body.threads).to.be.an('object');
+          pm.expect(body.http).to.be.an('object');
+          pm.expect(body.waypoint).to.be.an('object');
+      });
+    language: text/javascript
+order: 7000
