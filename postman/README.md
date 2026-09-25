@@ -19,12 +19,6 @@ Run the folders in order where applicable.
 1. Health
 2. Liveness
 3. Readiness
-4. Metrics - Missing Admin Credentials — expects `401`
-5. Metrics - Invalid Admin Credentials — expects `401`
-6. Generate Waypoint API Metric — creates a safe custom metric sample
-7. Metrics - Prometheus — expects `200` and verifies JVM, HTTP and Waypoint metrics
-
-The Prometheus request uses the same `adminId` and `adminPassword` values as the existing Admin requests and generates `adminBasicAuth` automatically. There is no separate metrics token. Production `/api/v1/admin/**` requests keep their TOTP requirement; `/actuator/prometheus` uses admin Basic Auth only so Prometheus can scrape it automatically.
 
 ### 01 - Authentication
 
@@ -174,6 +168,15 @@ Use Recovery only when a lifecycle test was interrupted and the selected Lemon S
 3. Intent - Group Tabs
 4. Chat - Page Context
 5. Friends and Family Usage — authenticated user's abstract 5-hour + weekly usage only
+
+### 08 - Metrics
+
+1. Missing Admin Credentials — expects `401`
+2. Invalid Admin Credentials — expects `401`
+3. Generate Waypoint API Metric — calls a safe endpoint to create a custom metric sample
+4. Prometheus — expects `200` and verifies JVM, HTTP and Waypoint metrics
+
+The Prometheus request uses the same `adminId` and `adminPassword` values as the existing Admin requests and generates `adminBasicAuth` automatically. There is no separate metrics token. Production `/api/v1/admin/**` requests keep their TOTP requirement; `/actuator/prometheus` uses admin Basic Auth only so Prometheus can scrape it automatically.
 
 ## Friends & Family AI visibility
 

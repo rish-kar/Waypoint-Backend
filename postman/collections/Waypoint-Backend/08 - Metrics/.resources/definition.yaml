@@ -1,0 +1,3 @@
+$kind: collection
+description: Prometheus endpoint authentication and Waypoint application metrics verification.
+order: 9000
