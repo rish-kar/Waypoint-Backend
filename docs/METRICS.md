@@ -56,10 +56,13 @@ adminPassword = same value as ADMIN_PASSWORD
 
 Run these requests in order:
 
-1. `01 - Missing Admin Credentials` — expects `401`.
-2. `02 - Invalid Admin Credentials` — expects `401`.
-3. `03 - Generate Waypoint API Metric` — creates a safe custom Waypoint metric sample.
-4. `04 - Prometheus` — expects `200` and verifies JVM, HTTP and Waypoint metrics.
+1. `01 - Health` — public health check.
+2. `02 - Liveness` — public liveness probe.
+3. `03 - Readiness` — public readiness probe.
+4. `04 - Missing Admin Credentials` — expects `401`.
+5. `05 - Invalid Admin Credentials` — expects `401`.
+6. `06 - Generate Waypoint API Metric` — creates a safe custom Waypoint metric sample.
+7. `07 - Prometheus` — expects `200` and verifies JVM, HTTP and Waypoint metrics.
 
 ## Prometheus scrape example
 
