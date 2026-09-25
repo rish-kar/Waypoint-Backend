@@ -1,3 +1,3 @@
 $kind: collection
-description: Prometheus endpoint authentication and Waypoint application metrics verification.
+description: Backend health, liveness, readiness, Prometheus authentication, and Waypoint application metrics verification.
 order: 9000
