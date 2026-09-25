@@ -54,69 +54,74 @@ public class AdminMetricsService {
 
         return new AdminMetricsResponse(
                 applicationName,
+                generatedAt,
                 new AdminMetricsResponse.MeasurementWindow(
                         "SINCE_APPLICATION_START",
                         startedAt,
-                        generatedAt,
                         round(uptimeSeconds, 3),
-                        "Counters and averages reset when the backend process restarts"
+                        true
                 ),
-                new AdminMetricsResponse.CpuMetrics(
-                        percent(value("process.cpu.usage")),
-                        percent(value("system.cpu.usage")),
-                        (int) Math.round(value("system.cpu.count"))
+                new AdminMetricsResponse.CurrentSnapshot(
+                        new AdminMetricsResponse.CpuMetrics(
+                                percent(value("process.cpu.usage")),
+                                percent(value("system.cpu.usage")),
+                                (int) Math.round(value("system.cpu.count"))
+                        ),
+                        new AdminMetricsResponse.MemoryMetrics(
+                                round(heapUsed / BYTES_PER_MB, 2),
+                                round(heapCommitted / BYTES_PER_MB, 2),
+                                round(heapMax / BYTES_PER_MB, 2),
+                                ratioPercent(heapUsed, heapMax)
+                        ),
+                        new AdminMetricsResponse.DiskMetrics(
+                                round(diskFree / BYTES_PER_GB, 2),
+                                round(diskTotal / BYTES_PER_GB, 2),
+                                diskTotal > 0 ? round(((diskTotal - diskFree) / diskTotal) * 100.0, 2) : 0.0
+                        ),
+                        new AdminMetricsResponse.DatabasePoolMetrics(
+                                Math.round(value("hikaricp.connections.active")),
+                                Math.round(value("hikaricp.connections.idle")),
+                                Math.round(value("hikaricp.connections.max")),
+                                Math.round(value("hikaricp.connections.pending"))
+                        ),
+                        new AdminMetricsResponse.ThreadMetrics(
+                                Math.round(value("jvm.threads.live")),
+                                Math.round(value("jvm.threads.daemon")),
+                                Math.round(value("jvm.threads.peak"))
+                        )
                 ),
-                new AdminMetricsResponse.MemoryMetrics(
-                        round(heapUsed / BYTES_PER_MB, 2),
-                        round(heapCommitted / BYTES_PER_MB, 2),
-                        round(heapMax / BYTES_PER_MB, 2),
-                        ratioPercent(heapUsed, heapMax)
-                ),
-                new AdminMetricsResponse.DiskMetrics(
-                        round(diskFree / BYTES_PER_GB, 2),
-                        round(diskTotal / BYTES_PER_GB, 2),
-                        diskTotal > 0 ? round(((diskTotal - diskFree) / diskTotal) * 100.0, 2) : 0.0
-                ),
-                new AdminMetricsResponse.DatabaseMetrics(
-                        Math.round(value("hikaricp.connections.active")),
-                        Math.round(value("hikaricp.connections.idle")),
-                        Math.round(value("hikaricp.connections.max")),
-                        Math.round(value("hikaricp.connections.pending"))
-                ),
-                new AdminMetricsResponse.ThreadMetrics(
-                        Math.round(value("jvm.threads.live")),
-                        Math.round(value("jvm.threads.daemon")),
-                        Math.round(value("jvm.threads.peak"))
-                ),
-                new AdminMetricsResponse.HttpMetrics(
-                        "ALL_HTTP_SERVER_REQUESTS",
-                        Math.round(httpCount),
-                        averageMilliseconds(httpTotalTime, httpCount)
-                ),
-                new AdminMetricsResponse.WaypointApiMetrics(
-                        "/api/v1/**",
-                        Math.round(waypointCount),
-                        Math.round(waypointErrors),
-                        ratioPercent(waypointErrors, waypointCount),
-                        averageMilliseconds(waypointDurationTotal, waypointDurationCount),
-                        countByTag("waypoint.api.requests", "area"),
-                        countByTag("waypoint.api.errors", "area"),
-                        Map.of(
-                                "auth", "/api/v1/auth/**",
-                                "ai", "/api/v1/ai/**",
-                                "billing", "/api/v1/billing/**",
-                                "webhook", "/api/v1/webhooks/**",
-                                "admin", "/api/v1/admin/**",
-                                "account", "/api/v1/account**",
-                                "entitlement", "/api/v1/entitlements**",
-                                "subscription", "/api/v1/subscriptions**",
-                                "other", "other /api/v1/** routes"
+                new AdminMetricsResponse.SinceApplicationStart(
+                        new AdminMetricsResponse.HttpTrafficMetrics(
+                                "ALL_BACKEND_HTTP_REQUESTS",
+                                Math.round(httpCount),
+                                averageMilliseconds(httpTotalTime, httpCount)
+                        ),
+                        new AdminMetricsResponse.WaypointApiMetrics(
+                                "/api/v1/**",
+                                Math.round(waypointCount),
+                                Math.round(waypointErrors),
+                                ratioPercent(waypointErrors, waypointCount),
+                                averageMilliseconds(waypointDurationTotal, waypointDurationCount),
+                                countByTag("waypoint.api.requests", "area"),
+                                countByTag("waypoint.api.errors", "area"),
+                                Map.of(
+                                        "auth", "/api/v1/auth/**",
+                                        "ai", "/api/v1/ai/**",
+                                        "billing", "/api/v1/billing/**",
+                                        "webhook", "/api/v1/webhooks/**",
+                                        "admin", "/api/v1/admin/**",
+                                        "account", "/api/v1/account**",
+                                        "entitlement", "/api/v1/entitlements**",
+                                        "subscription", "/api/v1/subscriptions**",
+                                        "other", "other /api/v1/** routes"
+                                ),
+                                "/api/v1/admin/metrics"
                         )
                 )
         );
     }
 
-    private double value(String name) {
+    private double value    private double value(String name) {
         return statistic(name, Statistic.VALUE);
     }
 
