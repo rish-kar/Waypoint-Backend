@@ -55,7 +55,9 @@ public class WaypointApiMetricsFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith("/api/v1/");
+        String path = request.getRequestURI();
+        return !path.startsWith("/api/v1/")
+                || path.equals("/api/v1/admin/metrics");
     }
 
     private void record(HttpServletRequest request, int status, long durationNanos) {
