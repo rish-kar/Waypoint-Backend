@@ -17,4 +17,8 @@ public interface LemonSqueezyClient {
         return Optional.empty();
     }
 
+    default void validateCheckoutConfiguration(String variantId, CheckoutPlan plan) {
+        // Provider clients may verify that the configured variant matches Waypoint billing rules.
+    }
+
 }
