@@ -33,6 +33,23 @@ class LemonSqueezyWebClientTests {
         requestBody = new AtomicReference<>();
         authorizationHeader = new AtomicReference<>();
         server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/prices", exchange -> {
+            String query = exchange.getRequestURI().getQuery();
+            boolean annual = query != null && query.contains("variant_id%5D=222");
+            if (!annual && query != null) annual = query.contains("variant_id]=222");
+            int unitPrice = annual ? 3999 : 499;
+            String interval = annual ? "year" : "month";
+            byte[] response = ("{\"data\":[{\"attributes\":{"
+                    + "\"unit_price\":" + unitPrice + ","
+                    + "\"renewal_interval_unit\":\"" + interval + "\","
+                    + "\"renewal_interval_quantity\":1,"
+                    + "\"trial_interval_unit\":\"day\","
+                    + "\"trial_interval_quantity\":3}}]}").getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/vnd.api+json");
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
         server.createContext("/checkouts", exchange -> {
             requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             authorizationHeader.set(exchange.getRequestHeaders().getFirst("Authorization"));
@@ -49,6 +66,14 @@ class LemonSqueezyWebClientTests {
     @AfterEach
     void tearDown() {
         server.stop(0);
+    }
+
+    @Test
+    void validatesConfiguredMonthlyAndAnnualPricesAndThreeDayTrial() {
+        LemonSqueezyWebClient client = new LemonSqueezyWebClient(WebClient.builder(), properties());
+
+        client.validateCheckoutConfiguration("111", CheckoutPlan.MONTHLY);
+        client.validateCheckoutConfiguration("222", CheckoutPlan.ANNUAL);
     }
 
     @Test
