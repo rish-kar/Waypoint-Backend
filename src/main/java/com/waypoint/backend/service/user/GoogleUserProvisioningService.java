@@ -28,6 +28,7 @@ public class GoogleUserProvisioningService {
         user.setDisplayName(profile.displayName());
         user.setPictureUrl(profile.pictureUrl());
         user.setPlan(freePlan);
+        user.setOnboardingCompleted(false);
         user.setCreatedAt(Instant.now());
         user.setLastLoginAt(Instant.now());
         return userRepository.saveAndFlush(user);
