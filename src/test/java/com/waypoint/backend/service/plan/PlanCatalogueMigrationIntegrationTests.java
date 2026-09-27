@@ -22,7 +22,7 @@ class PlanCatalogueMigrationIntegrationTests {
     }
 
     @Test
-    void catalogueUsesCurrentInrPricing() {
+    void catalogueUsesCurrentUsdPricing() {
         var free = planRepository.findById(PlanCode.FREE).orElseThrow();
         var monthly = planRepository.findById(PlanCode.PREMIUM_MONTHLY).orElseThrow();
         var annual = planRepository.findById(PlanCode.PREMIUM_ANNUAL).orElseThrow();
@@ -30,19 +30,19 @@ class PlanCatalogueMigrationIntegrationTests {
         var admin = planRepository.findById(PlanCode.ADMIN).orElseThrow();
 
         assertThat(free.getPrice()).isZero();
-        assertThat(free.getCurrency()).isEqualTo("INR");
+        assertThat(free.getCurrency()).isEqualTo("USD");
 
-        assertThat(monthly.getPrice()).isEqualTo(399);
-        assertThat(monthly.getCurrency()).isEqualTo("INR");
+        assertThat(monthly.getPrice()).isEqualTo(499);
+        assertThat(monthly.getCurrency()).isEqualTo("USD");
 
-        assertThat(annual.getPrice()).isEqualTo(3500);
-        assertThat(annual.getCurrency()).isEqualTo("INR");
+        assertThat(annual.getPrice()).isEqualTo(3999);
+        assertThat(annual.getCurrency()).isEqualTo("USD");
 
         assertThat(special.getPrice()).isZero();
-        assertThat(special.getCurrency()).isEqualTo("INR");
+        assertThat(special.getCurrency()).isEqualTo("USD");
 
         assertThat(admin.getPrice()).isZero();
-        assertThat(admin.getCurrency()).isEqualTo("INR");
+        assertThat(admin.getCurrency()).isEqualTo("USD");
         assertThat(admin.getBillingInterval()).isEqualTo(BillingInterval.NONE);
         assertThat(admin.isPremium()).isTrue();
         assertThat(admin.isActive()).isFalse();
