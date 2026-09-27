@@ -152,15 +152,15 @@ class BillingServiceTests {
 
     @Test
     void returnsPaidPlansUsingCanonicalCataloguePrices() {
-        PlanEntity monthly = plan(PlanCode.PREMIUM_MONTHLY, BillingInterval.MONTHLY, 399);
-        PlanEntity annual = plan(PlanCode.PREMIUM_ANNUAL, BillingInterval.ANNUAL, 3500);
+        PlanEntity monthly = plan(PlanCode.PREMIUM_MONTHLY, BillingInterval.MONTHLY, 499);
+        PlanEntity annual = plan(PlanCode.PREMIUM_ANNUAL, BillingInterval.ANNUAL, 3999);
         when(planRepository.findByActiveTrueAndPremiumTrueAndBillingIntervalNotOrderByPriceAsc(BillingInterval.NONE))
                 .thenReturn(List.of(monthly, annual));
 
         List<PlanResponse> result = billingService.availablePlans();
 
-        assertThat(result).extracting(PlanResponse::price).containsExactly(399, 3500);
-        assertThat(result).extracting(PlanResponse::currency).containsOnly("INR");
+        assertThat(result).extracting(PlanResponse::price).containsExactly(499, 3999);
+        assertThat(result).extracting(PlanResponse::currency).containsOnly("USD");
         verifyNoInteractions(lemonSqueezyClient);
     }
 
@@ -248,7 +248,7 @@ class BillingServiceTests {
         plan.setDisplayName(code.name());
         plan.setBillingInterval(interval);
         plan.setPrice(price);
-        plan.setCurrency("INR");
+        plan.setCurrency("USD");
         plan.setPremium(true);
         plan.setActive(true);
         return plan;
