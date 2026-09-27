@@ -65,8 +65,6 @@ public class BillingService {
             throw new InvalidRequestException("Requested billing plan is not configured");
         }
 
-        lemonSqueezyClient.validateCheckoutConfiguration(variantId, plan);
-
         CheckoutSessionCoordinator.Reservation reservation = checkoutSessionCoordinator.reserve(user.getId(), plan);
         if (StringUtils.hasText(reservation.checkoutUrl())) {
             return reservation.checkoutUrl();
@@ -74,6 +72,8 @@ public class BillingService {
         if (!reservation.providerOwner()) {
             throw new InvalidRequestException("Checkout is already being prepared; retry shortly");
         }
+
+        lemonSqueezyClient.validateCheckoutConfiguration(variantId, plan);
 
         Optional<String> recoveredCheckout = lemonSqueezyClient.findCheckoutByIntent(variantId, reservation.intentId());
         if (recoveredCheckout.isPresent()) {
