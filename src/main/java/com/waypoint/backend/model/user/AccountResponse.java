@@ -12,6 +12,7 @@ public record AccountResponse(
         String pictureUrl,
         String phoneNumber,
         String phoneCountryCode,
+        boolean onboardingCompleted,
         PlanResponse plan,
         EntitlementResponse entitlement
 ) {
