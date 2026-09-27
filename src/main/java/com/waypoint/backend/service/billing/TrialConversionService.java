@@ -1,11 +1,9 @@
 package com.waypoint.backend.service.billing;
 
-import com.waypoint.backend.model.ai.AiUsageResponse;
 import com.waypoint.backend.model.billing.BillingStatusResponse;
 import com.waypoint.backend.model.subscription.ProviderSubscriptionSnapshot;
 import com.waypoint.backend.model.subscription.SubscriptionSnapshot;
 import com.waypoint.backend.model.subscription.SubscriptionStatus;
-import com.waypoint.backend.service.ai.AiUsageService;
 import com.waypoint.backend.service.subscription.SubscriptionReconciliationService;
 import com.waypoint.backend.service.subscription.SubscriptionService;
 import com.waypoint.backend.utilities.client.lemonsqueezy.LemonSqueezySubscriptionClient;
@@ -20,18 +18,15 @@ import java.util.UUID;
 
 @Service
 public class TrialConversionService {
-    private final AiUsageService aiUsageService;
     private final SubscriptionService subscriptionService;
     private final LemonSqueezySubscriptionClient lemonSqueezySubscriptionClient;
     private final SubscriptionReconciliationService subscriptionReconciliationService;
 
     public TrialConversionService(
-            AiUsageService aiUsageService,
             SubscriptionService subscriptionService,
             LemonSqueezySubscriptionClient lemonSqueezySubscriptionClient,
             SubscriptionReconciliationService subscriptionReconciliationService
     ) {
-        this.aiUsageService = aiUsageService;
         this.subscriptionService = subscriptionService;
         this.lemonSqueezySubscriptionClient = lemonSqueezySubscriptionClient;
         this.subscriptionReconciliationService = subscriptionReconciliationService;
@@ -54,15 +49,6 @@ public class TrialConversionService {
                     HttpStatus.CONFLICT,
                     "TRIAL_SKIP_NOT_AVAILABLE",
                     "The active trial is not linked to Lemon Squeezy."
-            );
-        }
-
-        AiUsageResponse usage = aiUsageService.current(userId);
-        if (!usage.trialLimited() || usage.trialRemaining() > 0) {
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "AI_TRIAL_NOT_EXHAUSTED",
-                    "Cloud AI trial requests are still available."
             );
         }
 
