@@ -93,6 +93,10 @@ public class WebhookSubscriptionProcessor {
 
         subscription.setLastProviderEventAt(providerEventAt);
         subscriptionRepository.saveAndFlush(subscription);
+        if (!user.isOnboardingCompleted()) {
+            user.setOnboardingCompleted(true);
+            userRepository.save(user);
+        }
         planService.synchronizeUserPlan(user);
     }
 
