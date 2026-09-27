@@ -27,6 +27,7 @@ public class MicrosoftUserProvisioningService {
         user.setEmail(normalizedEmail);
         user.setDisplayName(profile.displayName());
         user.setPlan(freePlan);
+        user.setOnboardingCompleted(false);
         user.setCreatedAt(Instant.now());
         user.setLastLoginAt(Instant.now());
         return userRepository.saveAndFlush(user);
