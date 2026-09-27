@@ -9,6 +9,8 @@ import org.springframework.boot.flyway.autoconfigure.FlywayMigrationStrategy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.List;
+
 @Configuration
 public class FlywayMigrationConfiguration {
     private static final Logger log = LoggerFactory.getLogger(FlywayMigrationConfiguration.class);
@@ -22,9 +24,9 @@ public class FlywayMigrationConfiguration {
         return flyway -> {
             ValidateResult validation = flyway.validateWithResult();
 
-            if (!validation.validationSuccessful && isKnownV30ChecksumMismatch(validation)) {
+            if (!validation.validationSuccessful && isKnownV30ChecksumMismatchWithOnlyPendingMigrations(validation)) {
                 log.warn(
-                        "Repairing known Flyway V30 onboarding checksum mismatch ({} -> {})",
+                        "Repairing known Flyway V30 onboarding checksum mismatch ({} -> {}) before applying pending migrations",
                         APPLIED_V30_CHECKSUM,
                         RESOLVED_V30_CHECKSUM
                 );
@@ -35,16 +37,32 @@ public class FlywayMigrationConfiguration {
         };
     }
 
-    static boolean isKnownV30ChecksumMismatch(ValidateResult validation) {
+    static boolean isKnownV30ChecksumMismatchWithOnlyPendingMigrations(ValidateResult validation) {
         if (validation == null
                 || validation.validationSuccessful
                 || validation.invalidMigrations == null
-                || validation.invalidMigrations.size() != 1) {
+                || validation.invalidMigrations.isEmpty()) {
             return false;
         }
 
-        ValidateOutput invalid = validation.invalidMigrations.getFirst();
-        if (!ONBOARDING_MIGRATION_VERSION.equals(invalid.version)
+        List<ValidateOutput> invalid = validation.invalidMigrations;
+
+        long knownV30Mismatches = invalid.stream()
+                .filter(FlywayMigrationConfiguration::isExactKnownV30Mismatch)
+                .count();
+
+        if (knownV30Mismatches != 1) {
+            return false;
+        }
+
+        return invalid.stream().allMatch(entry ->
+                isExactKnownV30Mismatch(entry) || isExpectedPendingMigration(entry)
+        );
+    }
+
+    private static boolean isExactKnownV30Mismatch(ValidateOutput invalid) {
+        if (invalid == null
+                || !ONBOARDING_MIGRATION_VERSION.equals(invalid.version)
                 || invalid.errorDetails == null
                 || invalid.errorDetails.errorCode != CoreErrorCode.CHECKSUM_MISMATCH) {
             return false;
@@ -54,5 +72,13 @@ public class FlywayMigrationConfiguration {
         return message.contains("Migration checksum mismatch for migration version 30")
                 && message.contains("Applied to database : " + APPLIED_V30_CHECKSUM)
                 && message.contains("Resolved locally    : " + RESOLVED_V30_CHECKSUM);
+    }
+
+    private static boolean isExpectedPendingMigration(ValidateOutput invalid) {
+        if (invalid == null || invalid.errorDetails == null) {
+            return false;
+        }
+        return invalid.errorDetails.errorCode == CoreErrorCode.RESOLVED_VERSIONED_MIGRATION_NOT_APPLIED
+                || invalid.errorDetails.errorCode == CoreErrorCode.RESOLVED_REPEATABLE_MIGRATION_NOT_APPLIED;
     }
 }
