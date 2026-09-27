@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -46,6 +47,11 @@ public class AccountController {
         return response(userId, userService.requireById(userId));
     }
 
+    @PostMapping("/onboarding/complete")
+    public AccountResponse completeOnboarding(@AuthenticationPrincipal UUID userId) {
+        return response(userId, userService.completeOnboarding(userId));
+    }
+
     @PatchMapping
     public AccountResponse updateAccount(
             @AuthenticationPrincipal UUID userId,
@@ -67,6 +73,7 @@ public class AccountController {
                 user.getPictureUrl(),
                 user.getPhoneNumber(),
                 user.getPhoneCountryCode(),
+                user.isOnboardingCompleted(),
                 PlanResponse.from(planService.synchronizeUserPlan(user, subscription)),
                 entitlement
         );
