@@ -70,7 +70,10 @@ public class LemonSqueezySubscriptionWebClient implements LemonSqueezySubscripti
                 "data", Map.of(
                         "type", "subscriptions",
                         "id", externalSubscriptionId,
-                        "attributes", Map.of("billing_anchor", 0)
+                        "attributes", Map.of(
+                                "billing_anchor", 0,
+                                "invoice_immediately", true
+                        )
                 )
         );
 
