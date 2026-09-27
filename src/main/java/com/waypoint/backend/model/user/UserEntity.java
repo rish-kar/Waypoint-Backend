@@ -52,6 +52,9 @@ public class UserEntity {
     @Column(nullable = false)
     private int aiTrialRequestsUsed;
 
+    @Column(nullable = false)
+    private boolean onboardingCompleted;
+
     @Column(name = "openai_api_key_ciphertext", length = 4096)
     private String openAiApiKeyCiphertext;
 
@@ -176,6 +179,14 @@ public class UserEntity {
 
     public void setAiTrialRequestsUsed(int aiTrialRequestsUsed) {
         this.aiTrialRequestsUsed = aiTrialRequestsUsed;
+    }
+
+    public boolean isOnboardingCompleted() {
+        return onboardingCompleted;
+    }
+
+    public void setOnboardingCompleted(boolean onboardingCompleted) {
+        this.onboardingCompleted = onboardingCompleted;
     }
 
     public String getOpenAiApiKeyCiphertext() {
