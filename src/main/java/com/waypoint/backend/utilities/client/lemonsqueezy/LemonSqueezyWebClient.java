@@ -67,11 +67,16 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
             }
 
             String expectedRenewalUnit = plan == CheckoutPlan.MONTHLY ? "month" : "year";
+            int expectedUnitPrice = plan == CheckoutPlan.MONTHLY ? 499 : 3999;
+            int unitPrice = price.path("unit_price").asInt(-1);
             String renewalUnit = price.path("renewal_interval_unit").asText("");
             int renewalQuantity = price.path("renewal_interval_quantity").asInt(0);
             String trialUnit = price.path("trial_interval_unit").asText("");
             int trialQuantity = price.path("trial_interval_quantity").asInt(0);
 
+            if (unitPrice != expectedUnitPrice) {
+                throw new InvalidRequestException("Lemon Squeezy variant price does not match the selected Waypoint plan");
+            }
             if (!expectedRenewalUnit.equalsIgnoreCase(renewalUnit) || renewalQuantity != 1) {
                 throw new InvalidRequestException("Lemon Squeezy variant does not match the selected Waypoint billing cycle");
             }
