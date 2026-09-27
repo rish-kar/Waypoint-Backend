@@ -74,6 +74,7 @@ class BillingServiceTests {
         String result = billingService.createCheckout(user, CheckoutPlan.MONTHLY);
 
         assertThat(result).isEqualTo("https://checkout.example/monthly");
+        verify(lemonSqueezyClient).validateCheckoutConfiguration("111", CheckoutPlan.MONTHLY);
         verify(lemonSqueezyClient).createCheckout(user, CheckoutPlan.MONTHLY, "111", intentId);
         verify(checkoutSessionCoordinator).complete(user.getId(), intentId, result);
     }
@@ -91,6 +92,7 @@ class BillingServiceTests {
         String result = billingService.createCheckout(user, CheckoutPlan.ANNUAL);
 
         assertThat(result).isEqualTo("https://checkout.example/annual");
+        verify(lemonSqueezyClient).validateCheckoutConfiguration("222", CheckoutPlan.ANNUAL);
         verify(checkoutSessionCoordinator).complete(user.getId(), intentId, result);
     }
 
