@@ -124,6 +124,17 @@ public class UserService {
         return saved;
     }
 
+    @Transactional
+    public UserEntity completeOnboarding(UUID userId) {
+        UserEntity user = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        if (!user.isOnboardingCompleted()) {
+            user.setOnboardingCompleted(true);
+            user = userRepository.save(user);
+        }
+        return user;
+    }
+
     @Transactional(readOnly = true)
     public UserEntity requireById(UUID userId) {
         return userRepository.findById(userId)
