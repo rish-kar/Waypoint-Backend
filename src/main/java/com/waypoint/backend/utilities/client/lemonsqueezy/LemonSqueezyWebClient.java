@@ -42,6 +42,50 @@ public class LemonSqueezyWebClient implements LemonSqueezyClient {
     }
 
     @Override
+    public void validateCheckoutConfiguration(String variantId, CheckoutPlan plan) {
+        requireApiConfiguration();
+        long parsedVariantId = parseVariantId(variantId);
+        if (plan == null) throw new InvalidRequestException("plan is required");
+
+        try {
+            JsonNode response = webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/prices")
+                            .queryParam("filter[variant_id]", parsedVariantId)
+                            .queryParam("page[size]", 1)
+                            .build())
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
+                    .accept(JSON_API)
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .timeout(requestTimeout)
+                    .block();
+
+            JsonNode price = response == null ? null : response.path("data").path(0).path("attributes");
+            if (price == null || price.isMissingNode()) {
+                throw new InvalidRequestException("Lemon Squeezy pricing is unavailable for the selected plan");
+            }
+
+            String expectedRenewalUnit = plan == CheckoutPlan.MONTHLY ? "month" : "year";
+            String renewalUnit = price.path("renewal_interval_unit").asText("");
+            int renewalQuantity = price.path("renewal_interval_quantity").asInt(0);
+            String trialUnit = price.path("trial_interval_unit").asText("");
+            int trialQuantity = price.path("trial_interval_quantity").asInt(0);
+
+            if (!expectedRenewalUnit.equalsIgnoreCase(renewalUnit) || renewalQuantity != 1) {
+                throw new InvalidRequestException("Lemon Squeezy variant does not match the selected Waypoint billing cycle");
+            }
+            if (!"day".equalsIgnoreCase(trialUnit) || trialQuantity != 3) {
+                throw new InvalidRequestException("Lemon Squeezy variant must be configured with a 3-day free trial");
+            }
+        } catch (InvalidRequestException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new ExternalServiceException("Unable to verify Lemon Squeezy checkout configuration", exception);
+        }
+    }
+
+    @Override
     public String createCheckout(UserEntity user, CheckoutPlan plan, String variantId) {
         return createCheckout(user, plan, variantId, UUID.randomUUID());
     }
