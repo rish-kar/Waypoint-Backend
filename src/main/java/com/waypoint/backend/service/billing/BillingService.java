@@ -65,6 +65,8 @@ public class BillingService {
             throw new InvalidRequestException("Requested billing plan is not configured");
         }
 
+        lemonSqueezyClient.validateCheckoutConfiguration(variantId, plan);
+
         CheckoutSessionCoordinator.Reservation reservation = checkoutSessionCoordinator.reserve(user.getId(), plan);
         if (StringUtils.hasText(reservation.checkoutUrl())) {
             return reservation.checkoutUrl();
