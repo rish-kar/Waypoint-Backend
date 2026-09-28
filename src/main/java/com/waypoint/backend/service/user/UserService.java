@@ -127,7 +127,7 @@ public class UserService {
     @Transactional
     public UserEntity completeOnboarding(UUID userId) {
         UserEntity user = userRepository.findById(userId)
-                .orElseThrow(AccountUnavailableException::new)
+                .orElseThrow(AccountUnavailableException::new);
         if (!user.isOnboardingCompleted()) {
             user.setOnboardingCompleted(true);
             user = userRepository.save(user);
@@ -138,7 +138,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserEntity requireById(UUID userId) {
         return userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User not found"));
+                .orElseThrow(AccountUnavailableException::new);
     }
 
     @Transactional
