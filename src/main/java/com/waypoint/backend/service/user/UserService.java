@@ -7,7 +7,7 @@ import com.waypoint.backend.model.plan.PlanEntity;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.service.plan.PlanService;
-import com.waypoint.backend.utilities.exception.NotFoundException;
+import com.waypoint.backend.utilities.exception.AccountUnavailableException;
 import com.waypoint.backend.utilities.exception.UnauthorizedException;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -127,7 +127,7 @@ public class UserService {
     @Transactional
     public UserEntity completeOnboarding(UUID userId) {
         UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User not found"));
+                .orElseThrow(AccountUnavailableException::new)
         if (!user.isOnboardingCompleted()) {
             user.setOnboardingCompleted(true);
             user = userRepository.save(user);
