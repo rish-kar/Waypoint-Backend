@@ -103,7 +103,7 @@ public class UserService {
     @Transactional
     public UserEntity updateMicrosoftUser(UserEntity user, MicrosoftProfile profile) {
         UserEntity managed = userRepository.findByIdForUpdate(user.getId())
-                .orElseThrow(() -> new UnauthorizedException("Waypoint account is unavailable"));
+                .orElseThrow(AccountUnavailableException::new);
         UserEntity saved = microsoftUserProvisioningService.updateLogin(
                 managed,
                 profile,
@@ -144,7 +144,7 @@ public class UserService {
     @Transactional
     public UserEntity updatePhoneNumber(UUID userId, String phoneNumber, String phoneCountryCode) {
         UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User not found"));
+                .orElseThrow(AccountUnavailableException::new);
         String normalizedPhone = phoneNumber == null ? null : phoneNumber.trim();
         String normalizedCountry = phoneCountryCode == null ? null : phoneCountryCode.trim().toUpperCase(Locale.ROOT);
         boolean hasPhone = normalizedPhone != null && !normalizedPhone.isBlank();
