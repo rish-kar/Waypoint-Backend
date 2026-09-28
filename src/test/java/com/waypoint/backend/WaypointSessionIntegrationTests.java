@@ -139,6 +139,36 @@ class WaypointSessionIntegrationTests {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void deletedBackingUserInvalidatesSessionAndAllowsCleanRelogin() throws Exception {
+        JsonNode firstLogin = login();
+        String firstAccessToken = firstLogin.get("accessToken").asText();
+        String firstRefreshToken = firstLogin.get("refreshToken").asText();
+        UUID firstUserId = UUID.fromString(firstLogin.get("user").get("id").asText());
+
+        userRepository.deleteById(firstUserId);
+        userRepository.flush();
+
+        mockMvc.perform(get("/api/v1/account")
+                        .header("Authorization", "Bearer " + firstAccessToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_DELETED"));
+
+        mockMvc.perform(post("/api/v1/auth/session/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RefreshRequest(firstRefreshToken))))
+                .andExpect(status().isUnauthorized());
+
+        JsonNode secondLogin = login();
+        UUID secondUserId = UUID.fromString(secondLogin.get("user").get("id").asText());
+        assertThat(secondUserId).isNotEqualTo(firstUserId);
+
+        mockMvc.perform(get("/api/v1/account")
+                        .header("Authorization", "Bearer " + secondLogin.get("accessToken").asText()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.onboardingCompleted").value(false));
+    }
+
     private String issueShortLivedAccessToken(JsonNode login) {
         JwtService shortLivedJwtService = new JwtService(
                 new JwtProperties(TEST_JWT_SECRET, 1),
