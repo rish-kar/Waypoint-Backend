@@ -117,7 +117,7 @@ public class UserService {
     @Transactional
     public UserEntity markMicrosoftLinkedLogin(UUID userId) {
         UserEntity user = userRepository.findByIdForUpdate(userId)
-                .orElseThrow(() -> new UnauthorizedException("Waypoint account is unavailable"));
+                .orElseThrow(AccountUnavailableException::new);
         user.setLastLoginAt(Instant.now());
         UserEntity saved = userRepository.save(user);
         planService.synchronizeUserPlan(saved);
