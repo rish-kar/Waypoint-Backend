@@ -1,6 +1,7 @@
 package com.waypoint.backend.security.jwt;
 
 import com.waypoint.backend.model.common.ApiErrorResponse;
+import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.utilities.exception.UnauthorizedException;
 
 import jakarta.servlet.FilterChain;
@@ -29,15 +30,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final JwtRevocationService jwtRevocationService;
+    private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
 
     public JwtAuthenticationFilter(
             JwtService jwtService,
             JwtRevocationService jwtRevocationService,
+            UserRepository userRepository,
             ObjectMapper objectMapper
     ) {
         this.jwtService = jwtService;
         this.jwtRevocationService = jwtRevocationService;
+        this.userRepository = userRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -81,6 +85,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (jwtRevocationService.isRevoked(claims.tokenId())) {
                 throw new UnauthorizedException("Invalid or expired token");
             }
+            if (!userRepository.existsById(claims.userId())) {
+                SecurityContextHolder.clearContext();
+                reject(
+                        request,
+                        response,
+                        "account_deleted",
+                        "ACCOUNT_DELETED",
+                        "Waypoint account no longer exists"
+                );
+                return;
+            }
 
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                     claims.userId(),
@@ -122,6 +137,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private void reject(HttpServletRequest request, HttpServletResponse response, String reason) throws IOException {
+        reject(request, response, reason, "UNAUTHORIZED", "Invalid or expired bearer token");
+    }
+
+    private void reject(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            String reason,
+            String code,
+            String message
+    ) throws IOException {
         LOGGER.atWarn()
                 .addKeyValue("event", "bearer_token_rejected")
                 .addKeyValue("reason", reason)
@@ -135,8 +160,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         objectMapper.writeValue(response.getOutputStream(), new ApiErrorResponse(
                 Instant.now(),
                 HttpServletResponse.SC_UNAUTHORIZED,
-                "UNAUTHORIZED",
-                "Invalid or expired bearer token",
+                code,
+                message,
                 request.getRequestURI()
         ));
     }
