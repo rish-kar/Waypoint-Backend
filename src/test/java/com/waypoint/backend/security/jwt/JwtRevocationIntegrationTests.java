@@ -1,6 +1,10 @@
 package com.waypoint.backend.security.jwt;
 
+import com.waypoint.backend.model.plan.PlanCode;
+import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.repository.auth.RevokedJwtTokenRepository;
+import com.waypoint.backend.repository.plan.PlanRepository;
+import com.waypoint.backend.repository.user.UserRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,26 +29,41 @@ class JwtRevocationIntegrationTests {
     private final MockMvc mockMvc;
     private final JwtService jwtService;
     private final RevokedJwtTokenRepository revokedJwtTokenRepository;
+    private final UserRepository userRepository;
+    private final PlanRepository planRepository;
 
     @Autowired
     JwtRevocationIntegrationTests(
             MockMvc mockMvc,
             JwtService jwtService,
-            RevokedJwtTokenRepository revokedJwtTokenRepository
+            RevokedJwtTokenRepository revokedJwtTokenRepository,
+            UserRepository userRepository,
+            PlanRepository planRepository
     ) {
         this.mockMvc = mockMvc;
         this.jwtService = jwtService;
         this.revokedJwtTokenRepository = revokedJwtTokenRepository;
+        this.userRepository = userRepository;
+        this.planRepository = planRepository;
     }
 
     @BeforeEach
     void cleanRevokedTokens() {
         revokedJwtTokenRepository.deleteAll();
+        userRepository.deleteAll();
     }
 
     @Test
     void logoutRevokesTokenAndFutureRequestsAreRejected() throws Exception {
-        String token = jwtService.issueToken(UUID.randomUUID(), "user@example.com");
+        UserEntity user = new UserEntity();
+        user.setEmail("user@example.com");
+        user.setDisplayName("JWT Revocation User");
+        user.setProvider("GOOGLE");
+        user.setProviderUserId("jwt-revocation-user");
+        user.setPlan(planRepository.findById(PlanCode.FREE).orElseThrow());
+        user = userRepository.saveAndFlush(user);
+
+        String token = jwtService.issueToken(user.getId(), user.getEmail());
         JwtClaims claims = jwtService.parseToken(token);
 
         mockMvc.perform(post("/api/v1/auth/logout")
