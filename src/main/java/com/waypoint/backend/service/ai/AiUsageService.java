@@ -9,7 +9,7 @@ import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.service.entitlement.FeatureCatalog;
 import com.waypoint.backend.service.subscription.SubscriptionService;
 import com.waypoint.backend.utilities.exception.ApiException;
-import com.waypoint.backend.utilities.exception.NotFoundException;
+import com.waypoint.backend.utilities.exception.AccountUnavailableException;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -38,7 +38,7 @@ public class AiUsageService {
     @Transactional(readOnly = true)
     public AiUsageResponse current(UUID userId) {
         UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User not found"));
+                .orElseThrow(AccountUnavailableException::new);
         SubscriptionSnapshot subscription = subscriptionService.current(userId);
         return response(subscription, user.getAiTrialRequestsUsed());
     }
@@ -50,12 +50,12 @@ public class AiUsageService {
 
         if (subscription.status() != SubscriptionStatus.ON_TRIAL) {
             UserEntity user = userRepository.findById(userId)
-                    .orElseThrow(() -> new NotFoundException("User not found"));
+                    .orElseThrow(AccountUnavailableException::new);
             return response(subscription, user.getAiTrialRequestsUsed());
         }
 
         UserEntity user = userRepository.findByIdForUpdate(userId)
-                .orElseThrow(() -> new NotFoundException("User not found"));
+                .orElseThrow(AccountUnavailableException::new);
         int used = Math.max(0, user.getAiTrialRequestsUsed());
         if (used >= TRIAL_REQUEST_LIMIT) {
             throw new ApiException(
