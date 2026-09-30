@@ -15,14 +15,14 @@ scripts:
       }
       const adminId = pm.environment.get('adminId');
       const adminPassword = pm.environment.get('adminPassword');
-      const userId = pm.environment.get('userId');
+      const adminUserId = pm.environment.get('adminUserId');
       const subscriptionId = pm.environment.get('adminSubscriptionId');
       const subscriptionUserId = pm.environment.get('adminSubscriptionUserId');
       if (!adminId || !adminPassword) throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
-      if (!userId) throw new Error('Run Find User by Email first so userId is populated.');
+      if (!adminUserId) throw new Error('Run Find User by Email first so adminUserId is populated.');
       if (!subscriptionId) throw new Error('Run List Subscriptions for the selected user first. No subscription is selected.');
-      if (!subscriptionUserId || subscriptionUserId !== userId) {
-          throw new Error('Selected subscription does not belong to the current userId. Run List Subscriptions again.');
+      if (!subscriptionUserId || subscriptionUserId !== adminUserId) {
+          throw new Error('Selected subscription does not belong to the current adminUserId. Run List Subscriptions again.');
       }
       pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
     language: text/javascript
