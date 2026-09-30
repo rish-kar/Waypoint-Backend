@@ -25,8 +25,8 @@ scripts:
       if (pm.response.code !== 200) return;
       const body = pm.response.json();
       pm.test('Grant ID returned', () => pm.expect(body.id).to.eql(pm.environment.get('adminGrantId')));
-      if (pm.environment.get('userId')) {
-          pm.test('Grant belongs to selected user', () => pm.expect(body.userId).to.eql(pm.environment.get('userId')));
+      if (pm.environment.get('adminUserId')) {
+          pm.test('Grant belongs to selected user', () => pm.expect(body.userId).to.eql(pm.environment.get('adminUserId')));
       }
     language: text/javascript
 order: 5100
