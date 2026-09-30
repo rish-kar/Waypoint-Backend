@@ -14,6 +14,7 @@ import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.repository.webhook.WebhookEventRepository;
 import com.waypoint.backend.service.plan.PlanService;
 import com.waypoint.backend.utilities.client.lemonsqueezy.LemonSqueezySubscriptionClient;
+import com.waypoint.backend.utilities.exception.ExternalServiceException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,9 +23,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -84,6 +87,26 @@ class AdminDataDeletionServiceTests {
         verify(checkoutSessionRepository).flush();
         verify(userRepository).delete(user);
         verify(auditEventRepository).save(any());
+    }
+
+    @Test
+    void doesNotDeleteLocalUserWhenProviderCancellationFails() {
+        UserEntity user = user();
+        SubscriptionEntity subscription = new SubscriptionEntity();
+        subscription.setProvider("LEMON_SQUEEZY");
+        subscription.setExternalSubscriptionId("2514315");
+        subscription.setStatus(SubscriptionStatus.ACTIVE);
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(user.getId())).thenReturn(List.of(subscription));
+        doThrow(new ExternalServiceException("Unable to cancel the Lemon Squeezy subscription"))
+                .when(lemonSqueezySubscriptionClient)
+                .cancelSubscription("2514315");
+
+        assertThatThrownBy(() -> service.deleteUser(user.getId(), "admin"))
+                .isInstanceOf(ExternalServiceException.class);
+
+        verify(userRepository, org.mockito.Mockito.never()).delete(user);
+        verify(subscriptionRepository, org.mockito.Mockito.never()).deleteAll(any());
     }
 
     @Test
