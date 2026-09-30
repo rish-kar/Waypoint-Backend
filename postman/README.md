@@ -36,7 +36,7 @@ Authentication is split by flow.
 1. Link Account
 2. Disconnect Account
 
-Google Complete Login and Microsoft Exchange Session populate the shared Waypoint session variables such as `jwt`, `waypointRefreshToken`, `userId`, and `userEmail`.
+Google Complete Login and Microsoft Exchange Session populate the authenticated-session variables `jwt`, `waypointRefreshToken`, `userId`, and `userEmail`. Admin user selection is separate: Admin → Users → Find User by Email stores the managed account in `adminUserId`, so selecting another user never overwrites the signed-in session `userId`.
 
 The access JWT remains intentionally short-lived. For normal Bearer-authenticated Postman requests, the collection now detects an expiring JWT and automatically calls `/api/v1/auth/session/refresh`, rotates `waypointRefreshToken`, stores the new `jwt`, and sends the original request with the refreshed token. You should not need to sign in again every 15 minutes while the refresh token is still valid.
 
@@ -89,7 +89,7 @@ The Postman collection automatically sends it as `X-Admin-TOTP` for admin reques
 
 **02 - Users**
 1. List Users
-2. Find User by Email — stores the returned ID in `userId`
+2. Find User by Email — stores the returned target ID in `adminUserId`
 3. Get User
 4. Delete User — permanently removes the selected account and its owned subscription/Special data
 
