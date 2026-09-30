@@ -3,6 +3,7 @@ package com.waypoint.backend.service.admin;
 import com.waypoint.backend.model.billing.BillingCheckoutSessionEntity;
 import com.waypoint.backend.model.entitlement.SpecialPremiumGrantEntity;
 import com.waypoint.backend.model.subscription.SubscriptionEntity;
+import com.waypoint.backend.model.subscription.SubscriptionStatus;
 import com.waypoint.backend.model.user.UserEntity;
 import com.waypoint.backend.model.webhook.WebhookEventEntity;
 import com.waypoint.backend.repository.admin.AdminAuditEventRepository;
@@ -12,6 +13,7 @@ import com.waypoint.backend.repository.subscription.SubscriptionRepository;
 import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.repository.webhook.WebhookEventRepository;
 import com.waypoint.backend.service.plan.PlanService;
+import com.waypoint.backend.utilities.client.lemonsqueezy.LemonSqueezySubscriptionClient;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +36,7 @@ class AdminDataDeletionServiceTests {
     private WebhookEventRepository webhookEventRepository;
     private PlanService planService;
     private AdminAuditEventRepository auditEventRepository;
+    private LemonSqueezySubscriptionClient lemonSqueezySubscriptionClient;
     private AdminDataDeletionService service;
 
     @BeforeEach
@@ -45,6 +48,7 @@ class AdminDataDeletionServiceTests {
         webhookEventRepository = mock(WebhookEventRepository.class);
         planService = mock(PlanService.class);
         auditEventRepository = mock(AdminAuditEventRepository.class);
+        lemonSqueezySubscriptionClient = mock(LemonSqueezySubscriptionClient.class);
         service = new AdminDataDeletionService(
                 userRepository,
                 subscriptionRepository,
@@ -52,7 +56,8 @@ class AdminDataDeletionServiceTests {
                 grantRepository,
                 webhookEventRepository,
                 planService,
-                auditEventRepository
+                auditEventRepository,
+                lemonSqueezySubscriptionClient
         );
     }
 
@@ -60,6 +65,9 @@ class AdminDataDeletionServiceTests {
     void deletesUserOwnedSubscriptionGrantAndCheckoutSessionBeforeUser() {
         UserEntity user = user();
         SubscriptionEntity subscription = new SubscriptionEntity();
+        subscription.setProvider("LEMON_SQUEEZY");
+        subscription.setExternalSubscriptionId("2514315");
+        subscription.setStatus(SubscriptionStatus.ACTIVE);
         SpecialPremiumGrantEntity grant = new SpecialPremiumGrantEntity();
         BillingCheckoutSessionEntity checkoutSession = checkoutSession(user.getId());
         when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
@@ -69,12 +77,31 @@ class AdminDataDeletionServiceTests {
 
         service.deleteUser(user.getId(), "admin");
 
+        verify(lemonSqueezySubscriptionClient).cancelSubscription("2514315");
         verify(subscriptionRepository).deleteAll(List.of(subscription));
         verify(grantRepository).delete(grant);
         verify(checkoutSessionRepository).delete(checkoutSession);
         verify(checkoutSessionRepository).flush();
         verify(userRepository).delete(user);
         verify(auditEventRepository).save(any());
+    }
+
+    @Test
+    void skipsProviderCancellationForTerminalSubscriptionWhenDeletingUser() {
+        UserEntity user = user();
+        SubscriptionEntity subscription = new SubscriptionEntity();
+        subscription.setProvider("LEMON_SQUEEZY");
+        subscription.setExternalSubscriptionId("2514315");
+        subscription.setStatus(SubscriptionStatus.CANCELLED);
+        when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+        when(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(user.getId())).thenReturn(List.of(subscription));
+        when(grantRepository.findByUserId(user.getId())).thenReturn(Optional.empty());
+        when(checkoutSessionRepository.findById(user.getId())).thenReturn(Optional.empty());
+
+        service.deleteUser(user.getId(), "admin");
+
+        verify(lemonSqueezySubscriptionClient, org.mockito.Mockito.never()).cancelSubscription(any());
+        verify(userRepository).delete(user);
     }
 
     @Test
