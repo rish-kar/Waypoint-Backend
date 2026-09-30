@@ -60,6 +60,55 @@ public class LemonSqueezySubscriptionWebClient implements LemonSqueezySubscripti
     }
 
     @Override
+    public void cancelSubscription(String externalSubscriptionId) {
+        requireConfiguration();
+        if (!StringUtils.hasText(externalSubscriptionId) || !externalSubscriptionId.matches("\\d+")) {
+            throw new ExternalServiceException("Lemon Squeezy subscription ID is invalid");
+        }
+
+        try {
+            JsonNode response = webClient.delete()
+                    .uri("/subscriptions/{subscriptionId}", externalSubscriptionId)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.apiKey())
+                    .accept(JSON_API)
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .timeout(REQUEST_TIMEOUT)
+                    .block();
+
+            if (response == null) {
+                return;
+            }
+
+            JsonNode data = response.path("data");
+            if (data.isMissingNode()) {
+                return;
+            }
+
+            String returnedId = text(data, "id");
+            if (StringUtils.hasText(returnedId) && !externalSubscriptionId.equals(returnedId)) {
+                throw new ExternalServiceException("Lemon Squeezy returned the wrong subscription after cancellation");
+            }
+
+            String status = text(data.path("attributes"), "status");
+            if (StringUtils.hasText(status)
+                    && !"cancelled".equalsIgnoreCase(status)
+                    && !"canceled".equalsIgnoreCase(status)
+                    && !"expired".equalsIgnoreCase(status)) {
+                throw new ExternalServiceException("Lemon Squeezy did not cancel the subscription");
+            }
+        } catch (WebClientResponseException.NotFound exception) {
+            // A missing provider subscription cannot renew, so deletion may continue safely.
+        } catch (WebClientResponseException | WebClientRequestException exception) {
+            throw new ExternalServiceException("Unable to cancel the Lemon Squeezy subscription");
+        } catch (ExternalServiceException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new ExternalServiceException("Unable to cancel the Lemon Squeezy subscription");
+        }
+    }
+
+    @Override
     public ProviderSubscriptionSnapshot skipTrial(String externalSubscriptionId) {
         requireConfiguration();
         if (!StringUtils.hasText(externalSubscriptionId) || !externalSubscriptionId.matches("\\d+")) {
