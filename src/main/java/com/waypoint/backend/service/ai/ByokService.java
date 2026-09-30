@@ -12,7 +12,7 @@ import com.waypoint.backend.security.ai.ByokApiKeyCipher;
 import com.waypoint.backend.service.subscription.SubscriptionService;
 import com.waypoint.backend.utilities.exception.ApiException;
 import com.waypoint.backend.utilities.exception.InvalidRequestException;
-import com.waypoint.backend.utilities.exception.NotFoundException;
+import com.waypoint.backend.utilities.exception.AccountUnavailableException;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -188,7 +188,7 @@ public class ByokService {
 
     private UserEntity requireUser(UUID userId) {
         return userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User not found"));
+                .orElseThrow(AccountUnavailableException::new);
     }
 
     private ByokProvider requireProvider(String providerId) {
