@@ -1,5 +1,5 @@
 $kind: http-request
-description: Finds one user by email. Clears dependent IDs first so a failed lookup cannot leave a previous user's IDs active, then stores the returned userId only after an exact email match.
+description: Finds one user by email. Clears dependent IDs first so a failed lookup cannot leave a previous user's IDs active, then stores the returned adminUserId only after an exact email match. The authenticated session userId is intentionally left untouched.
 url: "{{baseUrl}}/api/v1/admin/users/by-email?email={{userEmail}}"
 method: GET
 headers:
@@ -22,7 +22,7 @@ scripts:
       if (!userEmail) {
           throw new Error('Set userEmail to the exact account you want to manage.');
       }
-      pm.environment.unset('userId');
+      pm.environment.unset('adminUserId');
       pm.environment.unset('adminSubscriptionId');
       pm.environment.unset('adminSubscriptionUserId');
       pm.environment.unset('adminGrantId');
@@ -37,7 +37,8 @@ scripts:
       pm.test('User email matches exactly', () => pm.expect(String(body.email).toLowerCase()).to.eql(String(expectedEmail).toLowerCase()));
       pm.test('User ID returned', () => pm.expect(body.id).to.be.a('string').and.not.empty);
       if (String(body.email).toLowerCase() === String(expectedEmail).toLowerCase()) {
-          pm.environment.set('userId', body.id);
+          pm.environment.set('adminUserId', String(body.id).trim());
       }
+      pm.test('Selected admin user ID persisted', () => pm.expect(pm.environment.get('adminUserId')).to.eql(String(body.id).trim()));
     language: text/javascript
 order: 2000
