@@ -154,6 +154,21 @@ class WaypointSessionIntegrationTests {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("ACCOUNT_DELETED"));
 
+        mockMvc.perform(get("/api/v1/subscriptions/current")
+                        .header("Authorization", "Bearer " + firstAccessToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_DELETED"));
+
+        mockMvc.perform(get("/api/v1/billing/status")
+                        .header("Authorization", "Bearer " + firstAccessToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_DELETED"));
+
+        mockMvc.perform(get("/api/v1/ai/byok")
+                        .header("Authorization", "Bearer " + firstAccessToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("ACCOUNT_DELETED"));
+
         mockMvc.perform(post("/api/v1/auth/session/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new RefreshRequest(firstRefreshToken))))
