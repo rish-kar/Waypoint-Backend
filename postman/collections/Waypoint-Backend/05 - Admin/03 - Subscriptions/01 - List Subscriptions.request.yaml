@@ -1,6 +1,6 @@
 $kind: http-request
-description: Lists subscriptions only for the currently selected userId. Clears any previous adminSubscriptionId first and stores a new ID only from a response item that belongs to the same user.
-url: "{{baseUrl}}/api/v1/admin/subscriptions?userId={{userId}}&size=50&sort=updatedAt&direction=DESC"
+description: Lists subscriptions only for the currently selected adminUserId. Clears any previous adminSubscriptionId first and stores a new ID only from a response item that belongs to the same user.
+url: "{{baseUrl}}/api/v1/admin/subscriptions?userId={{adminUserId}}&size=50&sort=updatedAt&direction=DESC"
 method: GET
 headers:
   Authorization: Basic {{adminBasicAuth}}
@@ -15,9 +15,9 @@ scripts:
       }
       const adminId = pm.environment.get('adminId');
       const adminPassword = pm.environment.get('adminPassword');
-      const userId = pm.environment.get('userId');
+      const adminUserId = pm.environment.get('adminUserId');
       if (!adminId || !adminPassword) throw new Error('Set adminId and adminPassword in the Waypoint Local environment.');
-      if (!userId) throw new Error('Run Find User by Email first so userId is populated.');
+      if (!adminUserId) throw new Error('Run Find User by Email first so adminUserId is populated.');
       pm.environment.unset('adminSubscriptionId');
       pm.environment.unset('adminSubscriptionUserId');
       pm.environment.set('adminBasicAuth', CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(`${adminId}:${adminPassword}`)));
@@ -27,7 +27,7 @@ scripts:
       pm.test('Status is 200', () => pm.response.to.have.status(200));
       if (pm.response.code !== 200) return;
       const body = pm.response.json();
-      const expectedUserId = pm.environment.get('userId');
+      const expectedUserId = pm.environment.get('adminUserId');
       pm.test('Paged subscriptions returned', () => pm.expect(body.items).to.be.an('array'));
       pm.test('Every returned subscription belongs to the selected user', () => {
           body.items.forEach(item => pm.expect(item.userId).to.eql(expectedUserId));
