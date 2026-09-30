@@ -20,6 +20,8 @@ values:
     value: ''
   - key: userId
     value: ''
+  - key: adminUserId
+    value: ''
   - key: userEmail
     value: ''
   - key: adminId
