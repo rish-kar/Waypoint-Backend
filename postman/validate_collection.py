@@ -197,7 +197,7 @@ require(
     "collections/Waypoint-Backend/05 - Admin/03 - Subscriptions/03 - Delete Subscription.request.yaml",
     "/api/v1/admin/subscriptions/{{adminSubscriptionId}}",
     "method: DELETE",
-    "subscriptionUserId !== userId",
+    "subscriptionUserId !== adminUserId",
     "Status is 204",
 )
 require(
