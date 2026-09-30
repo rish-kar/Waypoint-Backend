@@ -11,12 +11,15 @@ import com.waypoint.backend.repository.subscription.SubscriptionRepository;
 import com.waypoint.backend.repository.user.UserRepository;
 import com.waypoint.backend.repository.webhook.WebhookEventRepository;
 import com.waypoint.backend.service.plan.PlanService;
+import com.waypoint.backend.utilities.client.lemonsqueezy.LemonSqueezySubscriptionClient;
 import com.waypoint.backend.utilities.exception.NotFoundException;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -28,6 +31,7 @@ public class AdminDataDeletionService {
     private final WebhookEventRepository webhookEventRepository;
     private final PlanService planService;
     private final AdminAuditEventRepository auditEventRepository;
+    private final LemonSqueezySubscriptionClient lemonSqueezySubscriptionClient;
 
     public AdminDataDeletionService(
             UserRepository userRepository,
@@ -36,7 +40,8 @@ public class AdminDataDeletionService {
             SpecialPremiumGrantRepository grantRepository,
             WebhookEventRepository webhookEventRepository,
             PlanService planService,
-            AdminAuditEventRepository auditEventRepository
+            AdminAuditEventRepository auditEventRepository,
+            LemonSqueezySubscriptionClient lemonSqueezySubscriptionClient
     ) {
         this.userRepository = userRepository;
         this.subscriptionRepository = subscriptionRepository;
@@ -45,6 +50,7 @@ public class AdminDataDeletionService {
         this.webhookEventRepository = webhookEventRepository;
         this.planService = planService;
         this.auditEventRepository = auditEventRepository;
+        this.lemonSqueezySubscriptionClient = lemonSqueezySubscriptionClient;
     }
 
     @Transactional
@@ -52,8 +58,10 @@ public class AdminDataDeletionService {
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("User not found"));
         String email = user.getEmail();
+        List<SubscriptionEntity> subscriptions = subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId);
+        int providerSubscriptionsCancelled = cancelProviderSubscriptions(subscriptions);
 
-        subscriptionRepository.deleteAll(subscriptionRepository.findByUserIdOrderByUpdatedAtDesc(userId));
+        subscriptionRepository.deleteAll(subscriptions);
         grantRepository.findByUserId(userId).ifPresent(grantRepository::delete);
         clearCheckoutSession(userId);
         subscriptionRepository.flush();
@@ -61,7 +69,13 @@ public class AdminDataDeletionService {
 
         userRepository.delete(user);
         userRepository.flush();
-        audit(adminId, "DELETE_USER", "USER", userId, "email=" + email);
+        audit(
+                adminId,
+                "DELETE_USER",
+                "USER",
+                userId,
+                "email=" + email + ", providerSubscriptionsCancelled=" + providerSubscriptionsCancelled
+        );
     }
 
     @Transactional
@@ -127,6 +141,30 @@ public class AdminDataDeletionService {
                 eventId,
                 "eventName=" + eventName + ", externalObjectId=" + externalObjectId
         );
+    }
+
+    private int cancelProviderSubscriptions(List<SubscriptionEntity> subscriptions) {
+        Set<String> externalSubscriptionIds = new LinkedHashSet<>();
+        for (SubscriptionEntity subscription : subscriptions) {
+            if (subscription == null
+                    || !"LEMON_SQUEEZY".equalsIgnoreCase(subscription.getProvider())
+                    || terminal(subscription.getStatus())
+                    || subscription.getExternalSubscriptionId() == null
+                    || subscription.getExternalSubscriptionId().isBlank()) {
+                continue;
+            }
+            externalSubscriptionIds.add(subscription.getExternalSubscriptionId().trim());
+        }
+
+        externalSubscriptionIds.forEach(lemonSqueezySubscriptionClient::cancelSubscription);
+        return externalSubscriptionIds.size();
+    }
+
+    private boolean terminal(com.waypoint.backend.model.subscription.SubscriptionStatus status) {
+        return status == com.waypoint.backend.model.subscription.SubscriptionStatus.CANCELLED
+                || status == com.waypoint.backend.model.subscription.SubscriptionStatus.EXPIRED
+                || status == com.waypoint.backend.model.subscription.SubscriptionStatus.REFUNDED
+                || status == com.waypoint.backend.model.subscription.SubscriptionStatus.INACTIVE;
     }
 
     private void clearCheckoutSession(UUID userId) {
