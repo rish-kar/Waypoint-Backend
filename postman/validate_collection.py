@@ -170,13 +170,15 @@ require(
 )
 require(
     "collections/Waypoint-Backend/05 - Admin/02 - Users/02 - Find User by Email.request.yaml",
-    "pm.environment.unset('userId')",
+    "pm.environment.unset('adminUserId')",
+    "pm.environment.set('adminUserId', String(body.id).trim())",
+    "Selected admin user ID persisted",
     "pm.environment.unset('adminSubscriptionId')",
     "pm.environment.unset('adminGrantId')",
 )
 require(
     "collections/Waypoint-Backend/05 - Admin/02 - Users/04 - Delete User.request.yaml",
-    "/api/v1/admin/users/{{userId}}",
+    "/api/v1/admin/users/{{adminUserId}}",
     "method: DELETE",
     "Status is 204",
 )
@@ -184,10 +186,11 @@ require(
     "collections/Waypoint-Backend/05 - Admin/03 - Subscriptions/01 - List Subscriptions.request.yaml",
     "pm.environment.unset('adminSubscriptionId')",
     "item.userId === expectedUserId",
+    "pm.environment.get('adminUserId')",
 )
 require(
     "collections/Waypoint-Backend/05 - Admin/03 - Subscriptions/02 - Update Subscription.request.yaml",
-    "subscriptionUserId !== userId",
+    "subscriptionUserId !== adminUserId",
     "Updated subscription still belongs to selected user",
 )
 require(
@@ -199,7 +202,7 @@ require(
 )
 require(
     "collections/Waypoint-Backend/05 - Admin/04 - Premium Special/03 - List Special Grants.request.yaml",
-    "userId={{userId}}",
+    "userId={{adminUserId}}",
     "pm.environment.unset('adminGrantId')",
 )
 require(
@@ -246,6 +249,8 @@ require(
 
 # Generated IDs and backend-derived billing variants must start empty in both environment representations.
 yaml_env = read("environments/Waypoint Local.environment.yaml")
+if "- key: adminUserId" not in yaml_env:
+    errors.append("Waypoint Local.environment.yaml: adminUserId is required")
 if re.search(r"- key: subscriptionId\s+value:\s*[^'\"\n]*postman-subscription", yaml_env):
     errors.append("Waypoint Local.environment.yaml: subscriptionId must start empty")
 if "value: local-monthly-variant-id" in yaml_env:
@@ -275,6 +280,8 @@ try:
         errors.append("Waypoint-Local.postman_environment.json: monthlyVariantId must start empty and be populated from Admin > Plans")
     if values.get("annualVariantId"):
         errors.append("Waypoint-Local.postman_environment.json: annualVariantId must start empty and be populated from Admin > Plans")
+    if "adminUserId" not in values:
+        errors.append("Waypoint-Local.postman_environment.json: adminUserId is required")
     if "adminSubscriptionUserId" not in values:
         errors.append("Waypoint-Local.postman_environment.json: adminSubscriptionUserId is required")
     for forbidden_google_key in [
